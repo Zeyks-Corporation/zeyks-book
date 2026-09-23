@@ -37,7 +37,7 @@ const COMPARISON = [
   },
   {
     feature: 'Data Ownership & Privacy',
-    zeyks: 'Self-hosted on your own Supabase project (100% Private)',
+    zeyks: 'Self-hosted on your own private cloud database (100% Private)',
     excel: 'Scattered unencrypted .xlsx files vulnerable to loss',
     foreign: 'Locked on proprietary cloud servers with monthly fees',
   },

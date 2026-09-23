@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  BookOpen, CreditCard, FileText, Gauge, Heart, Menu, Receipt, Settings,
+  CreditCard, FileText, Gauge, Heart, Menu, Receipt, Settings,
   ShoppingBag, Wallet, X,
 } from 'lucide-react';
 import { ViewTab } from '../types';
@@ -41,7 +41,7 @@ export const Sidebar: React.FC<{
     >
       <div className="h-14 px-4 flex items-center justify-between border-b border-[var(--separator)]">
         <div className="flex items-center gap-2 min-w-0">
-          <BookOpen size={16} strokeWidth={1.8} className="text-[var(--label)] shrink-0" aria-hidden="true" />
+          <img src="/favicon.svg" alt="Zeyks Book Logo" className="h-5 w-5 shrink-0 object-contain" />
           <span className="text-[15px] font-semibold text-[var(--label)] truncate">
             {businessName || 'Zeyks Book'}
           </span>

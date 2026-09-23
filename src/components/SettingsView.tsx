@@ -82,8 +82,8 @@ export const SettingsView: React.FC<{
   const Section: React.FC<{ title: string; hint?: string; children: React.ReactNode }> = ({ title, hint, children }) => (
     <section className="space-y-3">
       <div>
-        <h2 className="text-sm font-semibold text-zinc-900">{title}</h2>
-        {hint && <p className="text-xs text-zinc-500 mt-0.5">{hint}</p>}
+        <h2 className="text-sm font-semibold text-[var(--label)]">{title}</h2>
+        {hint && <p className="text-xs text-[var(--label-secondary)] mt-0.5">{hint}</p>}
       </div>
       {children}
     </section>
@@ -181,12 +181,12 @@ export const SettingsView: React.FC<{
       </Section>
 
       <Section title="Tax and stock">
-        <label className="flex items-start gap-2.5 rounded-md border border-zinc-200 bg-white px-3 py-2.5">
-          <input type="checkbox" checked={form.vatRegistered} className="mt-0.5 rounded border-zinc-300"
+        <label className="flex items-start gap-2.5 rounded-md border border-[var(--separator)] bg-[var(--fill-secondary)] px-3 py-2.5">
+          <input type="checkbox" checked={form.vatRegistered} className="mt-0.5 rounded border-[var(--separator)]"
             onChange={(e) => set('vatRegistered', e.target.checked)} />
           <span className="text-xs">
-            <span className="font-medium text-zinc-900">Registered for VAT</span>
-            <span className="block text-zinc-500 mt-0.5">
+            <span className="font-medium text-[var(--label)]">Registered for VAT</span>
+            <span className="block text-[var(--label-secondary)] mt-0.5">
               Splits output tax into VAT payable and input tax into VAT receivable, and turns on the VAT return report.
             </span>
           </span>
@@ -197,12 +197,12 @@ export const SettingsView: React.FC<{
               value={form.vatRate} onChange={(e) => set('vatRate', Number(e.target.value))} />}
           </Field>
         )}
-        <label className="flex items-start gap-2.5 rounded-md border border-zinc-200 bg-white px-3 py-2.5">
-          <input type="checkbox" checked={form.trackInventory} className="mt-0.5 rounded border-zinc-300"
+        <label className="flex items-start gap-2.5 rounded-md border border-[var(--separator)] bg-[var(--fill-secondary)] px-3 py-2.5">
+          <input type="checkbox" checked={form.trackInventory} className="mt-0.5 rounded border-[var(--separator)]"
             onChange={(e) => set('trackInventory', e.target.checked)} />
           <span className="text-xs">
-            <span className="font-medium text-zinc-900">Track inventory</span>
-            <span className="block text-zinc-500 mt-0.5">
+            <span className="font-medium text-[var(--label)]">Track inventory</span>
+            <span className="block text-[var(--label-secondary)] mt-0.5">
               Purchases become an asset and only hit the profit and loss when the goods are sold. Leave this off
               to expense stock on the day you buy it.
             </span>
@@ -229,9 +229,9 @@ export const SettingsView: React.FC<{
         {!isSupported('accounts') && (
           <Callout tone="warn">{unsupportedMessage('Editing the chart of accounts')}</Callout>
         )}
-        <div className="overflow-x-auto border border-zinc-200 rounded-lg bg-white">
+        <div className="overflow-x-auto border border-[var(--separator)] rounded-lg bg-[var(--bg)]">
           <table className="w-full text-xs">
-            <thead className="bg-zinc-50/80 text-zinc-500 border-b border-zinc-200">
+            <thead className="bg-[var(--fill-secondary)] text-[var(--label-secondary)] border-b border-[var(--separator)]">
               <tr>
                 <th scope="col" className="py-2 px-3 text-left font-medium">Code</th>
                 <th scope="col" className="py-2 px-3 text-left font-medium">Name</th>
@@ -240,14 +240,14 @@ export const SettingsView: React.FC<{
                 <th scope="col" className="py-2 px-3 text-right font-medium" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100">
+            <tbody className="divide-y divide-[var(--separator)]">
               {accounts.filter((a) => a.isActive).map((a) => (
                 <tr key={a.id}>
-                  <td className="py-2 px-3 tabular-nums text-zinc-500">{a.code}</td>
+                  <td className="py-2 px-3 tabular-nums text-[var(--label-secondary)]">{a.code}</td>
                   <td className="py-2 px-3">
                     {a.name} {a.systemAccount && <Badge>system</Badge>}
                   </td>
-                  <td className="py-2 px-3 text-zinc-500">{a.type.toLowerCase()}</td>
+                  <td className="py-2 px-3 text-[var(--label-secondary)]">{a.type.toLowerCase()}</td>
                   <td className="py-2 px-3 text-right">
                     <Money value={balances[a.id] ?? 0} symbol={business.currencySymbol} size="sm" muted />
                   </td>
@@ -265,7 +265,7 @@ export const SettingsView: React.FC<{
         </div>
       </Section>
 
-      <Section title="Backup" hint="Your books live in the cloud (Supabase). Export downloads a copy.">
+      <Section title="Backup" hint="Your books live in the cloud. Export downloads a copy.">
         <Callout tone="info">
           A backup is a snapshot of your cloud books. Restoring from a file is not available yet — it needs a
           cloud import path so it cannot overwrite or duplicate your real data.
@@ -285,13 +285,13 @@ export const SettingsView: React.FC<{
         title="Account"
         hint="Your books are stored against this sign-in. Signing out here does not delete anything."
       >
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-zinc-100 bg-zinc-50 px-3 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--separator)] bg-[var(--fill-secondary)] px-3 py-2">
           <div className="min-w-0">
-            <p className="text-xs text-zinc-500">Signed in as</p>
-            <p className="text-xs font-medium text-zinc-900 truncate">
+            <p className="text-xs text-[var(--label-secondary)]">Signed in as</p>
+            <p className="text-xs font-medium text-[var(--label)] truncate">
               {user?.email || user?.fullName || 'your account'}
             </p>
-            <p className="text-xs text-zinc-500 mt-1">{SIGN_OUT_HINTS['this-device']}</p>
+            <p className="text-xs text-[var(--label-secondary)] mt-1">{SIGN_OUT_HINTS['this-device']}</p>
           </div>
           <Button
             variant="secondary"
@@ -302,10 +302,10 @@ export const SettingsView: React.FC<{
           </Button>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-rose-100 bg-rose-50/50 px-3 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--destructive-bg)] bg-[var(--destructive-bg)]/40 px-3 py-2">
           <div className="min-w-0">
-            <p className="text-xs font-medium text-zinc-900">{SIGN_OUT_LABELS.everywhere}</p>
-            <p className="text-xs text-zinc-500 mt-1">{SIGN_OUT_HINTS.everywhere}</p>
+            <p className="text-xs font-medium text-[var(--label)]">{SIGN_OUT_LABELS.everywhere}</p>
+            <p className="text-xs text-[var(--label-secondary)] mt-1">{SIGN_OUT_HINTS.everywhere}</p>
           </div>
           <Button
             variant="danger"
@@ -319,7 +319,7 @@ export const SettingsView: React.FC<{
 
       <Section title="Danger zone" hint="Destructive actions are disabled while your books are cloud-backed.">
         <Callout tone="warn">
-          {unsupportedMessage('Erasing everything')} Your financial data lives in Supabase, and nothing in the
+          {unsupportedMessage('Erasing everything')} Your financial data lives in a private cloud database, and nothing in the
           app can delete it.
         </Callout>
         <div className="flex flex-wrap gap-2">

@@ -17,7 +17,7 @@ export const AboutPage: React.FC<{
     {
       icon: ShieldCheck,
       title: 'Data sovereignty',
-      body: 'Your financial books belong to you. We store data directly in your own Supabase project without third-party vendor lock-in.',
+      body: 'Your financial books belong to you. We store data directly in your own private database without third-party vendor lock-in.',
     },
     {
       icon: Award,

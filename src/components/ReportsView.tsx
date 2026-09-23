@@ -751,7 +751,7 @@ export const ReportsView: React.FC<{
               <button key={r.value} type="button" role="tab" aria-selected={report === r.value}
                 onClick={() => setReport(r.value)}
                 className={`shrink-0 whitespace-nowrap rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                  report === r.value ? 'bg-zinc-900 text-white' : 'border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50'
+                  report === r.value ? 'bg-[var(--accent)] text-white' : 'border border-[var(--separator)] bg-[var(--bg)] text-[var(--label-secondary)] hover:bg-[var(--fill-secondary)]'
                 }`}>
                 {r.label}
               </button>
@@ -806,8 +806,8 @@ export const ReportsView: React.FC<{
                   onClick={() => { setAgingSide(value); setAgingPartyId(''); }}
                   className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
                     agingSide === value
-                      ? 'bg-zinc-900 text-white'
-                      : 'border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50'
+                      ? 'bg-[var(--accent)] text-white'
+                      : 'border border-[var(--separator)] bg-[var(--bg)] text-[var(--label-secondary)] hover:bg-[var(--fill-secondary)]'
                   }`}>
                   {label}
                 </button>

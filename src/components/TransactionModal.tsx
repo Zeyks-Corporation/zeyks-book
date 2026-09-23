@@ -520,16 +520,16 @@ export const TransactionModal: React.FC<{
 
         {/* --------------------------------- VAT ------------------------------- */}
         {business.vatRegistered && kind !== 'payment' && (
-          <div className="flex flex-wrap items-center gap-4 rounded-md bg-zinc-50 border border-zinc-100 px-3 py-2">
-            <label className="flex items-center gap-2 text-xs text-zinc-700">
+          <div className="flex flex-wrap items-center gap-4 rounded-md bg-[var(--fill-secondary)] border border-[var(--separator)] px-3 py-2">
+            <label className="flex items-center gap-2 text-xs text-[var(--label)]">
               <input type="checkbox" checked={taxable} onChange={(e) => setTaxable(e.target.checked)}
-                className="rounded border-zinc-300" />
+                className="rounded border-[var(--separator)]" />
               VAT at {business.vatRate}%
             </label>
             {taxable && (
-              <label className="flex items-center gap-2 text-xs text-zinc-700">
+              <label className="flex items-center gap-2 text-xs text-[var(--label)]">
                 <input type="checkbox" checked={priceIncludesVat} onChange={(e) => setPriceIncludesVat(e.target.checked)}
-                  className="rounded border-zinc-300" />
+                  className="rounded border-[var(--separator)]" />
                 Amounts already include VAT
               </label>
             )}
@@ -623,18 +623,18 @@ export const TransactionModal: React.FC<{
         </Field>
 
         {isDoc && (
-          <dl className="rounded-md border border-zinc-200 bg-zinc-50/60 px-3 py-2 text-xs space-y-1">
-            <div className="flex justify-between"><dt className="text-zinc-500">Subtotal</dt>
+          <dl className="rounded-md border border-[var(--separator)] bg-[var(--fill-secondary)] px-3 py-2 text-xs space-y-1">
+            <div className="flex justify-between"><dt className="text-[var(--label-secondary)]">Subtotal</dt>
               <dd><Money value={totals.subtotal} symbol={business.currencySymbol} size="sm" /></dd></div>
             {totals.discountTotal > 0 && (
-              <div className="flex justify-between"><dt className="text-zinc-500">Discount</dt>
+              <div className="flex justify-between"><dt className="text-[var(--label-secondary)]">Discount</dt>
                 <dd><Money value={-totals.discountTotal} symbol={business.currencySymbol} size="sm" /></dd></div>
             )}
             {totals.taxAmount > 0 && (
-              <div className="flex justify-between"><dt className="text-zinc-500">VAT {business.vatRate}%</dt>
+              <div className="flex justify-between"><dt className="text-[var(--label-secondary)]">VAT {business.vatRate}%</dt>
                 <dd><Money value={totals.taxAmount} symbol={business.currencySymbol} size="sm" /></dd></div>
             )}
-            <div className="flex justify-between border-t border-zinc-200 pt-1 font-semibold">
+            <div className="flex justify-between border-t border-[var(--separator)] pt-1 font-semibold text-[var(--label)]">
               <dt>Total</dt><dd><Money value={totals.totalAmount} symbol={business.currencySymbol} size="sm" /></dd></div>
           </dl>
         )}

@@ -10,11 +10,17 @@ import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 import type { UserProfile } from '../types';
 import { resolveSignOutOutcome, signOutScope } from '../lib/session';
 import type { SignOutKind, SignOutOutcome } from '../lib/session';
+import { sendAuthEmailNotification } from './resendService';
 
 export interface AuthResult {
   user: User | null;
   session: Session | null;
   error: string | null;
+}
+
+function cleanAuthError(message: string | null | undefined): string | null {
+  if (!message) return null;
+  return message.replace(/supabase/gi, 'auth system');
 }
 
 /**
@@ -33,7 +39,10 @@ export async function signUp(
     password,
     options: { data: { full_name: fullName } },
   });
-  if (error) return { user: null, session: null, error: error.message };
+  if (error) return { user: null, session: null, error: cleanAuthError(error.message) };
+  if (data.user) {
+    sendAuthEmailNotification('welcome', email, fullName).catch(() => {});
+  }
   return { user: data.user, session: data.session, error: null };
 }
 
@@ -46,7 +55,7 @@ export async function signIn(
     email,
     password,
   });
-  if (error) return { user: null, session: null, error: error.message };
+  if (error) return { user: null, session: null, error: cleanAuthError(error.message) };
   return { user: data.user, session: data.session, error: null };
 }
 
@@ -72,14 +81,14 @@ export async function signOut(kind: SignOutKind = 'this-device'): Promise<SignOu
     // Local scope never touches the network on the way out of storage, so this
     // is a real second chance, not a repeat of the same failure.
     const { error } = await supabase.auth.signOut({ scope: 'local' });
-    localRetryError = error?.message ?? null;
+    localRetryError = cleanAuthError(error?.message ?? null);
   }
 
   const { data, error: sessionError } = await supabase.auth.getSession();
   const sessionCleared = !sessionError && !data.session;
 
   return resolveSignOutOutcome({
-    firstError: firstError?.message ?? null,
+    firstError: cleanAuthError(firstError?.message ?? null),
     localRetryError,
     sessionCleared,
   });
@@ -87,24 +96,27 @@ export async function signOut(kind: SignOutKind = 'this-device'): Promise<SignOu
 
 /**
  * Send a password-recovery email. The link returns to this origin and the
- * client raises PASSWORD_RECOVERY once Supabase parses it.
+ * client raises PASSWORD_RECOVERY once the system parses it.
  */
 export async function requestPasswordReset(email: string): Promise<{ error: string | null }> {
   const redirectTo = typeof window !== 'undefined' ? window.location.origin : undefined;
   const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
-  return { error: error?.message ?? null };
+  if (!error) {
+    sendAuthEmailNotification('password_reset', email).catch(() => {});
+  }
+  return { error: cleanAuthError(error?.message ?? null) };
 }
 
 /** Set a new password for the currently authenticated (recovery) session. */
 export async function updatePassword(newPassword: string): Promise<{ error: string | null }> {
   const { error } = await supabase.auth.updateUser({ password: newPassword });
-  return { error: error?.message ?? null };
+  return { error: cleanAuthError(error?.message ?? null) };
 }
 
 /** Re-send the sign-up confirmation email (only needed when confirmation is on). */
 export async function resendConfirmation(email: string): Promise<{ error: string | null }> {
   const { error } = await supabase.auth.resend({ type: 'signup', email });
-  return { error: error?.message ?? null };
+  return { error: cleanAuthError(error?.message ?? null) };
 }
 
 /** Retrieve the current session, if any. */

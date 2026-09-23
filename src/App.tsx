@@ -589,7 +589,7 @@ export default function App() {
     }
     return (
       <a
-        href="/"
+        href="/?landing=1"
         target="_blank"
         rel="noopener noreferrer"
         className="inline-flex items-center gap-1.5 rounded-full border border-[var(--separator)] bg-[var(--fill-secondary)] px-3 py-1.5 text-[13px] font-medium text-[var(--label)] hover:bg-[var(--separator)] transition-all"
@@ -616,13 +616,23 @@ export default function App() {
    * see the sign-in screen, so signing in lands them where they were going.
    */
   const authenticated = Boolean(user) && sessionPhase === 'authenticated';
-  const redirect = redirectFor(route, authenticated);
+  const isExplicitLanding = typeof window !== 'undefined' && window.location.search.includes('landing=1');
+  const redirect = isExplicitLanding ? null : redirectFor(route, authenticated);
   useEffect(() => {
     if (redirect) navigate(redirect, { replace: true });
   }, [redirect, navigate]);
 
   if (recovery) {
     return <UpdatePasswordModal onFinish={finishRecovery} />;
+  }
+
+  if (authenticated && user && isExplicitLanding && route.kind === 'landing') {
+    return (
+      <>
+        <LandingPage onSignIn={() => navigate('/dashboard')} currentPath="/" navigate={navigate} />
+        <CookieBanner />
+      </>
+    );
   }
 
   if (phase === 'checking-session' || redirect) {

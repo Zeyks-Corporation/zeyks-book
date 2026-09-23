@@ -214,30 +214,30 @@ export const CollectOnlineModal: React.FC<{
             ]).map((p) => (
               <label key={p.value}
                 className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer ${
-                  provider === p.value ? 'border-zinc-900 bg-zinc-50' : 'border-zinc-200'
+                  provider === p.value ? 'border-[var(--accent)] bg-[var(--fill-secondary)]' : 'border-[var(--separator)]'
                 } ${!p.on ? 'opacity-40 cursor-not-allowed' : ''}`}>
                 <input type="radio" name="gw" value={p.value} checked={provider === p.value} disabled={!p.on}
-                  onChange={() => setProvider(p.value)} className="accent-zinc-900" />
+                  onChange={() => setProvider(p.value)} className="accent-[var(--accent)]" />
                 <span>{p.label}</span>
-                {!p.on && <span className="text-[11px] text-zinc-400 ml-auto">not set up</span>}
+                {!p.on && <span className="text-[11px] text-[var(--label-tertiary)] ml-auto">not set up</span>}
               </label>
             ))}
           </div>
         </fieldset>
 
-        <p className="flex gap-2 text-xs text-zinc-500">
+        <p className="flex gap-2 text-xs text-[var(--label-secondary)]">
           <ShieldCheck size={14} className="shrink-0 mt-0.5" aria-hidden="true" />
           Your merchant secret stays on the API server. This page never sees it, and a payment is
           only recorded after the server confirms it with {provider === 'ESEWA' ? 'eSewa' : 'Khalti'} directly.
         </p>
 
         {sale && (
-          <dl className="rounded-md border border-zinc-200 bg-zinc-50/60 px-3 py-2 text-xs space-y-1">
-            <div className="flex justify-between"><dt className="text-zinc-500">Invoice total</dt>
+          <dl className="rounded-md border border-[var(--separator)] bg-[var(--fill-secondary)] px-3 py-2 text-xs space-y-1">
+            <div className="flex justify-between"><dt className="text-[var(--label-secondary)]">Invoice total</dt>
               <dd><Money value={sale.totalAmount} symbol={business.currencySymbol} size="sm" /></dd></div>
-            <div className="flex justify-between"><dt className="text-zinc-500">Already settled</dt>
+            <div className="flex justify-between"><dt className="text-[var(--label-secondary)]">Already settled</dt>
               <dd><Money value={sale.paidAmount} symbol={business.currencySymbol} size="sm" /></dd></div>
-            <div className="flex justify-between font-semibold border-t border-zinc-200 pt-1">
+            <div className="flex justify-between font-semibold border-t border-[var(--separator)] pt-1 text-[var(--label)]">
               <dt>Outstanding</dt><dd><Money value={due} symbol={business.currencySymbol} size="sm" /></dd></div>
           </dl>
         )}

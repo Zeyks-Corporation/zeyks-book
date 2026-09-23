@@ -98,18 +98,18 @@ export const HealthView: React.FC<{ books: Books; onDone: (m: string, ok: boolea
 
       {unresolved.length > 0 && (
         <section>
-          <h2 className="text-sm font-semibold text-zinc-900 mb-1">Online payments awaiting confirmation</h2>
-          <p className="text-xs text-zinc-500 mb-3">
+          <h2 className="text-sm font-semibold text-[var(--label)] mb-1">Online payments awaiting confirmation</h2>
+          <p className="text-xs text-[var(--label-secondary)] mb-3">
             These have not been confirmed by the gateway, so nothing has been posted. Re-check to get the final answer.
           </p>
           <ul className="space-y-2">
             {unresolved.map((t) => (
-              <li key={t.id} className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3">
+              <li key={t.id} className="flex items-center gap-3 rounded-lg border border-[var(--separator)] bg-[var(--bg)] px-4 py-3">
                 <div className="grow min-w-0">
-                  <p className="text-xs font-medium text-zinc-900">
+                  <p className="text-xs font-medium text-[var(--label)]">
                     {t.provider} · {t.customerName} · <Money value={t.amount} symbol={business.currencySymbol} size="sm" />
                   </p>
-                  <p className="text-[11px] text-zinc-500 truncate">
+                  <p className="text-[11px] text-[var(--label-secondary)] truncate">
                     {t.gatewayRef} · started {new Date(t.initiatedAt).toLocaleString()}
                     {t.lastError ? ` · ${t.lastError}` : ''}
                   </p>
@@ -127,8 +127,8 @@ export const HealthView: React.FC<{ books: Books; onDone: (m: string, ok: boolea
       )}
       {settled.length > 0 && (
         <section>
-          <h2 className="text-sm font-semibold text-zinc-900 mb-1">Online collections on the books</h2>
-          <p className="text-xs text-zinc-500 mb-3">
+          <h2 className="text-sm font-semibold text-[var(--label)] mb-1">Online collections on the books</h2>
+          <p className="text-xs text-[var(--label-secondary)] mb-3">
             Each of these has a settlement recorded. Nothing here is reversed from this screen — a
             settlement is voided, and reversed, from the settlements list.
           </p>
@@ -136,12 +136,12 @@ export const HealthView: React.FC<{ books: Books; onDone: (m: string, ok: boolea
             {settled.map((t) => {
               const state = gatewaySettlementState(t, payments);
               return (
-                <li key={t.id} className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3">
+                <li key={t.id} className="flex items-center gap-3 rounded-lg border border-[var(--separator)] bg-[var(--bg)] px-4 py-3">
                   <div className="grow min-w-0">
-                    <p className="text-xs font-medium text-zinc-900">
+                    <p className="text-xs font-medium text-[var(--label)]">
                       {t.provider} · {t.customerName} · <Money value={t.amount} symbol={business.currencySymbol} size="sm" />
                     </p>
-                    <p className="text-[11px] text-zinc-500 truncate">
+                    <p className="text-[11px] text-[var(--label-secondary)] truncate">
                       {t.gatewayRef}
                       {t.gatewayTransactionId ? ` · ${t.gatewayTransactionId}` : ''}
                       {t.settledAt ? ` · settled ${new Date(t.settledAt).toLocaleString()}` : ''}

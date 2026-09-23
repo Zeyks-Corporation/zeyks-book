@@ -325,5 +325,5 @@ export function checkSupabaseConfig(input: SupabaseEnvInput): SupabaseConfigResu
 
 /** One line that makes the active target impossible to miss in a dev console. */
 export function describeTarget(target: SupabaseTarget, host: string, source: TargetSource): string {
-  return `Supabase target: ${target} (${host})${source === 'declared' ? ', declared by VITE_SUPABASE_ENV' : ''}`;
+  return `Database target: ${target} (${host})${source === 'declared' ? ', declared by VITE_SUPABASE_ENV' : ''}`;
 }

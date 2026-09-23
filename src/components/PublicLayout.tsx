@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookOpen, Menu, X } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { Button } from './ui';
 
 const NAV_LINKS = [
@@ -31,9 +31,7 @@ export const PublicLayout: React.FC<{
             className="flex items-center gap-2.5 min-h-[44px] px-1 rounded-[10px] hover:bg-[var(--fill-secondary)] transition-all group"
             aria-label="Home"
           >
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--accent)] shadow-xs transition-transform group-hover:scale-105">
-              <BookOpen size={15} strokeWidth={2} className="text-white" aria-hidden="true" />
-            </span>
+            <img src="/favicon.svg" alt="Zeyks Book Logo" className="h-7 w-7 shrink-0 object-contain transition-transform group-hover:scale-105" />
             <span className="text-[16px] font-bold text-[var(--label)] tracking-tight">
               Zeyks Book
             </span>
@@ -133,9 +131,7 @@ export const PublicLayout: React.FC<{
             {/* Brand */}
             <div className="max-w-xs">
               <div className="flex items-center gap-2">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--accent)]">
-                  <BookOpen size={13} strokeWidth={2} className="text-white" aria-hidden="true" />
-                </span>
+                <img src="/favicon.svg" alt="Zeyks Book Logo" className="h-6 w-6 shrink-0 object-contain" />
                 <span className="text-[16px] font-bold text-[var(--label)]">Zeyks Book</span>
               </div>
               <p className="mt-3 text-[13px] leading-[20px] text-[var(--label-secondary)]">

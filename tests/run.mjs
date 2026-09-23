@@ -3786,7 +3786,7 @@ test('a development build on the local stack starts with nothing to warn about',
   assertEqual(derived.ok, true);
   assertEqual(derived.source, 'derived');
   assertEqual(derived.warnings.length, 0);
-  assertEqual(describeTarget('local', '127.0.0.1:54321', 'derived'), 'Supabase target: local (127.0.0.1:54321)');
+  assertEqual(describeTarget('local', '127.0.0.1:54321', 'derived'), 'Database target: local (127.0.0.1:54321)');
 });
 
 test('a production build may reach production, and says so when it points at the stack', () => {

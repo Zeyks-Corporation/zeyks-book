@@ -14,7 +14,7 @@ export const PricingPage: React.FC<{
     'Aged receivables & payables (30, 60, 90 days)',
     'A4 print-ready financial statements & tax reports',
     'Automatic ledger & document health checks',
-    'Self-hosted on your own Supabase project',
+    'Self-hosted on your own private cloud database',
     'Zero monthly subscription or user limits',
     'Full control over your financial data',
   ];
@@ -22,11 +22,11 @@ export const PricingPage: React.FC<{
   const FAQS = [
     {
       q: 'Is Zeyks Book really free?',
-      a: 'Yes. Zeyks Book is an open accounting system designed to run on your own Supabase database tier. You only pay for your own infrastructure if you exceed Supabase’s free limits.',
+      a: 'Yes. Zeyks Book is an open accounting system designed to run on your own private database tier. You only pay for your own infrastructure if you exceed standard usage limits.',
     },
     {
       q: 'Where are my financial records stored?',
-      a: 'Your records stay entirely within your own Supabase PostgreSQL database. Zeyks Book holds no central servers that read or store your financial ledger.',
+      a: 'Your records stay entirely within your own PostgreSQL database. Zeyks Book holds no central servers that read or store your financial ledger.',
     },
     {
       q: 'Can I export statements for my bank or auditor?',
