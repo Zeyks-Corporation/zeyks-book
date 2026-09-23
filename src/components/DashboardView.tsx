@@ -1,0 +1,255 @@
+import React, { useMemo, useState } from 'react';
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { DateRange } from '../types';
+import { Books } from '../state/useBooks';
+import { AccountingEngine } from '../services/accountingEngine';
+import { Badge, Button, Callout, DualDate, EmptyState, Money } from './ui';
+import { PeriodPicker } from './PeriodPicker';
+import { formatCompactNpr, formatNpr, round2 } from '../lib/money';
+import { addDays } from '../lib/nepaliDate';
+import { outstandingParties, PartyBalanceList } from '../services/reportData';
+
+/**
+ * One side of the party rollup: the biggest balances, the true total, and how
+ * many are not shown. Every figure comes from `outstandingByParty`, which sums
+ * each party's outstanding documents — no arithmetic happens here.
+ */
+const PartyBalances: React.FC<{
+  title: string; list: PartyBalanceList; empty: string; symbol: string;
+}> = ({ title, list, empty, symbol }) => (
+  <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2.5">
+    <div className="flex items-baseline justify-between gap-3 mb-1.5">
+      <p className="text-[11px] text-zinc-500">{title}</p>
+      <Money value={list.total} symbol={symbol} size="sm" />
+    </div>
+    {list.rows.length === 0 ? (
+      <p className="text-[11px] text-zinc-400">{empty}</p>
+    ) : (
+      <ul className="space-y-1">
+        {list.rows.map((row) => (
+          <li key={row.id} className="flex items-baseline justify-between gap-3 text-xs">
+            <span className="truncate text-zinc-700">{row.name}</span>
+            <Money value={row.amount} symbol={symbol} size="sm" />
+          </li>
+        ))}
+        {list.hidden > 0 && (
+          <li className="text-[11px] text-zinc-400">and {list.hidden} more</li>
+        )}
+      </ul>
+    )}
+  </div>
+);
+
+export const DashboardView: React.FC<{
+  books: Books; range: DateRange; onRangeChange: (r: DateRange) => void;
+  calendar: 'BS' | 'AD'; onQuickAction: (k: 'sale' | 'purchase' | 'expense' | 'payment') => void;
+  onGoToHealth: () => void;
+  hideHealthBanner?: boolean;
+}> = ({ books, range, onRangeChange, calendar, onQuickAction, onGoToHealth, hideHealthBanner = false }) => {
+  const {
+    accounts, journalEntries, sales, purchases, expenses, payments, business, integrityIssues,
+    customers, suppliers, receivableByCustomer, payableBySupplier,
+  } = books;
+  const symbol = business.currencySymbol;
+
+  const metrics = useMemo(
+    () => AccountingEngine.getDashboardMetrics(accounts, journalEntries, { sales, purchases, expenses, payments }, range),
+    [accounts, journalEntries, sales, purchases, expenses, payments, range],
+  );
+
+  const errors = integrityIssues.filter((i) => i.severity === 'ERROR');
+
+  const owedByCustomers = useMemo(
+    () => outstandingParties(receivableByCustomer, customers),
+    [receivableByCustomer, customers],
+  );
+  const owedBySuppliers = useMemo(
+    () => outstandingParties(payableBySupplier, suppliers),
+    [payableBySupplier, suppliers],
+  );
+
+  /**
+   * The trend is built from journal entries, so the line and the headline
+   * figures come from the same source. Previously the chart plotted
+   * sales - expenses while the KPI showed revenue - expenses - COGS, and the
+   * two disagreed on screen. Days with no activity are filled in so the x-axis
+   * stays evenly spaced.
+   */
+  const [granularity] = useState<'day'>('day');
+  void granularity;
+
+  const trend = useMemo(() => {
+    const inRange = AccountingEngine.inPeriod(journalEntries, range);
+    if (inRange.length === 0) return [];
+
+    const revenueIds = new Set(accounts.filter((a) => a.type === 'REVENUE').map((a) => a.id));
+    const expenseIds = new Set(accounts.filter((a) => a.type === 'EXPENSE').map((a) => a.id));
+    const byDate = new Map<string, { revenue: number; expenses: number }>();
+
+    for (const entry of inRange) {
+      const bucket = byDate.get(entry.transactionDate) ?? { revenue: 0, expenses: 0 };
+      for (const line of entry.lines) {
+        if (revenueIds.has(line.accountId)) bucket.revenue += line.credit - line.debit;
+        if (expenseIds.has(line.accountId)) bucket.expenses += line.debit - line.credit;
+      }
+      byDate.set(entry.transactionDate, bucket);
+    }
+
+    const out: { date: string; Revenue: number; Expenses: number; Profit: number }[] = [];
+    // Cap the filled series so a multi-year range does not render 700 points.
+    const span = Math.round((Date.parse(range.to) - Date.parse(range.from)) / 86_400_000);
+    const step = span > 180 ? 7 : 1;
+    for (let d = range.from; d <= range.to; d = addDays(d, step)) {
+      let revenue = 0; let expense = 0;
+      for (let k = 0; k < step; k += 1) {
+        const bucket = byDate.get(addDays(d, k));
+        if (bucket) { revenue += bucket.revenue; expense += bucket.expenses; }
+      }
+      out.push({
+        date: d, Revenue: round2(revenue), Expenses: round2(expense), Profit: round2(revenue - expense),
+      });
+    }
+    return out;
+  }, [journalEntries, accounts, range]);
+
+  const hasActivity = metrics.revenue !== 0 || metrics.netProfit !== 0 || metrics.recentTransactions.length > 0;
+
+  const kpis = [
+    { label: 'Revenue', value: metrics.revenue, hint: 'Net of VAT' },
+    { label: 'Gross profit', value: metrics.grossProfit, hint: 'Revenue less cost of sales' },
+    { label: 'Operating expenses', value: metrics.operatingExpenses, hint: 'Excludes cost of sales' },
+    { label: 'Net profit', value: metrics.netProfit, hint: 'For the selected period' },
+  ];
+
+  const positions = [
+    { label: 'Cash in hand', value: metrics.cashBalance },
+    { label: 'Bank', value: metrics.bankBalance },
+    { label: 'eSewa + Khalti', value: metrics.walletBalance },
+    { label: 'Receivable', value: metrics.accountsReceivable },
+    { label: 'Payable', value: metrics.accountsPayable },
+    { label: 'VAT due', value: metrics.vatPayable },
+  ];
+
+  return (
+    <div className="max-w-5xl mx-auto py-6 px-4 sm:px-6 space-y-8">
+      {errors.length > 0 && !hideHealthBanner && (
+        <Callout tone="error">
+          <div className="flex items-center justify-between gap-3">
+            <span>
+              {errors.length === 1 ? 'One problem needs attention' : `${errors.length} problems need attention`} before
+              these figures can be relied on.
+            </span>
+            <Button variant="danger" onClick={onGoToHealth}>Review</Button>
+          </div>
+        </Callout>
+      )}
+
+      <PeriodPicker value={range} onChange={onRangeChange} fiscalStartMonth={business.fiscalYearStartMonth} calendar={calendar} />
+
+      <section aria-label="Performance">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 border-b border-zinc-200 pb-6">
+          {kpis.map((k) => (
+            <div key={k.label}>
+              <p className="text-xs font-medium text-zinc-500 mb-1">{k.label}</p>
+              <Money value={k.value} symbol={symbol} size="xl" />
+              <p className="text-[11px] text-zinc-400 mt-1">{k.hint}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section aria-label="Position">
+        <h2 className="text-xs font-medium text-zinc-500 mb-3">Where you stand today</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+          {positions.map((p) => (
+            <div key={p.label} className="rounded-lg border border-zinc-200 bg-white px-3 py-2.5">
+              <p className="text-[11px] text-zinc-500 mb-0.5">{p.label}</p>
+              <Money value={p.value} symbol={symbol} />
+            </div>
+          ))}
+        </div>
+        <p className="text-[11px] text-zinc-400 mt-2">
+          Liquid total <Money value={metrics.liquidTotal} symbol={symbol} size="sm" />
+          {business.trackInventory && <> · Inventory <Money value={metrics.inventoryValue} symbol={symbol} size="sm" /></>}
+        </p>
+      </section>
+
+      <section aria-label="Outstanding by party">
+        <h2 className="text-xs font-medium text-zinc-500 mb-3">Who owes you, and whom you owe</h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <PartyBalances title="Owed to you" list={owedByCustomers} symbol={symbol}
+            empty="No customer owes anything right now." />
+          <PartyBalances title="You owe" list={owedBySuppliers} symbol={symbol}
+            empty="No supplier is waiting to be paid." />
+        </div>
+        <p className="text-[11px] text-zinc-400 mt-2">
+          Each party's balance is the sum of their unsettled invoices or bills, so it comes from the same
+          settlements the ledger does — a disagreement between the two is reported under Data health.
+        </p>
+      </section>
+
+      <section aria-label="Trend">
+        <h2 className="text-xs font-medium text-zinc-500 mb-3">Revenue and expenses over the period</h2>
+        {trend.length > 1 ? (
+          <div className="h-64 rounded-lg border border-zinc-200 bg-white p-3">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={trend} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                <CartesianGrid strokeDasharray="2 4" stroke="#e4e4e7" vertical={false} />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#a1a1aa' }} tickLine={false} axisLine={false}
+                  minTickGap={28} tickFormatter={(d: string) => d.slice(5)} />
+                <YAxis tick={{ fontSize: 10, fill: '#a1a1aa' }} tickLine={false} axisLine={false} width={48}
+                  tickFormatter={formatCompactNpr} />
+                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 6, border: '1px solid #e4e4e7' }}
+                  formatter={(value) => formatNpr(Number(value ?? 0), symbol)} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Line type="monotone" dataKey="Revenue" stroke="#18181b" strokeWidth={1.5} dot={false} />
+                <Line type="monotone" dataKey="Expenses" stroke="#f43f5e" strokeWidth={1.5} dot={false} />
+                <Line type="monotone" dataKey="Profit" stroke="#10b981" strokeWidth={1.5} dot={false} strokeDasharray="3 3" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <EmptyState title="Nothing recorded in this period yet."
+            action={<Button variant="primary" onClick={() => onQuickAction('sale')}>Record a sale</Button>} />
+        )}
+      </section>
+
+      <section aria-label="Recent activity">
+        <h2 className="text-xs font-medium text-zinc-500 mb-3">Recent activity</h2>
+        {hasActivity && metrics.recentTransactions.length > 0 ? (
+          <div className="overflow-x-auto border border-zinc-200 rounded-lg bg-white">
+            <table className="w-full text-xs">
+              <thead className="bg-zinc-50/80 text-zinc-500 border-b border-zinc-200">
+                <tr>
+                  <th scope="col" className="py-2 px-3 text-left font-medium">Date</th>
+                  <th scope="col" className="py-2 px-3 text-left font-medium">Type</th>
+                  <th scope="col" className="py-2 px-3 text-left font-medium">Detail</th>
+                  <th scope="col" className="py-2 px-3 text-left font-medium">Status</th>
+                  <th scope="col" className="py-2 px-3 text-right font-medium">Amount</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {metrics.recentTransactions.map((t) => (
+                  <tr key={t.id} className={t.voided ? 'text-zinc-400 line-through' : undefined}>
+                    <td className="py-2 px-3"><DualDate iso={t.date} calendar={calendar} /></td>
+                    <td className="py-2 px-3">{t.type}</td>
+                    <td className="py-2 px-3 text-zinc-600">{t.description}</td>
+                    <td className="py-2 px-3">
+                      <Badge tone={t.voided ? 'neutral' : t.status === 'PAID' || t.status === 'COMPLETED' ? 'green'
+                        : t.status === 'UNPAID' ? 'rose' : 'amber'}>
+                        {t.status.replace('_', ' ').toLowerCase()}
+                      </Badge>
+                    </td>
+                    <td className="py-2 px-3 text-right"><Money value={t.amount} symbol={symbol} size="sm" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState title="No activity in this period." />
+        )}
+      </section>
+    </div>
+  );
+};

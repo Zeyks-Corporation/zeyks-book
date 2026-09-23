@@ -1,0 +1,29 @@
+# ---------------------------------------------------------------------------
+# Zeyks Book — files that must never be committed
+# ---------------------------------------------------------------------------
+
+# Dependencies and build output
+node_modules/
+dist/
+
+# Environment files. Every .env* is ignored except the template, so a staging or
+# production file cannot be committed by accident. Real values live only in
+# .env.local (browser config) and .env (server secrets); both stay on the machine.
+# See .env.example for the template and README.md for the environment model.
+.env
+.env.*
+!.env.example
+
+# Supabase CLI machine state: local runtime secrets (anon/service/JWT), the
+# linked remote project ref and pooler URL. Regenerated per machine by
+# `supabase start` — never source of truth, never committed.
+supabase/.temp/
+
+# Tooling
+.vercel/
+.freebuff/
+
+# Local OS / editor noise
+.DS_Store
+Thumbs.db
+*.log

@@ -1,0 +1,22 @@
+# Zeyks Book
+#
+# Only the public surface is indexable. Every signed-in screen is a private
+# view of one business's books, so it is disallowed here and kept out of the
+# sitemap.
+
+User-agent: *
+Allow: /
+Allow: /signin
+
+# Private application routes. Each renders nothing without a session, and none
+# of them belongs in a search index.
+Disallow: /dashboard
+Disallow: /sales
+Disallow: /purchases
+Disallow: /expenses
+Disallow: /payments
+Disallow: /reports
+Disallow: /health
+Disallow: /settings
+
+Sitemap: https://zeyks-book.vercel.app/sitemap.xml

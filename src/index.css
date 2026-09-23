@@ -1,0 +1,599 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&display=swap');
+@import "tailwindcss";
+
+/* -------------------------------------------------------------------------- */
+/* Typography & Design Tokens                                                 */
+/* -------------------------------------------------------------------------- */
+
+@layer base {
+  :root {
+    /* ---- Typography ---- */
+    --font-lovelace: 'Lovelace', 'Playfair Display', Georgia, serif;
+    --font-logam: 'Logam', 'Lagom', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
+    --font-sf: var(--font-logam);
+
+    /* ---- Semantic Colors: Light ---- */
+    --bg: #FFFFFF;
+    --bg-secondary: #F2F2F7;
+    --bg-tertiary: #FFFFFF;
+    --label: #000000;
+    --label-secondary: rgba(60, 60, 67, 0.6);
+    --label-tertiary: rgba(60, 60, 67, 0.3);
+    --separator: rgba(60, 60, 67, 0.29);
+    --separator-opaque: #C6C6C8;
+    --accent: #007AFF;
+    --accent-hover: #0066D6;
+    --fill: rgba(120, 120, 128, 0.2);
+    --fill-secondary: rgba(120, 120, 128, 0.16);
+    --destructive: #FF3B30;
+    --destructive-bg: rgba(255, 59, 48, 0.12);
+    --success: #34C759;
+    --success-bg: rgba(52, 199, 89, 0.12);
+    --warning: #FF9500;
+    --warning-bg: rgba(255, 149, 0, 0.12);
+
+    /* ---- Liquid Glass ---- */
+    --glass-bg: rgba(255, 255, 255, 0.68);
+    --glass-border: rgba(255, 255, 255, 0.4);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    --glass-shadow-inset: inset 0 0 0 0.5px rgba(255, 255, 255, 0.4);
+
+    /* ---- Motion ---- */
+    --spring: cubic-bezier(0.32, 0.72, 0, 1);
+    --duration-micro: 100ms;
+    --duration-standard: 240ms;
+    --duration-sheet: 380ms;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not(.light) {
+      --bg: #000000;
+      --bg-secondary: #0D0D0E;
+      --bg-tertiary: #1C1C1E;
+      --label: #FFFFFF;
+      --label-secondary: rgba(235, 235, 245, 0.65);
+      --label-tertiary: rgba(235, 235, 245, 0.35);
+      --separator: rgba(84, 84, 88, 0.5);
+      --separator-opaque: #2C2C2E;
+      --accent: #0A84FF;
+      --accent-hover: #409CFF;
+      --fill: rgba(120, 120, 128, 0.36);
+      --fill-secondary: rgba(120, 120, 128, 0.28);
+      --destructive: #FF453A;
+      --destructive-bg: rgba(255, 69, 58, 0.18);
+      --success: #30D158;
+      --success-bg: rgba(48, 209, 88, 0.18);
+      --warning: #FF9F0A;
+      --warning-bg: rgba(255, 159, 10, 0.18);
+
+      --glass-bg: rgba(18, 18, 20, 0.72);
+      --glass-border: rgba(255, 255, 255, 0.12);
+      --glass-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+      --glass-shadow-inset: inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
+    }
+  }
+
+  :root.dark, .dark {
+    --bg: #000000;
+    --bg-secondary: #0D0D0E;
+    --bg-tertiary: #1C1C1E;
+    --label: #FFFFFF;
+    --label-secondary: rgba(235, 235, 245, 0.65);
+    --label-tertiary: rgba(235, 235, 245, 0.35);
+    --separator: rgba(84, 84, 88, 0.5);
+    --separator-opaque: #2C2C2E;
+    --accent: #0A84FF;
+    --accent-hover: #409CFF;
+    --fill: rgba(120, 120, 128, 0.36);
+    --fill-secondary: rgba(120, 120, 128, 0.28);
+    --destructive: #FF453A;
+    --destructive-bg: rgba(255, 69, 58, 0.18);
+    --success: #30D158;
+    --success-bg: rgba(48, 209, 88, 0.18);
+    --warning: #FF9F0A;
+    --warning-bg: rgba(255, 159, 10, 0.18);
+
+    --glass-bg: rgba(18, 18, 20, 0.72);
+    --glass-border: rgba(255, 255, 255, 0.12);
+    --glass-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+    --glass-shadow-inset: inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
+  }
+
+  /* Increased contrast: tighter ratios for accessibility */
+  @media (prefers-contrast: more) {
+    :root {
+      --label-secondary: rgba(60, 60, 67, 0.8);
+      --label-tertiary: rgba(60, 60, 67, 0.55);
+      --separator: rgba(60, 60, 67, 0.5);
+    }
+  }
+  @media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+    :root {
+      --label-secondary: rgba(235, 235, 245, 0.8);
+      --label-tertiary: rgba(235, 235, 245, 0.55);
+      --separator: rgba(84, 84, 88, 0.9);
+    }
+  }
+
+  body {
+    font-family: var(--font-logam);
+    color: var(--label);
+    background-color: var(--bg-secondary);
+    -webkit-font-smoothing: antialiased;
+    /* Safe area insets for notched / Dynamic Island devices */
+    padding:
+      env(safe-area-inset-top)
+      env(safe-area-inset-right)
+      env(safe-area-inset-bottom)
+      env(safe-area-inset-left);
+  }
+
+  /* Keyboard focus: accent-colored ring aligned with Apple conventions. */
+  :focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--accent);
+    border-radius: 4px;
+  }
+}
+
+.font-lovelace {
+  font-family: var(--font-lovelace) !important;
+}
+
+.font-logam {
+  font-family: var(--font-logam) !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Motion — respect prefers-reduced-motion                                     */
+/* -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    /* Suppress press-scale transforms for users who dislike motion */
+    transform: none !important;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Reduced transparency — disable blur/glass for accessibility                 */
+/* -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass-regular,
+  .glass-clear {
+    background: var(--bg) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Liquid Glass material utilities                                             */
+/* -------------------------------------------------------------------------- */
+
+@layer components {
+  .glass-regular {
+    background: var(--glass-bg);
+    backdrop-filter: blur(40px) saturate(200%);
+    -webkit-backdrop-filter: blur(40px) saturate(200%);
+    border: 0.5px solid var(--glass-border);
+    box-shadow: var(--glass-shadow), var(--glass-shadow-inset);
+  }
+
+  .glass-clear {
+    background: rgba(255, 255, 255, 0.28);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 0.5px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .glass-clear {
+      background: rgba(30, 30, 30, 0.3);
+    }
+  }
+
+  .apple-ambient-glow {
+    background:
+      radial-gradient(ellipse 70% 40% at 50% -10%, rgba(0, 122, 255, 0.16), transparent 70%),
+      radial-gradient(ellipse 40% 30% at 80% 10%, rgba(88, 86, 214, 0.08), transparent 60%);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .apple-ambient-glow {
+      background:
+        radial-gradient(ellipse 80% 50% at 50% -10%, rgba(10, 132, 255, 0.28), transparent 75%),
+        radial-gradient(ellipse 50% 35% at 85% 15%, rgba(191, 90, 242, 0.15), transparent 60%),
+        radial-gradient(ellipse 40% 25% at 15% 10%, rgba(48, 209, 88, 0.1), transparent 50%);
+    }
+  }
+
+  .dark .apple-ambient-glow {
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(10, 132, 255, 0.28), transparent 75%),
+      radial-gradient(ellipse 50% 35% at 85% 15%, rgba(191, 90, 242, 0.15), transparent 60%),
+      radial-gradient(ellipse 40% 25% at 15% 10%, rgba(48, 209, 88, 0.1), transparent 50%);
+  }
+
+  .apple-canvas-window {
+    background: var(--bg);
+    border: 1px solid var(--separator);
+    border-radius: 20px;
+    box-shadow:
+      0 20px 60px -15px rgba(0, 0, 0, 0.12),
+      0 0 0 1px var(--glass-border),
+      inset 0 1px 1px 0 rgba(255, 255, 255, 0.4);
+    transition: transform 320ms cubic-bezier(0.32, 0.72, 0, 1), box-shadow 320ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .apple-canvas-window {
+      box-shadow:
+        0 30px 80px -20px rgba(0, 0, 0, 0.8),
+        0 0 40px -10px rgba(10, 132, 255, 0.2),
+        inset 0 1px 1px 0 rgba(255, 255, 255, 0.2);
+    }
+  }
+
+  .dark .apple-canvas-window {
+    box-shadow:
+      0 30px 80px -20px rgba(0, 0, 0, 0.8),
+      0 0 40px -10px rgba(10, 132, 255, 0.2),
+      inset 0 1px 1px 0 rgba(255, 255, 255, 0.2);
+  }
+
+  .apple-card {
+    background: var(--bg);
+    border: 1px solid var(--separator);
+    border-radius: 18px;
+    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
+    transition: all 260ms cubic-bezier(0.32, 0.72, 0, 1);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .apple-card:hover {
+    border-color: rgba(0, 122, 255, 0.4);
+    box-shadow: 0 16px 36px -6px rgba(0, 0, 0, 0.09), 0 2px 8px rgba(0, 0, 0, 0.03);
+    transform: translateY(-2px);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .apple-card {
+      box-shadow: 0 6px 28px -4px rgba(0, 0, 0, 0.5), inset 0 1px 1px 0 rgba(255, 255, 255, 0.08);
+    }
+    .apple-card:hover {
+      border-color: rgba(10, 132, 255, 0.6);
+      box-shadow: 0 20px 48px -6px rgba(0, 0, 0, 0.7), 0 0 24px -4px rgba(10, 132, 255, 0.25), inset 0 1px 1px 0 rgba(255, 255, 255, 0.18);
+    }
+  }
+
+  .dark .apple-card {
+    box-shadow: 0 6px 28px -4px rgba(0, 0, 0, 0.5), inset 0 1px 1px 0 rgba(255, 255, 255, 0.08);
+  }
+  .dark .apple-card:hover {
+    border-color: rgba(10, 132, 255, 0.6);
+    box-shadow: 0 20px 48px -6px rgba(0, 0, 0, 0.7), 0 0 24px -4px rgba(10, 132, 255, 0.25), inset 0 1px 1px 0 rgba(255, 255, 255, 0.18);
+  }
+
+  .apple-text-gradient {
+    background: linear-gradient(180deg, var(--label) 20%, var(--label-secondary) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Continuous corners (squircle)                                                */
+/* -------------------------------------------------------------------------- */
+/* Progressive enhancement: `corner-shape: squircle` is a CSS proposal that   */
+/* Safari supports. Other browsers fall back to standard border-radius.        */
+
+@layer components {
+  .squircle {
+    border-radius: 12px;
+    corner-shape: squircle;
+  }
+
+  .squircle-sm {
+    border-radius: 10px;
+    corner-shape: squircle;
+  }
+
+  .squircle-lg {
+    border-radius: 14px;
+    corner-shape: squircle;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* The A4 report / document system                                             */
+/* -------------------------------------------------------------------------- */
+/* One design language for every statement and every printable document: the   */
+/* same page shell, the same typography scale, the same table rules. Sizes are */
+/* in points because the target medium is paper, not a window.                 */
+
+@layer components {
+  /* The scroll container keeps a 210mm page usable on a narrow screen without
+     ever letting the page itself reflow to the screen width. */
+  .report-scroll {
+    overflow-x: auto;
+    padding: 0 1rem;
+  }
+
+  .report-sheet {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto;
+    padding: 16mm 14mm 18mm;
+    background: #fff;
+    color: #18181b;
+    border: 1px solid #e4e4e7;
+    box-shadow: 0 1px 2px rgb(24 24 27 / 0.05), 0 8px 24px rgb(24 24 27 / 0.05);
+    font-size: 9.5pt;
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .report-kicker {
+    font-size: 7.5pt;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #a1a1aa;
+    font-weight: 600;
+  }
+
+  .report-title {
+    font-size: 15pt;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: #09090b;
+  }
+
+  .report-business {
+    font-size: 11pt;
+    font-weight: 600;
+    color: #18181b;
+  }
+
+  .report-subtitle,
+  .report-identity {
+    font-size: 8.5pt;
+    color: #52525b;
+  }
+
+  .report-rule {
+    border-top: 1px solid #d4d4d8;
+  }
+
+  .report-rule-strong {
+    border-top: 1.5px solid #18181b;
+  }
+
+  .report-section-title {
+    font-size: 8.5pt;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #3f3f46;
+  }
+
+  .report-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.25rem 1.5rem;
+    font-size: 8.5pt;
+  }
+
+  .report-meta-key {
+    color: #71717a;
+  }
+
+  .report-meta-value {
+    color: #18181b;
+  }
+
+  .report-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 8.5pt;
+  }
+
+  .report-table thead th {
+    padding: 0.35rem 0.5rem;
+    border-bottom: 1px solid #18181b;
+    font-size: 7.5pt;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #52525b;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .report-table tbody td {
+    padding: 0.35rem 0.5rem;
+    border-bottom: 1px solid #f4f4f5;
+    color: #27272a;
+    vertical-align: top;
+  }
+
+  .report-table tfoot td {
+    padding: 0.4rem 0.5rem;
+    border-top: 1.5px solid #18181b;
+    font-weight: 600;
+    color: #09090b;
+  }
+
+  .report-table .report-num {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .report-table .report-quiet {
+    color: #a1a1aa;
+  }
+
+  /* Statement rows: label left, figure right, on ruled lines. */
+  .report-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.15rem 0;
+  }
+
+  .report-row-total {
+    border-top: 1px solid #d4d4d8;
+    margin-top: 0.25rem;
+    padding-top: 0.35rem;
+    font-weight: 600;
+    color: #09090b;
+  }
+
+  .report-row-grand {
+    border-top: 1.5px solid #18181b;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    font-size: 10.5pt;
+    font-weight: 600;
+    color: #09090b;
+  }
+
+  .report-note {
+    font-size: 8pt;
+    color: #71717a;
+  }
+
+  .report-empty {
+    border: 1px solid #e4e4e7;
+    background: #fafafa;
+    padding: 2.5rem 1.5rem;
+    text-align: center;
+    color: #52525b;
+    font-size: 9.5pt;
+  }
+
+  .report-footer {
+    margin-top: 1.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #e4e4e7;
+    font-size: 7.5pt;
+    color: #a1a1aa;
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Print                                                                       */
+/* -------------------------------------------------------------------------- */
+
+@media print {
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /* `.app-header`, not a bare `header`: the report's own header IS a <header>
+     element, and the old rule hid it, so every printed statement came out
+     without its business name, title or period. */
+  #app-sidebar,
+  .app-header,
+  .no-print {
+    display: none !important;
+  }
+
+  /* Printing an individual document from its overlay: the overlay becomes the
+     page and the app behind it is dropped. */
+  body[data-print-sheet='open'] main,
+  body[data-print-sheet='open'] #app-sidebar,
+  body[data-print-sheet='open'] .app-header {
+    display: none !important;
+  }
+
+  .print-overlay {
+    position: static !important;
+    inset: auto !important;
+    display: block !important;
+    overflow: visible !important;
+    background: #fff !important;
+    padding: 0 !important;
+  }
+
+  .print-overlay .report-scroll {
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
+  .report-scroll {
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
+  /* The page margins come from @page, so the sheet must not add its own. */
+  .report-sheet {
+    width: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Long tables used to split mid-row with no header on the next page. */
+  table {
+    width: 100% !important;
+    page-break-inside: auto;
+  }
+  thead { display: table-header-group; }
+  tfoot { display: table-footer-group; }
+  tr { page-break-inside: avoid; page-break-after: auto; }
+
+  /* Keep a block's heading with its first rows and never split a total. */
+  .report-block,
+  .report-row-grand,
+  .report-empty,
+  .report-footer {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .report-block > .report-section-title {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  /* Several sheets in one job (a report followed by its documents) each start
+     on their own page. */
+  .report-sheet + .report-sheet {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 16mm 14mm 18mm;
+  }
+
+  /* Paged-media engines (Prince, WeasyPrint) render these page-margin boxes;
+     browsers ignore them and supply their own print header/footer instead, so
+     the sheet carries a real generated-date footer too. */
+  @page {
+    @bottom-left {
+      content: "Zeyks Book";
+      font-size: 8pt;
+      color: #71717a;
+    }
+    @bottom-right {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 8pt;
+      color: #71717a;
+    }
+  }
+}

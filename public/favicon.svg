@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Zeyks Book">
+  <rect x="1.5" y="1.5" width="29" height="29" rx="7" fill="#18181b" />
+  <path d="M8.5 10h15M23.5 10 8.5 21M8.5 21h15" fill="none" stroke="#fafafa" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M8.5 25h15" fill="none" stroke="#71717a" stroke-width="1.4" stroke-linecap="round" />
+</svg>
