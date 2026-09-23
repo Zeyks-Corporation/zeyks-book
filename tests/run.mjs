@@ -5524,12 +5524,34 @@ test('the deployment serves the shell for real routes and an honest 404 for the 
   assert(Array.isArray(routes) && routes.length >= 3, 'routing is explicit');
   assertEqual(routes[0].handle, 'filesystem',
     'static files win first, so /sitemap.xml and /assets/* are never index.html');
-  const api = routes.find((r) => /\/api\//.test(r.src));
-  assert(api && api.status === 404,
+  const contact = routes.find((r) => r.src === '/api/contact');
+  assert(contact && contact.dest === '/api/contact.js',
+    'the public contact form must reach its serverless function');
+  const api = routes.find((r) => /\/api\//.test(r.src) && r.status === 404);
+  assert(api,
     'an undeployed API path must 404, not answer 200 with HTML');
+  assert(routes.indexOf(contact) < routes.indexOf(api),
+    'the contact function is matched before the generic API refusal');
   const fallback = routes[routes.length - 1];
   assertEqual(fallback.dest, '/index.html', 'everything else is the app shell');
   assert(routes.indexOf(api) < routes.indexOf(fallback), 'the API rule is decided first');
+});
+
+test('the deployed contact form validates and fails closed when email is missing', () => {
+  const handler = readProjectFile('api/contact.js');
+  const validation = readProjectFile('server/contact.js');
+  const resend = readProjectFile('server/resend.js');
+  assert(/validateContactPayload\(req\.body\)/.test(handler),
+    'the function validates the untrusted request body');
+  assert(/!resendService\.isConfigured\(\)/.test(handler),
+    'the function does not claim delivery without a Resend key');
+  assert(/MAX_MESSAGE_LENGTH = 5000/.test(validation),
+    'contact messages have a server-side size limit');
+  assert(/escapeHtml/.test(resend) && !/support@zeyks\.book/.test(resend),
+    'email content is escaped and the default recipient uses the real domain');
+  const contact = fileText('src/components/ContactPage.tsx');
+  assert(/fetch\('\/api\/contact'/.test(contact), 'the form uses the deployed contact endpoint');
+  assert(/mailto:contact@zeyksbook\.app/.test(contact), 'there is a direct email fallback');
 });
 
 test('the favicon is a real icon file, and the build ships it', () => {
@@ -5554,7 +5576,7 @@ test('the favicon is a real icon file, and the build ships it', () => {
   const html = readFileSync(path.join(root, 'index.html'), 'utf8');
   assert(/rel="icon" href="\/favicon.ico"/.test(html), 'the document asks for the icon');
   assert(/type="image\/svg\+xml" href="\/favicon.svg"/.test(html));
-  assert(/rel="canonical" href="https:\/\/zeyks-book.vercel.app\/"/.test(html));
+  assert(/rel="canonical" href="https:\/\/www\.zeyksbook\.app\/"/.test(html));
   assert(/name="description"/.test(html), 'and states what the product is');
 });
 
@@ -5578,8 +5600,8 @@ test('the sitemap lists the public surface only, and robots agrees', () => {
   for (const tab of APP_TABS) {
     assert(robots.includes(`Disallow: ${pathForTab(tab)}`), `robots must disallow ${tab}`);
   }
-  assert(/Sitemap: https:\/\/zeyks-book\.vercel\.app\/sitemap\.xml/.test(robots),
-    'robots points at the sitemap');
+  assert(/Sitemap: https:\/\/www\.zeyksbook\.app\/sitemap\.xml/.test(robots),
+    'robots points at the canonical sitemap');
 });
 
 test('the landing page is public, restrained and only claims what exists', () => {

@@ -157,7 +157,12 @@ export const ContactPage: React.FC<{
                 </div>
                 <div>
                   <h3 className="text-[15px] font-semibold text-[var(--label)]">Email Service</h3>
-                  <p className="text-[13px] text-[var(--label-secondary)]">Contact@zeyksbook.app</p>
+                  <a
+                    href="mailto:contact@zeyksbook.app"
+                    className="text-[13px] text-[var(--label-secondary)] hover:text-[var(--label)] transition-colors"
+                  >
+                    contact@zeyksbook.app
+                  </a>
                 </div>
               </div>
             </div>

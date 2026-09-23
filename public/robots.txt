@@ -19,4 +19,4 @@ Disallow: /reports
 Disallow: /health
 Disallow: /settings
 
-Sitemap: https://zeyks-book.vercel.app/sitemap.xml
+Sitemap: https://www.zeyksbook.app/sitemap.xml

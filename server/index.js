@@ -48,6 +48,7 @@ import { khalti } from './khalti.js';
 import { ProviderResponseError } from './verification.js';
 import { redact, redactDetail } from './redact.js';
 import { resendService } from './resend.js';
+import { validateContactPayload } from './contact.js';
 import {
   authorizeInvoice, authorizeReferences, claimedRefs, requireCaller, warnIfUnconfigured,
 } from './auth.js';
@@ -246,26 +247,11 @@ app.get('/api/resend/status', (_req, res) => {
 });
 
 app.post('/api/contact', async (req, res) => {
-  const payload = req.body ?? {};
-  const name = payload.name;
-  const email = payload.email;
-  const message = payload.message;
-  if (!name || typeof name !== 'string' || !name.trim()) {
-    return fail(res, 400, 'Your name is required.');
-  }
-  if (!email || typeof email !== 'string' || !email.includes('@')) {
-    return fail(res, 400, 'A valid email address is required.');
-  }
-  if (!message || typeof message !== 'string' || !message.trim()) {
-    return fail(res, 400, 'A message body is required.');
-  }
+  const validated = validateContactPayload(req.body);
+  if (!validated.ok) return fail(res, 400, validated.error);
 
   try {
-    const result = await resendService.sendContactEmail({
-      name: name.trim(),
-      email: email.trim(),
-      message: message.trim(),
-    });
+    const result = await resendService.sendContactEmail(validated.value);
     res.json(result);
   } catch (e) {
     return fail(res, 500, 'Failed to send message via Resend.', e);

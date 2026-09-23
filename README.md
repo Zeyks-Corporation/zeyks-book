@@ -137,11 +137,27 @@ machine state is tracked, and if an environment file other than `.env.example` i
 
 ## Deploying — routing, and the two runtimes
 
-The app deploys to Vercel as a static build of `dist/`. Two things about that
-are worth knowing before you touch it.
+The app deploys to Vercel as a static build of `dist/`, plus one small public
+contact function at `/api/contact`. Three things about that are worth knowing
+before you touch it.
 
-**One deployment, one API origin (or none).** The payment endpoints live in
-`server/index.js`, which is a long-running Node process, not a static asset —
+**The contact form has its own function.** Vercel does not run the long-lived
+`server/index.js` process, so `api/contact.js` is the only API route included in
+the static deployment. Set these deployment environment variables before using
+it:
+
+```bash
+RESEND_API_KEY="re_..."
+RESEND_FROM_EMAIL="Zeyks Book <contact@zeyksbook.app>"  # verified sender
+RESEND_TO_EMAIL="contact@zeyksbook.app"                 # optional override
+```
+
+If `RESEND_API_KEY` is missing, the function returns a clear `503` rather than
+claiming that a visitor's message was delivered. Local `npm run dev` keeps the
+simulation fallback so the form can be exercised without a credential.
+
+**One payment deployment, one API origin (or none).** The payment endpoints live
+in `server/index.js`, which is a long-running Node process, not a static asset —
 Vercel does not run it. So a deployment either names where that API lives or it
 does not have one:
 
@@ -166,8 +182,9 @@ link and the back button all work:
 | `/dashboard` `/sales` `/purchases` `/expenses` `/payments` `/reports` `/health` `/settings` | the signed-in app |
 | anything else | the 404 page |
 
-`vercel.json` routes static files first, 404s `/api/*` (so an undeployed API path
-cannot answer 200 with HTML), and sends everything else to `index.html`. Signed
+`vercel.json` routes static files first, sends `/api/contact` to the contact
+function, 404s every other `/api/*` path (so an undeployed API path cannot answer
+200 with HTML), and sends everything else to `index.html`. Signed
 out, a book path shows the sign-in screen *at that path*, so signing in continues
 to the screen that was asked for. Signed in, `/` and `/signin` redirect to
 the dashboard. Unknown paths are a 404 for everyone — never a random screen.
@@ -939,7 +956,8 @@ src/
   state/          useBooks — all app state and the actions that mutate it
   components/     views, the shared UI kit, and the A4 report/document layer
   data/           the default chart of accounts and an empty business profile
-server/           Express API: eSewa and Khalti integration, plus redact.js (credential masking)
+api/              Vercel function for the public contact form
+server/           Express API: eSewa and Khalti integration, contact delivery, plus redact.js (credential masking)
 tests/            offline test runner (node tests/run.mjs / npm test)
 ```
 t
