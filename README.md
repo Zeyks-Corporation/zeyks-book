@@ -942,4 +942,4 @@ src/
 server/           Express API: eSewa and Khalti integration, plus redact.js (credential masking)
 tests/            offline test runner (node tests/run.mjs / npm test)
 ```
-test 
+t
