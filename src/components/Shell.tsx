@@ -35,7 +35,7 @@ export const Sidebar: React.FC<{
     )}
     <aside
       id="app-sidebar"
-      className={`fixed inset-y-0 left-0 z-40 w-60 glass-regular border-r border-[var(--separator)] flex flex-col transition-transform lg:translate-x-0 ${
+      className={`fixed inset-y-0 left-0 z-40 w-60 bg-[var(--bg)] border-r border-[var(--separator)] flex flex-col transition-transform lg:translate-x-0 ${
         isOpenMobile ? 'translate-x-0' : '-translate-x-full'
       }`}
     >

@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from 'react';
-import { Home } from 'lucide-react';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { DateRange } from '../types';
 import { Books } from '../state/useBooks';
@@ -141,18 +140,7 @@ export const DashboardView: React.FC<{
         </Callout>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <PeriodPicker value={range} onChange={onRangeChange} fiscalStartMonth={business.fiscalYearStartMonth} calendar={calendar} />
-        <a
-          href="/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 rounded-full border border-[var(--separator)] bg-[var(--bg-tertiary)] px-3.5 py-1.5 text-[13px] font-medium text-[var(--label)] hover:bg-[var(--fill-secondary)] transition-all shadow-2xs shrink-0"
-        >
-          <Home size={14} className="text-[var(--accent)]" />
-          <span>Landing Page</span>
-        </a>
-      </div>
+      <PeriodPicker value={range} onChange={onRangeChange} fiscalStartMonth={business.fiscalYearStartMonth} calendar={calendar} />
 
       <section aria-label="Performance">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 border-b border-[var(--separator)] pb-6">
