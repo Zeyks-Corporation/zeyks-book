@@ -77,14 +77,15 @@ export const LandingPage: React.FC<{
                 <ArrowRight size={17} strokeWidth={2.2} className="ml-1.5 transition-transform group-hover:translate-x-1" />
               </Button>
 
-              <button
-                type="button"
-                onClick={() => navigate('/demo')}
+              <a
+                href="/demo"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="inline-flex h-11 min-h-[44px] items-center justify-center rounded-full border border-[var(--separator)] bg-[var(--bg)] px-6 text-[15px] font-medium text-[var(--label)] shadow-sm hover:bg-[var(--fill-secondary)] transition-all active:scale-[0.97] gap-1.5"
               >
                 <span>See Demo</span>
                 <ArrowRight size={16} className="opacity-70" />
-              </button>
+              </a>
             </div>
 
             {/* Trust Strip */}

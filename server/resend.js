@@ -58,4 +58,63 @@ export const resendService = {
       throw error;
     }
   },
+
+  /**
+   * Send authentication emails (welcome, reset password, confirmation) via Resend.
+   */
+  async sendAuthEmail({ type, email, name = 'Valued User', resetLink }) {
+    if (!resendClient) {
+      console.log(`[resend] Simulation: Auth email (${type}) for ${email}`);
+      return { success: true, simulated: true };
+    }
+
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'Zeyks Book <onboarding@resend.dev>';
+    const subjectMap = {
+      welcome: 'Welcome to Zeyks Book!',
+      password_reset: 'Reset Your Zeyks Book Password',
+      signup_notification: 'New User Registered on Zeyks Book',
+    };
+
+    const subject = subjectMap[type] || 'Zeyks Book Security Notification';
+
+    const htmlMap = {
+      welcome: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e4e4e7; border-radius: 12px;">
+          <h2 style="color: #09090b;">Welcome to Zeyks Book, ${name}!</h2>
+          <p style="color: #52525b;">Your account has been created. Start managing your double-entry accounting with native Bikram Sambat dates.</p>
+          <hr style="border: 0; border-top: 1px solid #e4e4e7; margin: 20px 0;" />
+          <p style="color: #a1a1aa; font-size: 12px;">Zeyks Book Security & Auth System · Powered by Resend</p>
+        </div>
+      `,
+      password_reset: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e4e4e7; border-radius: 12px;">
+          <h2 style="color: #09090b;">Password Reset Request</h2>
+          <p style="color: #52525b;">We received a request to reset your password for <strong>${email}</strong>.</p>
+          ${resetLink ? `<p><a href="${resetLink}" style="display: inline-block; background: #007AFF; color: #fff; padding: 10px 18px; border-radius: 8px; text-decoration: none; font-weight: 600;">Reset Password</a></p>` : ''}
+          <p style="color: #71717a; font-size: 13px;">If you did not request this change, you can safely ignore this email.</p>
+          <hr style="border: 0; border-top: 1px solid #e4e4e7; margin: 20px 0;" />
+          <p style="color: #a1a1aa; font-size: 12px;">Zeyks Book Security & Auth System · Powered by Resend</p>
+        </div>
+      `,
+      signup_notification: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e4e4e7; border-radius: 12px;">
+          <h2 style="color: #09090b;">New Signup Event</h2>
+          <p>A new user has registered: <strong>${name}</strong> (${email}).</p>
+        </div>
+      `,
+    };
+
+    try {
+      const data = await resendClient.emails.send({
+        from: fromEmail,
+        to: [email],
+        subject,
+        html: htmlMap[type] || htmlMap.welcome,
+      });
+      return { success: true, data };
+    } catch (error) {
+      console.error(`[resend] Failed to send auth email (${type}):`, error);
+      throw error;
+    }
+  },
 };

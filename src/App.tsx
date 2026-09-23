@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, Plus, XCircle } from 'lucide-react';
+import { CheckCircle2, Home, Plus, XCircle } from 'lucide-react';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { UserProfile, ViewTab } from './types';
 import { useBooks } from './state/useBooks';
@@ -573,18 +573,31 @@ export default function App() {
   };
 
   const headerActions = useMemo(() => {
-    if (!currentDocKind) return null;
-    const kind = quickActionForTab[currentDocKind]!;
-    const supported = isSupported(CAPABILITY_FOR_TXN[kind]);
+    if (currentDocKind) {
+      const kind = quickActionForTab[currentDocKind]!;
+      const supported = isSupported(CAPABILITY_FOR_TXN[kind]);
+      return (
+        <Button
+          variant="primary"
+          onClick={() => openQuickAction(kind)}
+          disabled={!supported}
+          title={supported ? undefined : unsupportedMessage(TXN_LABELS[kind])}
+        >
+          <Plus size={13} aria-hidden="true" /> New
+        </Button>
+      );
+    }
     return (
-      <Button
-        variant="primary"
-        onClick={() => openQuickAction(kind)}
-        disabled={!supported}
-        title={supported ? undefined : unsupportedMessage(TXN_LABELS[kind])}
+      <a
+        href="/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1.5 rounded-full border border-[var(--separator)] bg-[var(--fill-secondary)] px-3 py-1.5 text-[13px] font-medium text-[var(--label)] hover:bg-[var(--separator)] transition-all"
+        title="View Landing Page"
       >
-        <Plus size={13} aria-hidden="true" /> New
-      </Button>
+        <Home size={13} className="text-[var(--accent)] shrink-0" />
+        <span>Landing Page</span>
+      </a>
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDocKind, openQuickAction]);

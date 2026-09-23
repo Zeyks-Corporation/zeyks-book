@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Plus, RotateCcw, XCircle } from 'lucide-react';
+import { CheckCircle2, Plus, XCircle } from 'lucide-react';
 import { ViewTab } from '../types';
 import { useDemoBooks } from '../state/useDemoBooks';
 import { Sidebar, Header } from './Shell';
@@ -54,7 +54,7 @@ export const DemoPage: React.FC<{
   onSignIn: () => void;
 }> = ({ onSignIn }) => {
   const books = useDemoBooks();
-  const { defaultRange, integrityIssues, resetAll } = books;
+  const { defaultRange, integrityIssues } = books;
 
   const [activeTab, setActiveTab] = useState<ViewTab>('dashboard');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -127,48 +127,10 @@ export const DemoPage: React.FC<{
     );
   }, [currentDocKind, openQuickAction]);
 
-  const handleResetDemo = useCallback(() => {
-    resetAll();
-    notify('Demo environment reset to initial state. Local storage refreshed.', true);
-  }, [notify, resetAll]);
+
 
   return (
     <div className="min-h-screen bg-[var(--bg-secondary)] flex flex-col">
-      {/* ── Top Demo Mode Info Banner ── */}
-      <div className="sticky top-0 z-40 bg-[var(--accent)] text-white px-4 py-2.5 shadow-md flex flex-wrap items-center justify-between gap-3 text-[13px] border-b border-white/10">
-        <div className="flex items-center gap-2.5 font-medium">
-          <span className="flex h-6 px-2.5 items-center justify-center rounded-full bg-white/20 text-white font-bold text-[11px] uppercase tracking-wider">
-            Demo Mode
-          </span>
-          <span className="hidden sm:inline text-white/90">
-            Interactive Accounting Studio — All data is saved safely in your browser (local browser storage). No Supabase database involved.
-          </span>
-          <span className="sm:hidden text-white/90">
-            Interactive Studio (Local Storage only)
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={handleResetDemo}
-            className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[12px] font-semibold text-white hover:bg-white/25 active:scale-95 transition-all"
-            title="Reset all demo entries to sample snapshot"
-          >
-            <RotateCcw size={12} strokeWidth={2.2} />
-            <span>Reset Demo Data</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onSignIn}
-            className="inline-flex items-center gap-1 rounded-full bg-white text-[var(--accent)] px-3 py-1 text-[12px] font-bold shadow-xs hover:bg-white/90 active:scale-95 transition-all"
-          >
-            <span>Sign In / Full App</span>
-          </button>
-        </div>
-      </div>
-
       {/* ── Main Studio Layout ── */}
       <div className="flex-1 relative">
         <Sidebar

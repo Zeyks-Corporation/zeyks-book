@@ -272,6 +272,26 @@ app.post('/api/contact', async (req, res) => {
   }
 });
 
+app.post('/api/auth/email', async (req, res) => {
+  const bodyObj = req.body ?? {};
+  const recipientAddr = bodyObj.targetEmail || bodyObj.recipient;
+  if (!recipientAddr || typeof recipientAddr !== 'string' || !recipientAddr.includes('@')) {
+    return fail(res, 400, 'A valid email address is required.');
+  }
+
+  try {
+    const result = await resendService.sendAuthEmail({
+      type: bodyObj.type || 'welcome',
+      email: recipientAddr.trim(),
+      name: bodyObj.userName ? String(bodyObj.userName).trim() : 'Valued User',
+      resetLink: bodyObj.resetLink,
+    });
+    res.json(result);
+  } catch (e) {
+    return fail(res, 500, 'Failed to send auth email via Resend.', e);
+  }
+});
+
 /* ------------------------------ Static build ------------------------------ */
 
 const dist = path.resolve(__dirname, '../dist');

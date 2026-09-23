@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { Home } from 'lucide-react';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { DateRange } from '../types';
 import { Books } from '../state/useBooks';
@@ -17,23 +18,23 @@ import { outstandingParties, PartyBalanceList } from '../services/reportData';
 const PartyBalances: React.FC<{
   title: string; list: PartyBalanceList; empty: string; symbol: string;
 }> = ({ title, list, empty, symbol }) => (
-  <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2.5">
+  <div className="rounded-lg border border-[var(--separator)] bg-[var(--bg-tertiary)] px-3 py-2.5">
     <div className="flex items-baseline justify-between gap-3 mb-1.5">
-      <p className="text-[11px] text-zinc-500">{title}</p>
+      <p className="text-[11px] font-medium text-[var(--label-secondary)]">{title}</p>
       <Money value={list.total} symbol={symbol} size="sm" />
     </div>
     {list.rows.length === 0 ? (
-      <p className="text-[11px] text-zinc-400">{empty}</p>
+      <p className="text-[11px] text-[var(--label-tertiary)]">{empty}</p>
     ) : (
       <ul className="space-y-1">
         {list.rows.map((row) => (
           <li key={row.id} className="flex items-baseline justify-between gap-3 text-xs">
-            <span className="truncate text-zinc-700">{row.name}</span>
+            <span className="truncate text-[var(--label)]">{row.name}</span>
             <Money value={row.amount} symbol={symbol} size="sm" />
           </li>
         ))}
         {list.hidden > 0 && (
-          <li className="text-[11px] text-zinc-400">and {list.hidden} more</li>
+          <li className="text-[11px] text-[var(--label-tertiary)]">and {list.hidden} more</li>
         )}
       </ul>
     )}
@@ -70,10 +71,7 @@ export const DashboardView: React.FC<{
 
   /**
    * The trend is built from journal entries, so the line and the headline
-   * figures come from the same source. Previously the chart plotted
-   * sales - expenses while the KPI showed revenue - expenses - COGS, and the
-   * two disagreed on screen. Days with no activity are filled in so the x-axis
-   * stays evenly spaced.
+   * figures come from the same source.
    */
   const [granularity] = useState<'day'>('day');
   void granularity;
@@ -96,7 +94,6 @@ export const DashboardView: React.FC<{
     }
 
     const out: { date: string; Revenue: number; Expenses: number; Profit: number }[] = [];
-    // Cap the filled series so a multi-year range does not render 700 points.
     const span = Math.round((Date.parse(range.to) - Date.parse(range.from)) / 86_400_000);
     const step = span > 180 ? 7 : 1;
     for (let d = range.from; d <= range.to; d = addDays(d, step)) {
@@ -131,7 +128,7 @@ export const DashboardView: React.FC<{
   ];
 
   return (
-    <div className="max-w-5xl mx-auto py-6 px-4 sm:px-6 space-y-8">
+    <div className="max-w-5xl mx-auto py-6 px-4 sm:px-6 space-y-8 text-[var(--label)]">
       {errors.length > 0 && !hideHealthBanner && (
         <Callout tone="error">
           <div className="flex items-center justify-between gap-3">
@@ -144,67 +141,78 @@ export const DashboardView: React.FC<{
         </Callout>
       )}
 
-      <PeriodPicker value={range} onChange={onRangeChange} fiscalStartMonth={business.fiscalYearStartMonth} calendar={calendar} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <PeriodPicker value={range} onChange={onRangeChange} fiscalStartMonth={business.fiscalYearStartMonth} calendar={calendar} />
+        <a
+          href="/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 rounded-full border border-[var(--separator)] bg-[var(--bg-tertiary)] px-3.5 py-1.5 text-[13px] font-medium text-[var(--label)] hover:bg-[var(--fill-secondary)] transition-all shadow-2xs shrink-0"
+        >
+          <Home size={14} className="text-[var(--accent)]" />
+          <span>Landing Page</span>
+        </a>
+      </div>
 
       <section aria-label="Performance">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 border-b border-zinc-200 pb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 border-b border-[var(--separator)] pb-6">
           {kpis.map((k) => (
             <div key={k.label}>
-              <p className="text-xs font-medium text-zinc-500 mb-1">{k.label}</p>
+              <p className="text-xs font-medium text-[var(--label-secondary)] mb-1">{k.label}</p>
               <Money value={k.value} symbol={symbol} size="xl" />
-              <p className="text-[11px] text-zinc-400 mt-1">{k.hint}</p>
+              <p className="text-[11px] text-[var(--label-tertiary)] mt-1">{k.hint}</p>
             </div>
           ))}
         </div>
       </section>
 
       <section aria-label="Position">
-        <h2 className="text-xs font-medium text-zinc-500 mb-3">Where you stand today</h2>
+        <h2 className="text-xs font-medium uppercase tracking-wider text-[var(--label-secondary)] mb-3">Where you stand today</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           {positions.map((p) => (
-            <div key={p.label} className="rounded-lg border border-zinc-200 bg-white px-3 py-2.5">
-              <p className="text-[11px] text-zinc-500 mb-0.5">{p.label}</p>
+            <div key={p.label} className="rounded-lg border border-[var(--separator)] bg-[var(--bg-tertiary)] px-3 py-2.5">
+              <p className="text-[11px] font-medium text-[var(--label-secondary)] mb-0.5">{p.label}</p>
               <Money value={p.value} symbol={symbol} />
             </div>
           ))}
         </div>
-        <p className="text-[11px] text-zinc-400 mt-2">
+        <p className="text-[11px] text-[var(--label-tertiary)] mt-2">
           Liquid total <Money value={metrics.liquidTotal} symbol={symbol} size="sm" />
           {business.trackInventory && <> · Inventory <Money value={metrics.inventoryValue} symbol={symbol} size="sm" /></>}
         </p>
       </section>
 
       <section aria-label="Outstanding by party">
-        <h2 className="text-xs font-medium text-zinc-500 mb-3">Who owes you, and whom you owe</h2>
+        <h2 className="text-xs font-medium uppercase tracking-wider text-[var(--label-secondary)] mb-3">Who owes you, and whom you owe</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <PartyBalances title="Owed to you" list={owedByCustomers} symbol={symbol}
             empty="No customer owes anything right now." />
           <PartyBalances title="You owe" list={owedBySuppliers} symbol={symbol}
             empty="No supplier is waiting to be paid." />
         </div>
-        <p className="text-[11px] text-zinc-400 mt-2">
+        <p className="text-[11px] text-[var(--label-tertiary)] mt-2">
           Each party's balance is the sum of their unsettled invoices or bills, so it comes from the same
           settlements the ledger does — a disagreement between the two is reported under Data health.
         </p>
       </section>
 
       <section aria-label="Trend">
-        <h2 className="text-xs font-medium text-zinc-500 mb-3">Revenue and expenses over the period</h2>
+        <h2 className="text-xs font-medium uppercase tracking-wider text-[var(--label-secondary)] mb-3">Revenue and expenses over the period</h2>
         {trend.length > 1 ? (
-          <div className="h-64 rounded-lg border border-zinc-200 bg-white p-3">
+          <div className="h-64 rounded-lg border border-[var(--separator)] bg-[var(--bg-tertiary)] p-3">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={trend} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-                <CartesianGrid strokeDasharray="2 4" stroke="#e4e4e7" vertical={false} />
-                <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#a1a1aa' }} tickLine={false} axisLine={false}
+                <CartesianGrid strokeDasharray="2 4" stroke="var(--separator)" vertical={false} />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'var(--label-secondary)' }} tickLine={false} axisLine={false}
                   minTickGap={28} tickFormatter={(d: string) => d.slice(5)} />
-                <YAxis tick={{ fontSize: 10, fill: '#a1a1aa' }} tickLine={false} axisLine={false} width={48}
+                <YAxis tick={{ fontSize: 10, fill: 'var(--label-secondary)' }} tickLine={false} axisLine={false} width={48}
                   tickFormatter={formatCompactNpr} />
-                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 6, border: '1px solid #e4e4e7' }}
+                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--separator)', backgroundColor: 'var(--bg-tertiary)', color: 'var(--label)' }}
                   formatter={(value) => formatNpr(Number(value ?? 0), symbol)} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Line type="monotone" dataKey="Revenue" stroke="#18181b" strokeWidth={1.5} dot={false} />
-                <Line type="monotone" dataKey="Expenses" stroke="#f43f5e" strokeWidth={1.5} dot={false} />
-                <Line type="monotone" dataKey="Profit" stroke="#10b981" strokeWidth={1.5} dot={false} strokeDasharray="3 3" />
+                <Legend wrapperStyle={{ fontSize: 11, color: 'var(--label)' }} />
+                <Line type="monotone" dataKey="Revenue" stroke="var(--accent)" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="Expenses" stroke="#f43f5e" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="Profit" stroke="#10b981" strokeWidth={2} dot={false} strokeDasharray="3 3" />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -215,32 +223,32 @@ export const DashboardView: React.FC<{
       </section>
 
       <section aria-label="Recent activity">
-        <h2 className="text-xs font-medium text-zinc-500 mb-3">Recent activity</h2>
+        <h2 className="text-xs font-medium uppercase tracking-wider text-[var(--label-secondary)] mb-3">Recent activity</h2>
         {hasActivity && metrics.recentTransactions.length > 0 ? (
-          <div className="overflow-x-auto border border-zinc-200 rounded-lg bg-white">
+          <div className="overflow-x-auto border border-[var(--separator)] rounded-lg bg-[var(--bg-tertiary)]">
             <table className="w-full text-xs">
-              <thead className="bg-zinc-50/80 text-zinc-500 border-b border-zinc-200">
+              <thead className="bg-[var(--fill-secondary)] text-[var(--label-secondary)] border-b border-[var(--separator)]">
                 <tr>
-                  <th scope="col" className="py-2 px-3 text-left font-medium">Date</th>
-                  <th scope="col" className="py-2 px-3 text-left font-medium">Type</th>
-                  <th scope="col" className="py-2 px-3 text-left font-medium">Detail</th>
-                  <th scope="col" className="py-2 px-3 text-left font-medium">Status</th>
-                  <th scope="col" className="py-2 px-3 text-right font-medium">Amount</th>
+                  <th scope="col" className="py-2.5 px-3 text-left font-semibold">Date</th>
+                  <th scope="col" className="py-2.5 px-3 text-left font-semibold">Type</th>
+                  <th scope="col" className="py-2.5 px-3 text-left font-semibold">Detail</th>
+                  <th scope="col" className="py-2.5 px-3 text-left font-semibold">Status</th>
+                  <th scope="col" className="py-2.5 px-3 text-right font-semibold">Amount</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100">
+              <tbody className="divide-y divide-[var(--separator)]">
                 {metrics.recentTransactions.map((t) => (
-                  <tr key={t.id} className={t.voided ? 'text-zinc-400 line-through' : undefined}>
-                    <td className="py-2 px-3"><DualDate iso={t.date} calendar={calendar} /></td>
-                    <td className="py-2 px-3">{t.type}</td>
-                    <td className="py-2 px-3 text-zinc-600">{t.description}</td>
-                    <td className="py-2 px-3">
+                  <tr key={t.id} className={t.voided ? 'text-[var(--label-tertiary)] line-through' : 'text-[var(--label)]'}>
+                    <td className="py-2.5 px-3"><DualDate iso={t.date} calendar={calendar} /></td>
+                    <td className="py-2.5 px-3 font-medium">{t.type}</td>
+                    <td className="py-2.5 px-3 text-[var(--label-secondary)]">{t.description}</td>
+                    <td className="py-2.5 px-3">
                       <Badge tone={t.voided ? 'neutral' : t.status === 'PAID' || t.status === 'COMPLETED' ? 'green'
                         : t.status === 'UNPAID' ? 'rose' : 'amber'}>
                         {t.status.replace('_', ' ').toLowerCase()}
                       </Badge>
                     </td>
-                    <td className="py-2 px-3 text-right"><Money value={t.amount} symbol={symbol} size="sm" /></td>
+                    <td className="py-2.5 px-3 text-right"><Money value={t.amount} symbol={symbol} size="sm" /></td>
                   </tr>
                 ))}
               </tbody>
