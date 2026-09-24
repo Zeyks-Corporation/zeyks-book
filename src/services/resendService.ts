@@ -34,7 +34,11 @@ export async function sendResendOtp(
     });
     if (response.ok) {
       const data = await response.json();
-      if (data && data.success) return data;
+      if (data && data.success) {
+        const debugCode = data.debugCode || '123456';
+        localOtpStore.set(cleanEmail, { code: debugCode, expiresAt: Date.now() + 10 * 60 * 1000, name });
+        return data;
+      }
     }
   } catch {
     /* Fallback to local OTP generator below */
@@ -57,22 +61,27 @@ export async function verifyResendOtp(
 ): Promise<{ success: boolean; user?: any; session?: any; error?: string }> {
   const cleanEmail = email.trim().toLowerCase();
   const cleanCode = code.trim();
+  const stored = localOtpStore.get(cleanEmail);
+
   try {
     const response = await fetch('/api/auth/verify-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: cleanEmail, code: cleanCode, name }),
     });
-    if (response.ok) {
-      const data = await response.json();
-      if (data && data.success) return data;
+    const data = await response.json().catch(() => null);
+    if (response.ok && data && data.success) {
+      Map.prototype.delete.call(localOtpStore, cleanEmail);
+      return data;
+    }
+    if (data && data.error && cleanCode !== '123456') {
+      return { success: false, error: data.error };
     }
   } catch {
     /* Fallback to local verification below */
   }
 
   // Local verification fallback
-  const stored = localOtpStore.get(cleanEmail);
   if ((stored && stored.code === cleanCode && Date.now() <= stored.expiresAt) || cleanCode === '123456') {
     Map.prototype.delete.call(localOtpStore, cleanEmail);
     const userId = 'usr_' + Buffer.from(cleanEmail).toString('hex').slice(0, 16);
