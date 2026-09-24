@@ -29,25 +29,14 @@ function notifyListeners(event: AuthChangeEvent, session: Session | null) {
 const getBrowserStore = () => (typeof window !== 'undefined' ? (window as unknown as Record<string, Storage>)[['local', 'Storage'].join('')] : null);
 
 export function getStoredResendSession(): Session | null {
-  const store = getBrowserStore();
-  if (!store) return null;
-  try {
-    const raw = store.getItem(LOCAL_STORAGE_SESSION_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as Session;
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 export function setStoredResendSession(session: Session | null) {
+  void session;
   const store = getBrowserStore();
   if (!store) return;
-  if (!session) {
-    store.removeItem(LOCAL_STORAGE_SESSION_KEY);
-  } else {
-    store.setItem(LOCAL_STORAGE_SESSION_KEY, JSON.stringify(session));
-  }
+  store.removeItem(LOCAL_STORAGE_SESSION_KEY);
 }
 
 function cleanAuthError(message: string | null | undefined): string | null {
@@ -62,7 +51,8 @@ export async function requestOtp(email: string, name?: string): Promise<{ succes
 
 /** Verify Resend OTP */
 export async function verifyOtp(email: string, code: string, name?: string): Promise<AuthResult> {
-  const result = await verifyResendOtp(email, code, name);
+  void name;
+  const result = await verifyResendOtp(email, code);
   if (!result.success || !result.session) {
     return { user: null, session: null, error: result.error || 'Invalid or expired verification code.' };
   }
