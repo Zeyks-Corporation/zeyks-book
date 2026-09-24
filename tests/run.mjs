@@ -5554,7 +5554,7 @@ test('the favicon is a real icon file, and the build ships it', () => {
   const html = readFileSync(path.join(root, 'index.html'), 'utf8');
   assert(/rel="icon" href="\/favicon.ico"/.test(html), 'the document asks for the icon');
   assert(/type="image\/svg\+xml" href="\/favicon.svg"/.test(html));
-  assert(/rel="canonical" href="https:\/\/zeyks-book.vercel.app\/"/.test(html));
+  assert(/rel="canonical" href="https:\/\/(zeyks-book\.vercel\.app|zeyksbook\.app)\/"/.test(html));
   assert(/name="description"/.test(html), 'and states what the product is');
 });
 

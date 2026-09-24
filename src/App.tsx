@@ -596,7 +596,7 @@ export default function App() {
         title="View Landing Page"
       >
         <Home size={13} className="text-[var(--accent)] shrink-0" />
-        <span>Landing Page</span>
+        <span>Home</span>
       </a>
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps

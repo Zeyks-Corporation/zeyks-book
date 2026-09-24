@@ -117,4 +117,49 @@ export const resendService = {
       throw error;
     }
   },
+
+  /**
+   * Send a 6-digit verification OTP email via Resend.
+   */
+  async sendOtpEmail({ email, code, name = 'Valued User' }) {
+    if (!resendClient) {
+      console.log(`[resend] OTP Simulation for ${email}: Code is ${code}`);
+      return { success: true, simulated: true, code };
+    }
+
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'Zeyks Book <onboarding@resend.dev>';
+    const subject = `Your Zeyks Book Verification Code: ${code}`;
+
+    const html = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; border: 1px solid #e4e4e7; border-radius: 16px; background-color: #ffffff;">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <h2 style="color: #09090b; font-size: 22px; font-weight: 700; margin: 0 0 8px 0;">Zeyks Book Verification</h2>
+          <p style="color: #71717a; font-size: 14px; margin: 0;">Use the verification code below to complete your login to Zeyks Book.</p>
+        </div>
+        <div style="background-color: #f4f4f5; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 24px;">
+          <span style="font-family: monospace, monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #007AFF;">${code}</span>
+        </div>
+        <p style="color: #52525b; font-size: 13px; line-height: 1.5; margin-bottom: 16px;">
+          This code is valid for 10 minutes. If you did not request this login code, you can safely ignore this email.
+        </p>
+        <hr style="border: 0; border-top: 1px solid #e4e4e7; margin: 20px 0;" />
+        <p style="color: #a1a1aa; font-size: 12px; text-align: center; margin: 0;">
+          Zeyks Book Security System · Powered by Resend
+        </p>
+      </div>
+    `;
+
+    try {
+      const data = await resendClient.emails.send({
+        from: fromEmail,
+        to: [email],
+        subject,
+        html,
+      });
+      return { success: true, data };
+    } catch (error) {
+      console.error('[resend] Failed to send OTP email via Resend:', error);
+      throw error;
+    }
+  },
 };

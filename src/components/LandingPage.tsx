@@ -57,12 +57,11 @@ export const LandingPage: React.FC<{
           {/* Hero Headline & Subtitle */}
           <div className="text-center">
             <h1 className="mx-auto max-w-4xl text-[36px] font-extrabold leading-[44px] tracking-[-0.03em] sm:text-[58px] sm:leading-[66px] text-[var(--label)] font-lovelace">
-              Simple, powerful tools to manage your business from one place.{' '}
+              Accounting for the way Nepal actually does business.{' '}
             </h1>
 
             <p className="mx-auto mt-4 max-w-2xl text-[16px] leading-[24px] text-[var(--label-secondary)] sm:text-[19px] sm:leading-[28px]">
-              Every invoice, settlement, and expense posts an immutable double-entry journal.
-              Zero balance drift, native Bikram Sambat dates, and A4 reports formatted for paper and tax filing.
+              Simple, powerful tools to manage your business from one place.
             </p>
 
             {/* CTAs */}

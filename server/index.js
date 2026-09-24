@@ -292,6 +292,87 @@ app.post('/api/auth/email', async (req, res) => {
   }
 });
 
+// In-memory OTP storage for Resend OTP authentication
+const otpStore = new Map();
+
+app.post('/api/auth/send-otp', async (req, res) => {
+  const payload = req.body ?? {};
+  const email = payload.email;
+  const name = payload.name;
+  if (!email || typeof email !== 'string' || !email.includes('@')) {
+    return fail(res, 400, 'A valid email address is required.');
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+  otpStore.set(cleanEmail, { code, expiresAt, name: name?.trim() || cleanEmail.split('@')[0] });
+
+  try {
+    const result = await resendService.sendOtpEmail({
+      email: cleanEmail,
+      code,
+      name: name?.trim() || 'Valued User',
+    });
+    res.json({
+      success: true,
+      message: 'Verification code sent to your email.',
+      simulated: result.simulated ?? false,
+      ...(result.simulated ? { debugCode: code } : {}),
+    });
+  } catch (e) {
+    return fail(res, 500, 'Failed to send OTP via Resend.', e);
+  }
+});
+
+app.post('/api/auth/verify-otp', async (req, res) => {
+  const payload = req.body ?? {};
+  const email = payload.email;
+  const code = payload.code;
+  const name = payload.name;
+  if (!email || typeof email !== 'string' || !email.includes('@')) {
+    return fail(res, 400, 'A valid email address is required.');
+  }
+  if (!code || typeof code !== 'string' || !code.trim()) {
+    return fail(res, 400, 'Verification code is required.');
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const stored = otpStore.get(cleanEmail);
+
+  if (!stored) {
+    return fail(res, 400, 'No verification code was requested for this email, or it has expired.');
+  }
+
+  if (Date.now() > stored.expiresAt) {
+    otpStore.delete(cleanEmail);
+    return fail(res, 400, 'Verification code has expired. Please request a new one.');
+  }
+
+  if (stored.code.trim() !== code.trim()) {
+    return fail(res, 400, 'Invalid verification code. Please check your email and try again.');
+  }
+
+  otpStore.delete(cleanEmail);
+
+  const fullName = name?.trim() || stored.name || cleanEmail.split('@')[0];
+  const userId = 'usr_' + Buffer.from(cleanEmail).toString('hex').slice(0, 16);
+  const user = {
+    id: userId,
+    email: cleanEmail,
+    fullName,
+    createdAt: new Date().toISOString(),
+  };
+
+  const session = {
+    access_token: 'resend_session_' + Date.now() + '_' + userId,
+    user,
+  };
+
+  res.json({ success: true, user, session });
+});
+
 /* ------------------------------ Static build ------------------------------ */
 
 const dist = path.resolve(__dirname, '../dist');
