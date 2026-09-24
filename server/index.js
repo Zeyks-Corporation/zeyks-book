@@ -382,14 +382,18 @@ app.get('*', (req, res, next) => {
   res.sendFile(path.join(dist, 'index.html'), (err) => { if (err) next(); });
 });
 
-app.listen(PORT, () => {
-  console.log(`Zeyks Book API on http://localhost:${PORT}  [${MODE}]`);
-  console.log(`  eSewa   ${esewa.isConfigured() ? 'ready' : 'not configured'}`);
-  console.log(`  Khalti  ${khalti.isConfigured() ? 'ready' : 'not configured — set KHALTI_SECRET_KEY'}`);
-  console.log(`  Resend  ${resendService.isConfigured() ? 'ready' : 'configured for simulation — set RESEND_API_KEY'}`);
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Zeyks Book API on http://localhost:${PORT}  [${MODE}]`);
+    console.log(`  eSewa   ${esewa.isConfigured() ? 'ready' : 'not configured'}`);
+    console.log(`  Khalti  ${khalti.isConfigured() ? 'ready' : 'not configured — set KHALTI_SECRET_KEY'}`);
+    console.log(`  Resend  ${resendService.isConfigured() ? 'ready' : 'configured for simulation — set RESEND_API_KEY'}`);
 
-  if (MODE === 'live') {
-    console.log('[payments] live mode: merchant credentials in use; every route requires a signed-in session.');
-  }
-  warnIfUnconfigured();
-});
+    if (MODE === 'live') {
+      console.log('[payments] live mode: merchant credentials in use; every route requires a signed-in session.');
+    }
+    warnIfUnconfigured();
+  });
+}
+
+export default app;

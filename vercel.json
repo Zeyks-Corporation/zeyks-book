@@ -3,7 +3,7 @@
   "outputDirectory": "dist",
   "routes": [
     { "handle": "filesystem" },
-    { "src": "/api/(.*)", "status": 404 },
+    { "src": "/api/(.*)", "dest": "/api/index.js" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]
 }

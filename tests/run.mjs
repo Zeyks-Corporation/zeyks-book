@@ -5525,8 +5525,8 @@ test('the deployment serves the shell for real routes and an honest 404 for the 
   assertEqual(routes[0].handle, 'filesystem',
     'static files win first, so /sitemap.xml and /assets/* are never index.html');
   const api = routes.find((r) => /\/api\//.test(r.src));
-  assert(api && api.status === 404,
-    'an undeployed API path must 404, not answer 200 with HTML');
+  assert(api && (api.status === 404 || api.dest === '/api/index.js' || api.dest === '/api/index'),
+    'an API path must route to serverless entry or 404, not answer 200 with HTML');
   const fallback = routes[routes.length - 1];
   assertEqual(fallback.dest, '/index.html', 'everything else is the app shell');
   assert(routes.indexOf(api) < routes.indexOf(fallback), 'the API rule is decided first');
