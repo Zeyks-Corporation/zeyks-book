@@ -1,228 +1,164 @@
-import { supabase } from '../lib/supabase';
-import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
-import type { UserProfile } from '../types';
-import { resolveSignOutOutcome, signOutScope } from '../lib/session';
-import type { SignOutKind, SignOutOutcome } from '../lib/session';
-import { sendAuthEmailNotification, sendResendOtp, verifyResendOtp } from './resendService';
+/**
+ * The verification-code transport — the browser's half of email OTP sign-in.
+ *
+ * This module is deliberately thin, and deliberately dumb. It carries a code
+ * request to the API server and carries the answer back. It does not:
+ *
+ *   - generate a code, or invent one when the server is unreachable. A build
+ *     that can mint its own credential is not an authentication system.
+ *   - keep a copy of a code in memory (or anywhere else) to check later. The
+ *     only thing that may verify a code is the server that issued it, against
+ *     the row it wrote when it did.
+ *   - create a user or a session. It cannot: the server answers a successful
+ *     verification with a Supabase token hash, and `authService.verifyOtp`
+ *     exchanges that hash for a real session through Supabase Auth. Nothing
+ *     before that point is signed in.
+ *
+ * Every failure is a failure. If the API server is down, misconfigured, or
+ * answers with an error, the result is `success: false` — there is no local
+ * path that could still say yes, because that is exactly the hole this module
+ * used to have.
+ */
 
-export interface AuthResult {
-  user: User | null;
-  session: Session | null;
-  error: string | null;
+import { paymentApiUrl } from '../lib/paymentApi';
+
+export interface OtpRequestResult {
+  success: boolean;
+  message?: string;
+  error?: string;
 }
 
-const LOCAL_STORAGE_SESSION_KEY = 'zeyks_resend_session';
-
-type AuthListener = (event: AuthChangeEvent, session: Session | null) => void;
-const listeners = new Set<AuthListener>();
-
-function notifyListeners(event: AuthChangeEvent, session: Session | null) {
-  for (const cb of listeners) {
-    try {
-      cb(event, session);
-    } catch (e) {
-      console.error('[authService] listener error:', e);
-    }
-  }
+export interface OtpVerificationResult {
+  success: boolean;
+  email?: string;
+  /**
+   * A one-time Supabase token hash, returned by the server only after it has
+   * verified the code itself. Single-use: exchanging it consumes it.
+   */
+  tokenHash?: string;
+  error?: string;
 }
 
-const getBrowserStore = () => (typeof window !== 'undefined' ? (window as unknown as Record<string, Storage>)[['local', 'Storage'].join('')] : null);
+/** One sentence per failure. The server's own wording wins when it has one. */
+const SEND_FAILED =
+  'We could not send a verification code right now. Please try again in a moment.';
+const VERIFY_FAILED =
+  'That verification code could not be verified. Request a new code and try again.';
 
-export function getStoredResendSession(): Session | null {
-  return null;
+interface JsonRecord {
+  [key: string]: unknown;
 }
 
-export function setStoredResendSession(session: Session | null) {
-  void session;
-  const store = getBrowserStore();
-  if (!store) return;
-  store.removeItem(LOCAL_STORAGE_SESSION_KEY);
+function asRecord(value: unknown): JsonRecord | null {
+  return typeof value === 'object' && value !== null ? (value as JsonRecord) : null;
 }
 
-function cleanAuthError(message: string | null | undefined): string | null {
-  if (!message) return null;
-  return message.replace(/supabase/gi, 'auth system');
-}
-
-/** Send Resend OTP to email */
-export async function requestOtp(email: string, name?: string): Promise<{ success: boolean; message?: string; error?: string; debugCode?: string }> {
-  return await sendResendOtp(email, name);
-}
-
-/** Verify Resend OTP */
-export async function verifyOtp(email: string, code: string, name?: string): Promise<AuthResult> {
-  void name;
-  const result = await verifyResendOtp(email, code);
-  if (!result.success || !result.session) {
-    return { user: null, session: null, error: result.error || 'Invalid or expired verification code.' };
-  }
-  const session = result.session as Session;
-  setStoredResendSession(session);
-  notifyListeners('SIGNED_IN', session);
-  return { user: result.user as User, session, error: null };
+function errorMessageFrom(data: unknown): string | null {
+  const record = asRecord(data);
+  const message = record?.error;
+  return typeof message === 'string' && message.trim() ? message : null;
 }
 
 /**
- * Register a new user with Resend OTP / Auth system.
+ * POST one JSON body and read one JSON answer.
+ *
+ * A non-JSON body is treated as an empty answer rather than as a success, and
+ * the HTTP status is preserved so the caller can tell a refusal (4xx) from an
+ * outage (5xx).
  */
-export async function signUp(
-  email: string,
-  _password: string,
-  fullName: string,
-): Promise<AuthResult> {
-  const cleanEmail = email.trim().toLowerCase();
-  const userId = 'usr_' + Buffer.from(cleanEmail).toString('hex').slice(0, 16);
-  const user = {
-    id: userId,
-    email: cleanEmail,
-    user_metadata: { full_name: fullName },
-    created_at: new Date().toISOString(),
-  } as unknown as User;
-
-  const session = {
-    access_token: 'resend_session_' + Date.now() + '_' + userId,
-    user,
-  } as unknown as Session;
-
-  setStoredResendSession(session);
-  sendAuthEmailNotification('welcome', cleanEmail, fullName).catch(() => {});
-  notifyListeners('SIGNED_IN', session);
-  return { user, session, error: null };
-}
-
-/** Sign in with email + password / Resend OTP system. */
-export async function signIn(
-  email: string,
-  _password?: string,
-): Promise<AuthResult> {
-  const cleanEmail = email.trim().toLowerCase();
-  const userId = 'usr_' + Buffer.from(cleanEmail).toString('hex').slice(0, 16);
-  const user = {
-    id: userId,
-    email: cleanEmail,
-    user_metadata: { full_name: cleanEmail.split('@')[0] },
-    created_at: new Date().toISOString(),
-  } as unknown as User;
-
-  const session = {
-    access_token: 'resend_session_' + Date.now() + '_' + userId,
-    user,
-  } as unknown as Session;
-
-  setStoredResendSession(session);
-  notifyListeners('SIGNED_IN', session);
-  return { user, session, error: null };
-}
-
-/**
- * Sign the current user out cleanly.
- */
-export async function signOut(kind: SignOutKind = 'this-device'): Promise<SignOutOutcome> {
-  setStoredResendSession(null);
-  notifyListeners('SIGNED_OUT', null);
-
-  let localRetryError: string | null = null;
-  try {
-    await supabase.auth.signOut({ scope: signOutScope(kind) });
-  } catch (e) {
-    localRetryError = cleanAuthError(e instanceof Error ? e.message : 'Sign out error');
-  }
-
-  return resolveSignOutOutcome({
-    firstError: null,
-    localRetryError,
-    sessionCleared: true,
+async function postJson(
+  path: string,
+  body: JsonRecord,
+): Promise<{ ok: boolean; status: number; data: unknown }> {
+  const response = await fetch(paymentApiUrl(path), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
   });
-}
 
-/** Send a password-recovery / OTP email. */
-export async function requestPasswordReset(email: string): Promise<{ error: string | null }> {
-  const res = await sendResendOtp(email);
-  if (!res.success) return { error: res.error || 'Failed to send verification code.' };
-  return { error: null };
-}
-
-/** Set a new password for the currently authenticated session. */
-export async function updatePassword(_newPassword: string): Promise<{ error: string | null }> {
-  return { error: null };
-}
-
-/** Re-send the sign-up confirmation email. */
-export async function resendConfirmation(email: string): Promise<{ error: string | null }> {
-  const res = await sendResendOtp(email);
-  if (!res.success) return { error: res.error || 'Failed to send confirmation code.' };
-  return { error: null };
-}
-
-/** Retrieve the current session, if any. */
-export async function getSession(): Promise<{
-  session: Session | null;
-  error: string | null;
-}> {
-  const localSession = getStoredResendSession();
-  if (localSession) {
-    return { session: localSession, error: null };
+  let data: unknown = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
   }
-  const { data, error } = await supabase.auth.getSession();
-  if (error) return { session: null, error: cleanAuthError(error.message) };
-  return { session: data.session, error: null };
+
+  return { ok: response.ok, status: response.status, data };
 }
 
-/** Subscribe to auth state changes. */
-export function onAuthStateChange(
-  callback: (event: AuthChangeEvent, session: Session | null) => void,
-): () => void {
-  listeners.add(callback);
-  const { data } = supabase.auth.onAuthStateChange(callback);
-  return () => {
-    Set.prototype.delete.call(listeners, callback);
-    data.subscription.unsubscribe();
-  };
-}
+/**
+ * Ask the server to email a verification code to this address.
+ *
+ * The code is generated and stored by the server; this function never sees it,
+ * and nothing about the request decides what the code will be.
+ */
+export async function sendResendOtp(
+  email: string,
+  name?: string,
+): Promise<OtpRequestResult> {
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanName = name?.trim();
 
-/** Fetch user profile. */
-export async function getProfile(userId: string): Promise<{
-  profile: UserProfile | null;
-  error: string | null;
-}> {
-  const localSession = getStoredResendSession();
-  if (localSession && localSession.user && localSession.user.id === userId) {
+  try {
+    const { ok, data } = await postJson('/api/auth/send-otp', {
+      email: cleanEmail,
+      ...(cleanName ? { name: cleanName } : {}),
+    });
+    const record = asRecord(data);
+
+    if (!ok || record?.success !== true) {
+      return { success: false, error: errorMessageFrom(data) ?? SEND_FAILED };
+    }
+
+    const message = record.message;
     return {
-      profile: {
-        id: localSession.user.id,
-        email: localSession.user.email ?? '',
-        fullName: (localSession.user.user_metadata?.full_name as string) || localSession.user.email?.split('@')[0] || 'Valued User',
-        createdAt: localSession.user.created_at ?? new Date().toISOString(),
-      },
-      error: null,
+      success: true,
+      message: typeof message === 'string' && message.trim()
+        ? message
+        : `Verification code sent to ${cleanEmail}. Check your inbox!`,
     };
+  } catch {
+    return { success: false, error: SEND_FAILED };
   }
+}
 
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, email, full_name, created_at')
-    .eq('id', userId)
-    .single();
+/**
+ * Hand the code the person received back to the server for verification.
+ *
+ * On success the answer is a Supabase token hash, not a session: the caller
+ * must still exchange it with Supabase Auth before anything is signed in.
+ */
+export async function verifyResendOtp(
+  email: string,
+  code: string,
+): Promise<OtpVerificationResult> {
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanCode = code.trim();
 
-  if (error) {
+  try {
+    const { ok, data } = await postJson('/api/auth/verify-otp', {
+      email: cleanEmail,
+      code: cleanCode,
+    });
+    const record = asRecord(data);
+
+    if (!ok || record?.success !== true) {
+      return { success: false, error: errorMessageFrom(data) ?? VERIFY_FAILED };
+    }
+
+    const tokenHash = record.tokenHash;
+    if (typeof tokenHash !== 'string' || !tokenHash.trim()) {
+      // A success without a token is not a success. Fail closed.
+      return { success: false, error: VERIFY_FAILED };
+    }
+
+    const verifiedEmail = record.email;
     return {
-      profile: {
-        id: userId,
-        email: localSession?.user?.email || 'user@zeyks.book',
-        fullName: (localSession?.user?.user_metadata?.full_name as string) || 'Valued User',
-        createdAt: new Date().toISOString(),
-      },
-      error: null,
+      success: true,
+      email: typeof verifiedEmail === 'string' && verifiedEmail.trim() ? verifiedEmail : cleanEmail,
+      tokenHash: tokenHash.trim(),
     };
+  } catch {
+    return { success: false, error: VERIFY_FAILED };
   }
-
-  return {
-    profile: {
-      id: data.id,
-      email: data.email,
-      fullName: data.full_name || '',
-      createdAt: data.created_at,
-    },
-    error: null,
-  };
 }

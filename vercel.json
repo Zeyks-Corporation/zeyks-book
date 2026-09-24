@@ -4,6 +4,13 @@
   "routes": [
     { "handle": "filesystem" },
     { "src": "/api/(.*)", "dest": "/api/index.js" },
+    { "src": "/signin", "dest": "/signin.html" },
+    { "src": "/demo", "dest": "/demo.html" },
+    { "src": "/pricing", "dest": "/pricing.html" },
+    { "src": "/about", "dest": "/about.html" },
+    { "src": "/contact", "dest": "/contact.html" },
+    { "src": "/privacy", "dest": "/privacy.html" },
+    { "src": "/terms", "dest": "/terms.html" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]
 }

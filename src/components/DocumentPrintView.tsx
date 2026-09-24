@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { Printer, X } from 'lucide-react';
 import { Expense, LineItem, Payment, Purchase, Sale } from '../types';
 import { Books } from '../state/useBooks';
 import { Button } from './ui';
+import { useDialogFocus } from '../lib/dialogFocus';
 import {
   ReportAmount, ReportBlock, ReportFooter, ReportHeader, ReportNote, ReportRow, ReportSection,
   ReportSheet, ReportStatus, ReportTable, reportDate, reportMoney, reportStamp,
@@ -71,18 +72,30 @@ export const DocumentPrintView: React.FC<{
     return expenses.find((e) => e.id === documentId);
   }, [kind, documentId, sales, purchases, payments, expenses]);
 
+  const panelRef = useRef<HTMLDivElement>(null);
+
   // While a sheet is on screen the print job is that sheet and nothing else.
   // A CSS selector can express this, but a data attribute on <body> is explicit
   // and works the same in every browser we care about.
   useEffect(() => {
     window.document.body.dataset.printSheet = 'open';
-    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKeyDown);
     return () => {
       delete window.document.body.dataset.printSheet;
-      window.removeEventListener('keydown', onKeyDown);
     };
-  }, [onClose]);
+  }, []);
+
+  /**
+   * `aria-modal="true"` on these overlays used to be a promise with nothing
+   * behind it: focus stayed where it was (often on the button behind the sheet),
+   * Tab walked the app underneath, and closing left the keyboard at the top of
+   * the document. The shared hook places focus inside the sheet, keeps it there,
+   * and hands it back to the control that opened it.
+   *
+   * Called unconditionally, before the missing-record exit below, so both
+   * overlays — the document and the "no longer in your books" notice — behave
+   * the same way.
+   */
+  useDialogFocus({ isOpen: true, panel: panelRef, onEscape: onClose });
 
   /* ------------------------- document-specific parts ---------------------- */
 
@@ -143,7 +156,14 @@ export const DocumentPrintView: React.FC<{
   // The exit lives here, after the last hook, on purpose — see the note above.
   if (!document) {
     return (
-      <div className="print-overlay fixed inset-0 z-50 bg-zinc-100 overflow-auto p-6" role="dialog" aria-modal="true">
+      <div
+        ref={panelRef}
+        className="print-overlay fixed inset-0 z-50 bg-zinc-100 overflow-auto p-6"
+        role="dialog"
+        aria-modal="true"
+        aria-label="That record is no longer in your books"
+        tabIndex={-1}
+      >
         <div className="max-w-md mx-auto bg-white border border-zinc-200 rounded-lg p-6 space-y-3">
           <p className="text-sm text-zinc-700">That record is no longer in your books.</p>
           <Button onClick={onClose}>Close</Button>
@@ -159,10 +179,12 @@ export const DocumentPrintView: React.FC<{
 
   return (
     <div
+      ref={panelRef}
       className="print-overlay fixed inset-0 z-50 bg-zinc-100 overflow-auto"
       role="dialog"
       aria-modal="true"
       aria-label={sheetTitle}
+      tabIndex={-1}
     >
       <div className="no-print sticky top-0 z-10 border-b border-zinc-200 bg-white/95 backdrop-blur px-4 py-2.5 flex items-center gap-3">
         <p className="text-xs font-medium text-zinc-900 grow truncate">{sheetTitle}</p>

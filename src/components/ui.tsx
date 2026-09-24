@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useId, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
+import { useDialogFocus } from '../lib/dialogFocus';
 import { formatNpr } from '../lib/money';
 import { adToBs, bsToAd, bsDaysInMonth, BS_MONTHS, formatAd, todayNpt, BS_MIN_YEAR, BS_MAX_YEAR } from '../lib/nepaliDate';
 
@@ -22,8 +23,6 @@ export const Money: React.FC<{
 /* Modal — focus trap, Escape, focus restore, aria wiring                      */
 /* -------------------------------------------------------------------------- */
 
-const FOCUSABLE = 'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
-
 export const Modal: React.FC<{
   isOpen: boolean; onClose: () => void; title: string; description?: string;
   children: React.ReactNode; footer?: React.ReactNode; size?: 'sm' | 'md' | 'lg';
@@ -35,50 +34,13 @@ export const Modal: React.FC<{
   dismissible?: boolean;
 }> = ({ isOpen, onClose, title, description, children, footer, size = 'md', dismissible = true }) => {
   const panel = useRef<HTMLDivElement>(null);
-  const restoreTo = useRef<HTMLElement | null>(null);
-  const onCloseRef = useRef(onClose);
   const titleId = useId();
   const descId = useId();
 
-  // Keep the latest callback without making the focus-trap effect restart on
-  // every parent render. Restarting it on every keystroke steals focus from
-  // text inputs because many callers pass an inline onClose callback.
-  onCloseRef.current = onClose;
-
-  useEffect(() => {
-    if (!isOpen) return undefined;
-    restoreTo.current = document.activeElement as HTMLElement;
-
-    // Preserve autofocus (for example, the first field in the setup dialog).
-    // Only move focus when nothing inside the dialog is already focused.
-    const active = document.activeElement as HTMLElement | null;
-    const alreadyFocusedInside = Boolean(active && panel.current?.contains(active) && active.matches(FOCUSABLE));
-    if (!alreadyFocusedInside) {
-      const first = panel.current?.querySelector<HTMLElement>(FOCUSABLE);
-      (first ?? panel.current)?.focus();
-    }
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.stopPropagation(); if (dismissible) onCloseRef.current(); return; }
-      if (e.key !== 'Tab' || !panel.current) return;
-      const items = Array.from(panel.current.querySelectorAll<HTMLElement>(FOCUSABLE))
-        .filter((el) => el.offsetParent !== null);
-      if (items.length === 0) return;
-      const first_ = items[0]!;
-      const last = items[items.length - 1]!;
-      if (e.shiftKey && document.activeElement === first_) { e.preventDefault(); last.focus(); }
-      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first_.focus(); }
-    };
-
-    document.addEventListener('keydown', onKeyDown, true);
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', onKeyDown, true);
-      document.body.style.overflow = previousOverflow;
-      restoreTo.current?.focus();
-    };
-  }, [isOpen, dismissible]);
+  // Focus placement, the Tab cycle, Escape and the trip back to the trigger all
+  // live in one place — lib/dialogFocus.ts — which the printable-document
+  // overlay shares. `aria-modal="true"` is a promise the keyboard has to keep.
+  useDialogFocus({ isOpen, panel, onEscape: dismissible ? onClose : null });
 
   if (!isOpen) return null;
   const widths = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-3xl' };

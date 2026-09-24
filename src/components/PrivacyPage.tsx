@@ -47,7 +47,7 @@ export const PrivacyPage: React.FC<{
                 2. Zero Third-Party Telemetry & Tracking
               </h2>
               <p className="mt-2">
-                We do not sell, rent, share, or monetize your business data, transaction history, customer identities, or financial balances. We do not use third-party analytics trackers, behavioral ad pixels, or session recording tools.
+                We do not sell, rent, share, or monetize your business data, transaction history, customer identities, or financial balances. We do not use third-party analytics trackers, behavioral ad pixels, or session recording tools. Even the two typefaces this app is set in are served from our own origin — loading a page makes no request to any third party.
               </p>
             </div>
 

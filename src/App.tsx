@@ -32,6 +32,7 @@ import {
   PAYMENT_API_DISABLED_MESSAGE, onlineCollectionAvailable, paymentApiConfigured,
 } from './lib/paymentApi';
 import { todayNpt } from './lib/nepaliDate';
+import { applyPageMeta } from './lib/pageMeta';
 import * as authService from './services/authService';
 import * as businessService from './services/businessService';
 import {
@@ -227,6 +228,16 @@ export default function App() {
    */
   const { path, navigate } = useRoute();
   const route = useMemo(() => parseRoute(path), [path]);
+
+  /**
+   * The document's title, description and canonical URL follow the route.
+   *
+   * The static documents the build writes (scripts/prerender.mjs) carry the
+   * right head for a crawler that does not run JavaScript; this keeps the same
+   * three facts correct in the tab, and for one that does. Private screens lose
+   * the canonical link and gain `noindex`.
+   */
+  useEffect(() => { applyPageMeta(route); }, [route]);
   const [range, setRange] = useState(defaultRange);
   const [rangeTouched, setRangeTouched] = useState(false);
   /**

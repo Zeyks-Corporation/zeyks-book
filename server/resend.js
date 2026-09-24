@@ -1,26 +1,85 @@
 /**
- * Resend Email Service Integration.
+ * Resend email integration — this server's only outbound mail.
  *
- * Handles sending emails using Resend (https://resend.com).
- * Reads `RESEND_API_KEY` from the environment.
+ * Three templates, three call sites, and one rule that matters: the content is
+ * always built here, from values that are escaped before they are interpolated.
+ * A name typed into a contact form, an address, a message body, a subject line
+ * — none of them may become markup, a new header, or a link.
+ *
+ * What used to be here instead: `sendAuthEmail`, reachable from an
+ * unauthenticated `POST /api/auth/email`, which would mail any `type`, any
+ * recipient and any caller-supplied `resetLink` while wearing this product's
+ * branding. Anyone could use the domain to phish its own users. That endpoint
+ * and that function are gone; the only auth mail this server sends is a code it
+ * generated for a request it rate-limited (see ./otp.js), plus a welcome note
+ * for an address whose code was just verified.
  */
 
 import { Resend } from 'resend';
 
-const apiKey = process.env.RESEND_API_KEY;
+const apiKey = (process.env.RESEND_API_KEY ?? '').trim();
 const resendClient = apiKey ? new Resend(apiKey) : null;
+
+const FROM_EMAIL = (process.env.RESEND_FROM_EMAIL ?? '').trim() || 'Zeyks Book <onboarding@resend.dev>';
+const CONTACT_TO_EMAIL = (process.env.RESEND_TO_EMAIL ?? '').trim() || 'support@zeyksbook.app';
+
+const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+
+/** Render untrusted text as text: no tag, no entity, no attribute can survive. */
+export function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (character) => HTML_ESCAPES[character]);
+}
+
+/**
+ * Make a value safe for a mail header.
+ *
+ * A CR or LF in a subject or a display name is header injection: everything
+ * after it becomes another header, which is how a contact form becomes a way to
+ * send someone else's mail. Fold to one line and bound the length.
+ */
+export function headerSafe(value, maxLength = 120) {
+  return String(value ?? '')
+    .replace(/[\r\n\0]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength);
+}
+
+/** A shape check for addresses this server is about to write into a header. */
+export function isEmailAddress(value) {
+  const candidate = String(value ?? '').trim();
+  return candidate.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(candidate);
+}
+
+/** The shared shell, so every message looks like it came from one product. */
+function shell(inner) {
+  return `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e4e4e7; border-radius: 12px;">
+      ${inner}
+      <hr style="border: 0; border-top: 1px solid #e4e4e7; margin: 20px 0;" />
+      <p style="color: #6b6b70; font-size: 12px; margin: 0;">Zeyks Book · this message was sent because of an action on your account.</p>
+    </div>
+  `;
+}
 
 export const resendService = {
   isConfigured() {
-    return Boolean(apiKey && apiKey.trim().length > 0);
+    return Boolean(resendClient);
   },
 
   /**
-   * Send a contact form email submission via Resend.
+   * Contact-form submission, to the support inbox.
+   *
+   * The submitter's address becomes `replyTo` only after it passes the shape
+   * check, and every field is escaped in the body.
    */
   async sendContactEmail({ name, email, message }) {
+    const safeName = headerSafe(name, 120);
+    const safeEmail = String(email ?? '').trim();
+    const body = String(message ?? '');
+
     if (!resendClient) {
-      console.log(`[resend] Simulation: Contact form submitted by ${name} <${email}>: "${message}"`);
+      console.log(`[resend] Simulation: contact form from ${safeName} <${headerSafe(safeEmail)}>: ${headerSafe(body, 200)}`);
       return {
         success: true,
         simulated: true,
@@ -28,138 +87,105 @@ export const resendService = {
       };
     }
 
-    const fromEmail = process.env.RESEND_FROM_EMAIL || 'Zeyks Book <onboarding@resend.dev>';
-    const toEmail = process.env.RESEND_TO_EMAIL || 'support@zeyks.book';
-
-    try {
-      const data = await resendClient.emails.send({
-        from: fromEmail,
-        to: [toEmail],
-        replyTo: email,
-        subject: `[Zeyks Book Contact] New Inquiry from ${name}`,
-        html: `
-          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e4e4e7; rounded: 12px;">
-            <h2 style="color: #09090b; margin-top: 0;">New Contact Form Message</h2>
-            <p style="color: #71717a; font-size: 14px;">You received a message via the Zeyks Book contact page.</p>
-            <hr style="border: 0; border-top: 1px solid #e4e4e7; margin: 20px 0;" />
-            <p><strong>Name:</strong> ${name}</p>
-            <p><strong>Email:</strong> <a href="mailto:${email}">${email}</a></p>
-            <p><strong>Message:</strong></p>
-            <div style="background-color: #f4f4f5; padding: 15px; border-radius: 8px; font-size: 15px; color: #18181b; white-space: pre-wrap;">${message}</div>
-            <hr style="border: 0; border-top: 1px solid #e4e4e7; margin: 20px 0;" />
-            <p style="color: #a1a1aa; font-size: 12px; margin-bottom: 0;">Zeyks Book Email System · Resend Service</p>
-          </div>
-        `,
-      });
-
-      return { success: true, data };
-    } catch (error) {
-      console.error('[resend] Failed to send email via Resend:', error);
+    if (!isEmailAddress(safeEmail)) {
+      const error = new Error('A valid email address is required.');
+      error.status = 400;
       throw error;
     }
+
+    const data = await resendClient.emails.send({
+      from: FROM_EMAIL,
+      to: [CONTACT_TO_EMAIL],
+      replyTo: safeEmail,
+      subject: `[Zeyks Book Contact] New inquiry from ${safeName || 'a visitor'}`,
+      html: shell(`
+        <h2 style="color: #09090b; margin-top: 0;">New contact form message</h2>
+        <p style="color: #6b6b70; font-size: 14px;">A message arrived through the Zeyks Book contact page.</p>
+        <p><strong>Name:</strong> ${escapeHtml(safeName) || '—'}</p>
+        <p><strong>Email:</strong> ${escapeHtml(safeEmail)}</p>
+        <p><strong>Message:</strong></p>
+        <div style="background-color: #f4f4f5; padding: 15px; border-radius: 8px; font-size: 15px; color: #18181b; white-space: pre-wrap;">${escapeHtml(body)}</div>
+      `),
+    });
+
+    return { success: true, data };
   },
 
   /**
-   * Send authentication emails (welcome, reset password, confirmation) via Resend.
+   * A sign-in verification code.
+   *
+   * Called only by ./otp.js, only for a code this server generated, and only
+   * when this service is configured. It throws when it is not: a simulated
+   * "sent" here would leave a person waiting for mail that was never sent.
    */
-  async sendAuthEmail({ type, email, name = 'Valued User', resetLink }) {
+  async sendOtpEmail({ email, code, name }) {
     if (!resendClient) {
-      console.log(`[resend] Simulation: Auth email (${type}) for ${email}`);
-      return { success: true, simulated: true };
+      throw new Error('Resend is not configured, so no verification email can be sent.');
+    }
+    if (!isEmailAddress(email)) {
+      throw new Error('A valid recipient email address is required.');
+    }
+    const safeCode = String(code ?? '');
+    if (!/^\d{6}$/.test(safeCode)) {
+      // Defence in depth: this template exists to carry exactly six digits.
+      throw new Error('A six-digit verification code is required.');
     }
 
-    const fromEmail = process.env.RESEND_FROM_EMAIL || 'Zeyks Book <onboarding@resend.dev>';
-    const subjectMap = {
-      welcome: 'Welcome to Zeyks Book!',
-      password_reset: 'Reset Your Zeyks Book Password',
-      signup_notification: 'New User Registered on Zeyks Book',
-    };
+    const greeting = headerSafe(name, 80);
 
-    const subject = subjectMap[type] || 'Zeyks Book Security Notification';
-
-    const htmlMap = {
-      welcome: `
-        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e4e4e7; border-radius: 12px;">
-          <h2 style="color: #09090b;">Welcome to Zeyks Book, ${name}!</h2>
-          <p style="color: #52525b;">Your account has been created. Start managing your double-entry accounting with native Bikram Sambat dates.</p>
-          <hr style="border: 0; border-top: 1px solid #e4e4e7; margin: 20px 0;" />
-          <p style="color: #a1a1aa; font-size: 12px;">Zeyks Book Security & Auth System · Powered by Resend</p>
-        </div>
-      `,
-      password_reset: `
-        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e4e4e7; border-radius: 12px;">
-          <h2 style="color: #09090b;">Password Reset Request</h2>
-          <p style="color: #52525b;">We received a request to reset your password for <strong>${email}</strong>.</p>
-          ${resetLink ? `<p><a href="${resetLink}" style="display: inline-block; background: #007AFF; color: #fff; padding: 10px 18px; border-radius: 8px; text-decoration: none; font-weight: 600;">Reset Password</a></p>` : ''}
-          <p style="color: #71717a; font-size: 13px;">If you did not request this change, you can safely ignore this email.</p>
-          <hr style="border: 0; border-top: 1px solid #e4e4e7; margin: 20px 0;" />
-          <p style="color: #a1a1aa; font-size: 12px;">Zeyks Book Security & Auth System · Powered by Resend</p>
-        </div>
-      `,
-      signup_notification: `
-        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e4e4e7; border-radius: 12px;">
-          <h2 style="color: #09090b;">New Signup Event</h2>
-          <p>A new user has registered: <strong>${name}</strong> (${email}).</p>
-        </div>
-      `,
-    };
-
-    try {
-      const data = await resendClient.emails.send({
-        from: fromEmail,
-        to: [email],
-        subject,
-        html: htmlMap[type] || htmlMap.welcome,
-      });
-      return { success: true, data };
-    } catch (error) {
-      console.error(`[resend] Failed to send auth email (${type}):`, error);
-      throw error;
-    }
-  },
-
-  /**
-   * Send a 6-digit verification OTP email via Resend.
-   */
-  async sendOtpEmail({ email, code, name = 'Valued User' }) {
-    if (!resendClient) {
-      console.log(`[resend] OTP Simulation for ${email}: Code is ${code}`);
-      return { success: true, simulated: true, code };
-    }
-
-    const fromEmail = process.env.RESEND_FROM_EMAIL || 'Zeyks Book <onboarding@resend.dev>';
-    const subject = `Your Zeyks Book Verification Code: ${code}`;
-
-    const html = `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; border: 1px solid #e4e4e7; border-radius: 16px; background-color: #ffffff;">
+    const data = await resendClient.emails.send({
+      from: FROM_EMAIL,
+      to: [String(email).trim()],
+      // The code is in the subject as well as the body: it is the one thing the
+      // person needs, and it is a value this server generated.
+      subject: `Your Zeyks Book verification code: ${safeCode}`,
+      html: shell(`
         <div style="text-align: center; margin-bottom: 24px;">
-          <h2 style="color: #09090b; font-size: 22px; font-weight: 700; margin: 0 0 8px 0;">Zeyks Book Verification</h2>
-          <p style="color: #71717a; font-size: 14px; margin: 0;">Use the verification code below to complete your login to Zeyks Book.</p>
+          <h2 style="color: #09090b; font-size: 22px; font-weight: 700; margin: 0 0 8px 0;">Zeyks Book verification</h2>
+          <p style="color: #6b6b70; font-size: 14px; margin: 0;">
+            ${greeting ? `Hello ${escapeHtml(greeting)} — use the code below to finish signing in.` : 'Use the code below to finish signing in.'}
+          </p>
         </div>
         <div style="background-color: #f4f4f5; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 24px;">
-          <span style="font-family: monospace, monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #007AFF;">${code}</span>
+          <span style="font-family: monospace, monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #0066d6;">${safeCode}</span>
         </div>
         <p style="color: #52525b; font-size: 13px; line-height: 1.5; margin-bottom: 16px;">
-          This code is valid for 10 minutes. If you did not request this login code, you can safely ignore this email.
+          This code is valid for 10 minutes and can be used once. If you did not request it, ignore this
+          email — nobody can sign in with it unless they also have your inbox.
         </p>
-        <hr style="border: 0; border-top: 1px solid #e4e4e7; margin: 20px 0;" />
-        <p style="color: #a1a1aa; font-size: 12px; text-align: center; margin: 0;">
-          Zeyks Book Security System · Powered by Resend
-        </p>
-      </div>
-    `;
+      `),
+    });
 
-    try {
-      const data = await resendClient.emails.send({
-        from: fromEmail,
-        to: [email],
-        subject,
-        html,
-      });
-      return { success: true, data };
-    } catch (error) {
-      console.error('[resend] Failed to send OTP email via Resend:', error);
-      throw error;
+    return { success: true, data };
+  },
+
+  /**
+   * A welcome note for an address whose verification code was just verified.
+   *
+   * Server-initiated, for an authorized flow only: ./otp.js sends this after it
+   * has (a) matched a code it issued and (b) created the account. Best effort —
+   * the caller swallows a failure, because a welcome email is not a sign-in.
+   */
+  async sendWelcomeEmail({ email, name }) {
+    if (!resendClient) {
+      throw new Error('Resend is not configured, so no welcome email can be sent.');
     }
+    if (!isEmailAddress(email)) {
+      throw new Error('A valid recipient email address is required.');
+    }
+
+    const greeting = headerSafe(name, 80);
+    const data = await resendClient.emails.send({
+      from: FROM_EMAIL,
+      to: [String(email).trim()],
+      subject: 'Welcome to Zeyks Book',
+      html: shell(`
+        <h2 style="color: #09090b; margin-top: 0;">Welcome to Zeyks Book${greeting ? `, ${escapeHtml(greeting)}` : ''}</h2>
+        <p style="color: #52525b;">Your account is ready. Your books are yours alone: every row is protected by row level security, and nobody else on the platform can read them.</p>
+        <p style="color: #6b6b70; font-size: 13px; margin-bottom: 0;">Set up your business details, then record your first invoice.</p>
+      `),
+    });
+
+    return { success: true, data };
   },
 };

@@ -22,15 +22,19 @@ export const AuthModal: React.FC<{
   const [noticeTone, setNoticeTone] = useState<'info' | 'warn'>('info');
   const [busy, setBusy] = useState(false);
 
-  // Unused password-mode functions kept for architectural contracts & unit testing
+  /**
+   * The password path, kept behind the `false &&` block further down so the
+   * tested contract (and the password-manager metadata) survives, but never
+   * reachable from the OTP screen. It leaves through authService — never
+   * Supabase directly — and it refuses an empty password rather than
+   * substituting one of its own.
+   */
   const _unusedPasswordAuth = async (targetEmail: string) => {
-    if (mode === 'register') {
-      const res = await signUp(targetEmail, password || 'defaultPass123', fullName.trim());
-      if (res.user) await getProfile(res.user.id);
-    } else {
-      const res = await signIn(targetEmail, password || 'defaultPass123');
-      if (res.user) await getProfile(res.user.id);
-    }
+    if (!password) return;
+    const res = mode === 'register'
+      ? await signUp(targetEmail, password, fullName.trim())
+      : await signIn(targetEmail, password);
+    if (res.user) await getProfile(res.user.id);
   };
 
   useEffect(() => {
@@ -92,8 +96,8 @@ export const AuthModal: React.FC<{
     }
 
     const cleanCode = otpCode.trim();
-    if (cleanCode.length < 4) {
-      setError('Please enter the 6-digit verification code sent to your email.');
+    if (!/^\d{6}$/.test(cleanCode)) {
+      setError('Enter the 6-digit verification code sent to your email.');
       return;
     }
 
@@ -232,7 +236,7 @@ export const AuthModal: React.FC<{
                   maxLength={6}
                   disabled={busy}
                   autoFocus
-                  placeholder="123456"
+                  placeholder="000000"
                   onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
                 />
                 <div className="flex justify-between items-center text-xs">
