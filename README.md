@@ -263,7 +263,7 @@ server-side by business membership and role. Expenses are settled at posting
 time, so they never produce a settlement row or enter `reconcile()`. **Voiding**
 (`void_document`, `void_payment`) is cloud-backed too: it writes exactly one
 mirror reversal, links it from the original entry, marks the document VOIDED and
-voids any embedded settlement, without ever deleting a row. **Online collection**
+voids any embedded settlement, without ever deleting a row. **Online collection*
 (`initiate_gateway_txn` + `settle_gateway_txn`) is cloud-backed since Stage 8 —
 see *Collecting online* below. Chart-of-accounts edits have no RPC yet, so they
 are shown read-only with a clear "not available yet" notice rather than
