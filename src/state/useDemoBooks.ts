@@ -719,15 +719,23 @@ export function useDemoBooks() {
     return { ok: false, message: 'Gateway settlement disabled in Demo mode.' };
   }, []);
 
-  const addAccount = useCallback((draft: Omit<Account, 'id' | 'businessId' | 'isActive'>): ActionResult => {
+  const addAccount = useCallback(async (draft: Omit<Account, 'id' | 'businessId' | 'isActive'>): Promise<ActionResult> => {
     if (accounts.some((a) => a.code === draft.code)) return { ok: false, message: `Code ${draft.code} in use.` };
     setAccounts((prev) => [...prev, { ...draft, id: newId('acc'), businessId: 'biz_demo', isActive: true }]);
     return { ok: true, message: `${draft.name} added.` };
   }, [accounts]);
 
-  const archiveAccount = useCallback((id: string): ActionResult => {
+  const archiveAccount = useCallback(async (id: string): Promise<ActionResult> => {
     setAccounts((prev) => prev.map((a) => a.id === id ? { ...a, isActive: false } : a));
     return { ok: true, message: 'Account archived in Demo mode.' };
+  }, []);
+
+  const updateAccount = useCallback(async (
+    id: string,
+    changes: Pick<Account, 'name' | 'description'>,
+  ): Promise<ActionResult> => {
+    setAccounts((prev) => prev.map((a) => a.id === id ? { ...a, ...changes } : a));
+    return { ok: true, message: 'Account updated in Demo mode.' };
   }, []);
 
   const snapshot = useCallback((): BooksSnapshot => ({
@@ -778,7 +786,7 @@ export function useDemoBooks() {
     openInvoices, openBills, currentFy, defaultRange, lookup,
     codes: ACCOUNT_CODES,
     loadFromCloud, addSale, addPurchase, addExpense, addPayment, voidDocument, voidPayment,
-    startGatewayCollection, settleGatewayTxn, addAccount, archiveAccount,
+    startGatewayCollection, settleGatewayTxn, addAccount, archiveAccount, updateAccount,
     snapshot, restore, resetAll, saveBusinessSettings, refFor,
   };
 }

@@ -10,6 +10,9 @@ import { AccountLookup, outstandingByParty, outstandingOn, reconcile } from '../
 import { nextReference, RefKind } from '../services/referenceGenerator';
 import { BACKUP_SCHEMA_VERSION } from '../lib/backupVersion';
 import {
+  archiveAccount as archiveAccountInCloud,
+  createAccount as createAccountInCloud,
+  updateAccount as updateAccountInCloud,
   fetchAllBookData, fetchControlIntegrity, fetchCustomers, fetchSuppliers,
   initiateGatewayTxn as initiateGatewayTxnRpc,
   postExpense, postPayment, postPurchase, postSale, settleGatewayTxn as settleGatewayTxnRpc,
@@ -646,23 +649,52 @@ export function useBooks() {
   /* Chart of accounts                                                       */
   /* ---------------------------------------------------------------------- */
 
-  const addAccount = useCallback((draft: Omit<Account, 'id' | 'businessId' | 'isActive'>): ActionResult => {
+  const addAccount = useCallback(async (draft: Omit<Account, 'id' | 'businessId' | 'isActive'>): Promise<ActionResult> => {
     if (!isSupported('accounts')) return unsupported('accounts', 'Adding an account');
     if (accounts.some((a) => a.code === draft.code)) return err(`Account code ${draft.code} is already in use.`);
     if (!/^\d{4}$/.test(draft.code)) return err('Account codes are four digits.');
-    setAccounts((prev) => [...prev, { ...draft, id: newId('acc'), businessId: business.id, isActive: true }]);
-    return ok(`${draft.name} added.`);
+    if (!draft.name.trim()) return err('Account name is required.');
+    try {
+      const account = await createAccountInCloud(business.id, draft);
+      setAccounts((prev) => [...prev, account].sort((a, b) => a.code.localeCompare(b.code)));
+      return ok(`${account.name} added.`);
+    } catch (e) {
+      return err(e instanceof Error ? e.message : 'Could not save the account to the cloud.');
+    }
   }, [accounts, business.id]);
 
-  const archiveAccount = useCallback((id: string): ActionResult => {
+  const archiveAccount = useCallback(async (id: string): Promise<ActionResult> => {
     if (!isSupported('accounts')) return unsupported('accounts', 'Archiving an account');
     const account = accounts.find((a) => a.id === id);
     if (!account) return err('That account no longer exists.');
     if (account.systemAccount) return err(`${account.name} is used by the posting rules and cannot be removed.`);
     if (Math.abs(balances[id] ?? 0) > 0.005) return err(`${account.name} still has a balance. Clear it first.`);
-    setAccounts((prev) => prev.map((a) => (a.id === id ? { ...a, isActive: false } : a)));
-    return ok(`${account.name} archived.`);
-  }, [accounts, balances]);
+    try {
+      await archiveAccountInCloud(business.id, id);
+      setAccounts((prev) => prev.map((a) => (a.id === id ? { ...a, isActive: false } : a)));
+      return ok(`${account.name} archived.`);
+    } catch (e) {
+      return err(e instanceof Error ? e.message : 'Could not archive the account in the cloud.');
+    }
+  }, [accounts, balances, business.id]);
+
+  const updateAccount = useCallback(async (
+    id: string,
+    changes: Pick<Account, 'name' | 'description'>,
+  ): Promise<ActionResult> => {
+    if (!isSupported('accounts')) return unsupported('accounts', 'Editing an account');
+    const account = accounts.find((a) => a.id === id);
+    if (!account) return err('That account no longer exists.');
+    if (account.systemAccount) return err(`${account.name} is used by the posting rules and cannot be renamed.`);
+    if (!changes.name.trim()) return err('Account name is required.');
+    try {
+      const updated = await updateAccountInCloud(business.id, id, changes);
+      setAccounts((prev) => prev.map((a) => (a.id === id ? updated : a)));
+      return ok(`${updated.name} updated.`);
+    } catch (e) {
+      return err(e instanceof Error ? e.message : 'Could not save the account changes to the cloud.');
+    }
+  }, [accounts, business.id]);
 
   /* ---------------------------------------------------------------------- */
   /* Backup                                                                  */
@@ -744,7 +776,7 @@ export function useBooks() {
     // actions
     loadFromCloud,
     addSale, addPurchase, addExpense, addPayment, voidDocument, voidPayment,
-    startGatewayCollection, settleGatewayTxn, addAccount, archiveAccount,
+    startGatewayCollection, settleGatewayTxn, addAccount, archiveAccount, updateAccount,
     snapshot, restore, resetAll, saveBusinessSettings, refFor,
   };
 }

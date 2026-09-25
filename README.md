@@ -265,10 +265,10 @@ time, so they never produce a settlement row or enter `reconcile()`. **Voiding**
 mirror reversal, links it from the original entry, marks the document VOIDED and
 voids any embedded settlement, without ever deleting a row. **Online collection*
 (`initiate_gateway_txn` + `settle_gateway_txn`) is cloud-backed since Stage 8 —
-see *Collecting online* below. Chart-of-accounts edits have no RPC yet, so they
-are shown read-only with a clear "not available yet" notice rather than
-pretending to save. See `src/lib/capabilities.ts` for the single source of
-truth.
+see *Collecting online* below. Chart-of-accounts additions, name/description
+edits, and archiving are persisted through the accounts table's column-scoped
+grants and membership policies. See `src/lib/capabilities.ts` for the single
+source of truth.
 
 A settlement always settles a posted sale (money in) or purchase (money out).
 `post_payment` locks that document, recomputes what is still outstanding from
@@ -636,9 +636,9 @@ The database side is pinned by
 `022_security_boundaries.test.sql` (48 assertions: the grants on every financial
 table for every role, `search_path` on each definer, the helpers that must not be
 callable, VIEWER refusals, cross-tenant refusals, and the audit trail). The client
-side is pinned in the Stage 13 block of `tests/run.mjs`: no `.insert`, no
-`.delete`, one `.update` (business settings), an allowlist of the nine RPCs, and
-the bundle scan above.
+side is pinned in the Stage 13 block of `tests/run.mjs`: no direct writes to
+financial tables, account writes limited to the column-scoped accounts policy,
+an allowlist of the nine accounting RPCs, and the bundle scan above.
 
 ### Payment API security model
 

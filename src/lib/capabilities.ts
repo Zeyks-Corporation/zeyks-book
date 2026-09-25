@@ -5,9 +5,9 @@
  * settlements (`post_payment`), voiding (`void_document` for documents,
  * `void_payment` for settlements) and online collection
  * (`initiate_gateway_txn` + `settle_gateway_txn` for eSewa/Khalti) are backed by
- * Cloud Functions / Firestore. Chart-of-accounts edits and backup restore have no Function yet, so
- * their write paths would change React state only and be lost on refresh. Those
- * write paths are disabled in cloud mode until their RPCs ship.
+ * Cloud Functions / Firestore. Chart-of-accounts writes use the accounts
+ * table's column-scoped grants and membership-checked RLS policies. Backup
+ * restore has no cloud write path yet.
  *
  * Gateways being available does NOT mean the browser can post money: the only
  * thing these two RPCs let a member do is record a provider interaction and ask
@@ -25,7 +25,7 @@ export const CAPABILITIES = {
   payments: true,
   voiding: true,
   gateway: true,
-  accounts: false,
+  accounts: true,
   restore: false,
   erase: false,
 } as const;

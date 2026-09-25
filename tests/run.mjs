@@ -902,7 +902,7 @@ test('selectActiveMembership breaks ties by businessId and handles empty input',
 /* Cloud capability model                                                   */
 /* ---------------------------------------------------------------------- */
 
-test('every posting path is cloud-backed; the remaining local-only features stay disabled', () => {
+test('posting and chart-of-accounts paths are cloud-backed; unsupported capabilities stay disabled', () => {
   assertEqual(CAPABILITIES.sales, true);
   assertEqual(CAPABILITIES.purchases, true, 'purchases now have a post_purchase RPC');
   assertEqual(CAPABILITIES.expenses, true, 'expenses now have a post_expense RPC');
@@ -910,7 +910,8 @@ test('every posting path is cloud-backed; the remaining local-only features stay
   assertEqual(CAPABILITIES.voiding, true, 'voiding now has a void_document RPC');
   assertEqual(CAPABILITIES.gateway, true,
     'online collection now has initiate_gateway_txn and settle_gateway_txn');
-  for (const cap of ['accounts', 'restore', 'erase']) {
+  assertEqual(isSupported('accounts'), true, 'account writes use column-scoped table grants and RLS');
+  for (const cap of ['restore', 'erase']) {
     assertEqual(isSupported(cap), false, `${cap} should be disabled`);
   }
 });

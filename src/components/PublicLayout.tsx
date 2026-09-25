@@ -22,7 +22,7 @@ export const PublicLayout: React.FC<{
       {/* ── Liquid Glass Navigation Bar ── */}
       <header className="sticky top-0 z-30 border-b border-[var(--separator)] glass-regular transition-colors duration-300">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4 sm:px-6">
-          {/* Logo + Brand */}
+          {/* Logo */}
           <button
             type="button"
             onClick={() => {
@@ -30,12 +30,9 @@ export const PublicLayout: React.FC<{
               navigate('/');
             }}
             className="flex items-center gap-2.5 min-h-[44px] px-1 rounded-[10px] hover:bg-[var(--fill-secondary)] transition-all group"
-            aria-label="Home"
+            aria-label="Zeyks Book home"
           >
-            <img src="/favicon.svg" alt="Zeyks Book Logo" className="h-7 w-7 shrink-0 object-contain transition-transform group-hover:scale-105" />
-            <span className="text-[16px] font-bold text-[var(--label)] tracking-tight">
-              Zeyks Book
-            </span>
+            <img src="/zeyks-mark.png" alt="Zeyks Book" className="h-10 w-9 shrink-0 object-contain transition-transform group-hover:scale-105" />
           </button>
 
           {/* Desktop Nav links + Sign In (sm and up) */}
@@ -132,8 +129,7 @@ export const PublicLayout: React.FC<{
             {/* Brand */}
             <div className="max-w-xs">
               <div className="flex items-center gap-2">
-                <img src="/favicon.svg" alt="Zeyks Book Logo" className="h-6 w-6 shrink-0 object-contain" />
-                <span className="text-[16px] font-bold text-[var(--label)]">Zeyks Book</span>
+                <img src="/zeyks-mark.png" alt="Zeyks Book" className="h-12 w-10 shrink-0 object-contain" />
               </div>
               <p className="mt-3 text-[13px] leading-[20px] text-[var(--label-secondary)]">
                 Double-entry bookkeeping for Nepali businesses, with Bikram Sambat dates, NPR amounts, and printable A4 reports.
@@ -210,7 +206,7 @@ export const PublicLayout: React.FC<{
 
           {/* Bottom copyright bar */}
           <div className="mt-10 border-t border-[var(--separator)] pt-6 flex flex-col gap-2 sm:flex-row sm:items-center text-[12px] text-[var(--label-tertiary)]">
-            <p>© {new Date().getFullYear()} Zeyks Book · Kathmandu, Nepal</p>
+            <p>© {new Date().getFullYear()} · Kathmandu, Nepal</p>
             <p className="sm:ml-auto">
               Prepared for Inland Revenue Department (IRD) compliance and standard A4 paper presentation.
             </p>

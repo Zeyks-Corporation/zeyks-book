@@ -39,8 +39,11 @@ export const SettingsView: React.FC<{
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showNewAccount, setShowNewAccount] = useState(false);
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [draft, setDraft] = useState({ code: '', name: '', type: 'EXPENSE' as AccountType, description: '' });
   const [accountError, setAccountError] = useState<string | null>(null);
+  const [savingAccount, setSavingAccount] = useState(false);
+  const [archivingAccountId, setArchivingAccountId] = useState<string | null>(null);
   const [confirmSignOutEverywhere, setConfirmSignOutEverywhere] = useState(false);
 
   // Re-seed the form if a different business is loaded.
@@ -70,10 +73,17 @@ export const SettingsView: React.FC<{
     onDone('Backup downloaded. Keep it somewhere safe.', true);
   };
 
-  const addAccount = () => {
-    const result = books.addAccount(draft);
+  const saveAccount = async () => {
+    if (savingAccount) return;
+    setSavingAccount(true);
+    setAccountError(null);
+    const result = editingAccountId
+      ? await books.updateAccount(editingAccountId, draft)
+      : await books.addAccount(draft);
+    setSavingAccount(false);
     if (!result.ok) { setAccountError(result.message); return; }
     setShowNewAccount(false);
+    setEditingAccountId(null);
     setDraft({ code: '', name: '', type: 'EXPENSE', description: '' });
     setAccountError(null);
     onDone(result.message, true);
@@ -237,7 +247,7 @@ export const SettingsView: React.FC<{
                 <th scope="col" className="py-2 px-3 text-left font-medium">Name</th>
                 <th scope="col" className="py-2 px-3 text-left font-medium">Type</th>
                 <th scope="col" className="py-2 px-3 text-right font-medium">Balance</th>
-                <th scope="col" className="py-2 px-3 text-right font-medium" />
+                <th scope="col" className="py-2 px-3 text-right font-medium">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--separator)]">
@@ -252,11 +262,29 @@ export const SettingsView: React.FC<{
                     <Money value={balances[a.id] ?? 0} symbol={business.currencySymbol} size="sm" muted />
                   </td>
                   <td className="py-2 px-3 text-right">
-                    <Button variant="ghost"
-                      disabled={!isSupported('accounts') || a.systemAccount}
-                      onClick={() => { const r = books.archiveAccount(a.id); onDone(r.message, r.ok); }}>
-                      Archive
-                    </Button>
+                    <div className="flex justify-end gap-1">
+                      {!a.systemAccount && (
+                        <Button variant="ghost" disabled={!isSupported('accounts') || savingAccount || archivingAccountId !== null}
+                          onClick={() => {
+                            setEditingAccountId(a.id);
+                            setDraft({ code: a.code, name: a.name, type: a.type, description: a.description ?? '' });
+                            setAccountError(null);
+                            setShowNewAccount(true);
+                          }}>
+                          Edit
+                        </Button>
+                      )}
+                      <Button variant="ghost"
+                        disabled={!isSupported('accounts') || a.systemAccount || archivingAccountId !== null || savingAccount}
+                        onClick={async () => {
+                          setArchivingAccountId(a.id);
+                          const result = await books.archiveAccount(a.id);
+                          setArchivingAccountId(null);
+                          onDone(result.message, result.ok);
+                        }}>
+                        {archivingAccountId === a.id ? 'Archiving…' : 'Archive'}
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -361,26 +389,28 @@ export const SettingsView: React.FC<{
         </p>
       </Modal>
 
-      <Modal isOpen={showNewAccount} onClose={() => setShowNewAccount(false)} title="Add an account" size="sm"
+      <Modal isOpen={showNewAccount} onClose={() => setShowNewAccount(false)} title={editingAccountId ? 'Edit account' : 'Add an account'} size="sm"
         footer={
           <div className="flex justify-end gap-2">
-            <Button onClick={() => setShowNewAccount(false)}>Cancel</Button>
-            <Button variant="primary" onClick={addAccount}>Add account</Button>
+            <Button onClick={() => setShowNewAccount(false)} disabled={savingAccount}>Cancel</Button>
+            <Button variant="primary" onClick={() => void saveAccount()} disabled={savingAccount}>
+              {savingAccount ? 'Saving…' : editingAccountId ? 'Save changes' : 'Add account'}
+            </Button>
           </div>
         }>
         <div className="space-y-3">
           {accountError && <Callout tone="error">{accountError}</Callout>}
-          <Field label="Code" required hint="Four digits. 1xxx assets, 2xxx liabilities, 3xxx equity, 4xxx revenue, 5xxx expenses.">
-            {(id) => <input id={id} className={inputClass} value={draft.code} inputMode="numeric" maxLength={4}
+          <Field label="Code" required hint={editingAccountId ? 'Account codes cannot be changed after creation.' : 'Four digits. 1xxx assets, 2xxx liabilities, 3xxx equity, 4xxx revenue, 5xxx expenses.'}>
+            {(id) => <input id={id} className={inputClass} value={draft.code} inputMode="numeric" maxLength={4} disabled={Boolean(editingAccountId) || savingAccount}
               onChange={(e) => setDraft({ ...draft, code: e.target.value.replace(/\D/g, '') })} />}
           </Field>
           <Field label="Name" required>
-            {(id) => <input id={id} className={inputClass} value={draft.name}
+            {(id) => <input id={id} className={inputClass} value={draft.name} disabled={savingAccount}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })} />}
           </Field>
           <Field label="Type" required>
             {(id) => (
-              <select id={id} className={inputClass} value={draft.type}
+              <select id={id} className={inputClass} value={draft.type} disabled={Boolean(editingAccountId) || savingAccount}
                 onChange={(e) => setDraft({ ...draft, type: e.target.value as AccountType })}>
                 {(['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE'] as AccountType[]).map((t) => (
                   <option key={t} value={t}>{t.charAt(0) + t.slice(1).toLowerCase()}</option>
@@ -389,7 +419,7 @@ export const SettingsView: React.FC<{
             )}
           </Field>
           <Field label="Description">
-            {(id) => <input id={id} className={inputClass} value={draft.description}
+            {(id) => <input id={id} className={inputClass} value={draft.description} disabled={savingAccount}
               onChange={(e) => setDraft({ ...draft, description: e.target.value })} />}
           </Field>
         </div>

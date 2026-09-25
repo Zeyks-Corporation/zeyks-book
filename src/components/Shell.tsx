@@ -86,10 +86,12 @@ export const Sidebar: React.FC<{
     >
       <div className="h-14 px-4 flex items-center justify-between border-b border-[var(--separator)]">
         <div className="flex items-center gap-2 min-w-0">
-          <img src="/favicon.svg" alt="Zeyks Book Logo" className="h-5 w-5 shrink-0 object-contain" />
-          <span className="text-[15px] font-semibold text-[var(--label)] truncate">
-            {businessName || 'Zeyks Book'}
-          </span>
+          <img src="/zeyks-mark.png" alt="Zeyks Book" className="h-9 w-8 shrink-0 object-contain" />
+          {businessName && (
+            <span className="text-[15px] font-semibold text-[var(--label)] truncate">
+              {businessName}
+            </span>
+          )}
         </div>
         <button type="button" onClick={onCloseMobile} aria-label="Close menu"
           className="lg:hidden min-h-[44px] min-w-[44px] flex items-center justify-center text-[var(--label-tertiary)] hover:text-[var(--label)] p-1 -mr-1 rounded">
