@@ -212,6 +212,9 @@ export async function getSession(): Promise<{
     const user = auth.currentUser ?? (await new Promise<User | null>((resolve) => {
       const unsub = onAuthStateChanged(auth, (u: User | null) => { unsub(); resolve(u); });
     }));
+    if (user) {
+      await syncSupabaseSession(user).catch(() => {});
+    }
     return { session: user ? { user } : null, error: null };
   } catch (e) {
     return { session: null, error: cleanAuthError(e instanceof Error ? e.message : 'Session error') };
@@ -222,9 +225,9 @@ export async function getSession(): Promise<{
 export function onAuthStateChange(
   callback: (event: string, session: { user: User } | null) => void,
 ): () => void {
-  return onAuthStateChanged(auth, (user: User | null) => {
+  return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
-      void syncSupabaseSession(user);
+      await syncSupabaseSession(user).catch(() => {});
     }
     callback(user ? 'SIGNED_IN' : 'SIGNED_OUT', user ? { user } : null);
   });
@@ -241,34 +244,39 @@ export async function getProfile(userId: string): Promise<{
 }> {
   void userId;
   try {
-    const email = auth.currentUser?.email;
-    if (email) {
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('email', email.toLowerCase())
-        .maybeSingle();
+    const user = auth.currentUser;
+    if (user) {
+      await syncSupabaseSession(user).catch(() => {});
 
-      if (data) {
-        return {
-          profile: {
-            id: data.id,
-            email: data.email,
-            fullName: data.full_name || '',
-            createdAt: data.created_at || '',
-          },
-          error: null,
-        };
+      // Only query Supabase profiles if an active authenticated Supabase session is established
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
+        if (!error && data) {
+          return {
+            profile: {
+              id: data.id,
+              email: data.email || user.email || '',
+              fullName: data.full_name || user.displayName || '',
+              createdAt: data.created_at || user.metadata.creationTime || new Date().toISOString(),
+            },
+            error: null,
+          };
+        }
       }
-    }
 
-    if (auth.currentUser) {
+      // Clean metadata from authenticated user without throwing 401
       return {
         profile: {
-          id: auth.currentUser.uid,
-          email: auth.currentUser.email || '',
-          fullName: auth.currentUser.displayName || auth.currentUser.email?.split('@')[0] || '',
-          createdAt: auth.currentUser.metadata.creationTime || new Date().toISOString(),
+          id: user.uid,
+          email: user.email || '',
+          fullName: user.displayName || user.email?.split('@')[0] || '',
+          createdAt: user.metadata.creationTime || new Date().toISOString(),
         },
         error: null,
       };
@@ -279,4 +287,5 @@ export async function getProfile(userId: string): Promise<{
     return { profile: null, error: e instanceof Error ? e.message : 'Profile error' };
   }
 }
+
 

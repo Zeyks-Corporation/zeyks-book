@@ -31,21 +31,27 @@ export async function getMyMemberships(): Promise<{
       await syncSupabaseSession(auth.currentUser);
     }
 
-    const { data, error } = await supabase
-      .from('business_memberships')
-      .select('business_id, user_id, role, created_at');
+    const { data: { session } } = await supabase.auth.getSession();
+    let clientErr: { message: string } | null = null;
 
-    if (!error && data) {
-      const memberships: Membership[] = data.map((row) => ({
-        businessId: row.business_id as string,
-        userId: row.user_id as string,
-        role: (row.role as Membership['role']) || 'OWNER',
-        createdAt: (row.created_at as string) || '',
-      }));
-      return { memberships, error: null };
+    if (session?.user) {
+      const { data, error } = await supabase
+        .from('business_memberships')
+        .select('business_id, user_id, role, created_at');
+
+      if (!error && data) {
+        const memberships: Membership[] = data.map((row) => ({
+          businessId: row.business_id as string,
+          userId: row.user_id as string,
+          role: (row.role as Membership['role']) || 'OWNER',
+          createdAt: (row.created_at as string) || '',
+        }));
+        return { memberships, error: null };
+      }
+      clientErr = error;
     }
 
-    // Fallback: If client query encounters permission denied or timing issue, query via API
+    // Fallback: If client session was not established, query via API
     const email = auth.currentUser?.email;
     if (email) {
       try {
@@ -57,7 +63,6 @@ export async function getMyMemberships(): Promise<{
         if (res.ok) {
           const json = await res.json();
           if (Array.isArray(json?.memberships)) {
-            // Re-trigger session sync in background
             void syncSupabaseSession(auth.currentUser);
             return { memberships: json.memberships, error: null };
           }
@@ -67,8 +72,8 @@ export async function getMyMemberships(): Promise<{
       }
     }
 
-    if (error) {
-      return { memberships: [], error: error.message };
+    if (clientErr) {
+      return { memberships: [], error: clientErr.message };
     }
 
     return { memberships: [], error: null };
@@ -87,14 +92,24 @@ export async function getBusiness(
   businessId: string,
 ): Promise<{ business: BusinessProfile | null; error: string | null }> {
   try {
-    const { data, error } = await supabase
-      .from('businesses')
-      .select('*')
-      .eq('id', businessId)
-      .single();
+    if (auth.currentUser) {
+      await syncSupabaseSession(auth.currentUser);
+    }
 
-    if (!error && data) {
-      return { business: toBusinessProfile(data as DbBusiness), error: null };
+    const { data: { session } } = await supabase.auth.getSession();
+    let clientErr: { message: string } | null = null;
+
+    if (session?.user) {
+      const { data, error } = await supabase
+        .from('businesses')
+        .select('*')
+        .eq('id', businessId)
+        .single();
+
+      if (!error && data) {
+        return { business: toBusinessProfile(data as DbBusiness), error: null };
+      }
+      clientErr = error;
     }
 
     // Fallback to server endpoint if client query encountered permission or RLS delay
@@ -115,10 +130,10 @@ export async function getBusiness(
       // Continue to handle primary error
     }
 
-    if (error) {
+    if (clientErr) {
       return {
         business: null,
-        error: error.message || 'This business could not be found, or you are not a member of it.',
+        error: clientErr.message || 'This business could not be found, or you are not a member of it.',
       };
     }
 
