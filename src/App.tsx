@@ -1,27 +1,20 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, Home, Plus, XCircle } from 'lucide-react';
 import type { User } from 'firebase/auth';
 import { UserProfile, ViewTab } from './types';
 import { useBooks } from './state/useBooks';
 import { Sidebar, Header } from './components/Shell';
-import { DashboardView } from './components/DashboardView';
-import { DocumentsView } from './components/DocumentsView';
-import { ReportsView } from './components/ReportsView';
-import { HealthView } from './components/HealthView';
-import { SettingsView } from './components/SettingsView';
 import { TransactionModal, TxnKind } from './components/TransactionModal';
 import { CollectOnlineModal, resolvePending } from './components/CollectOnlineModal';
 import { AuthModal } from './components/AuthModal';
 import { UpdatePasswordModal } from './components/UpdatePasswordModal';
 import { Button, Callout, Field, inputClass } from './components/ui';
 import { LandingPage } from './components/LandingPage';
-import { DemoPage } from './components/DemoPage';
 import { PricingPage } from './components/PricingPage';
 import { AboutPage } from './components/AboutPage';
 import { ContactPage } from './components/ContactPage';
 import { PrivacyPage } from './components/PrivacyPage';
 import { TermsPage } from './components/TermsPage';
-import { CookieBanner } from './components/CookieBanner';
 import { NotFoundView } from './components/NotFoundView';
 import { gateway, GatewayConfig, takePending } from './services/paymentGateway';
 import { useRoute } from './lib/useRoute';
@@ -45,6 +38,15 @@ import { CAPABILITIES, isSupported, unsupportedMessage } from './lib/capabilitie
 import type { Capability } from './lib/capabilities';
 import { isCurrentEpoch, nextEpoch } from './lib/session';
 import type { SignOutKind } from './lib/session';
+
+// Keep charting and demo-only code out of the first page download. These
+// screens are fetched only when a user opens that part of the app.
+const DashboardView = lazy(() => import('./components/DashboardView').then((m) => ({ default: m.DashboardView })));
+const DocumentsView = lazy(() => import('./components/DocumentsView').then((m) => ({ default: m.DocumentsView })));
+const ReportsView = lazy(() => import('./components/ReportsView').then((m) => ({ default: m.ReportsView })));
+const HealthView = lazy(() => import('./components/HealthView').then((m) => ({ default: m.HealthView })));
+const SettingsView = lazy(() => import('./components/SettingsView').then((m) => ({ default: m.SettingsView })));
+const DemoPage = lazy(() => import('./components/DemoPage').then((m) => ({ default: m.DemoPage })));
 
 /** Which capability each transaction kind needs before it can be recorded. */
 const CAPABILITY_FOR_TXN: Record<TxnKind, Capability> = {
@@ -630,12 +632,7 @@ export default function App() {
   }
 
   if (authenticated && user && isExplicitLanding && route.kind === 'landing') {
-    return (
-      <>
-        <LandingPage onSignIn={() => navigate('/dashboard')} currentPath="/" navigate={navigate} />
-        <CookieBanner />
-      </>
-    );
+    return <LandingPage onSignIn={() => navigate('/dashboard')} currentPath="/" navigate={navigate} />;
   }
 
   if (phase === 'checking-session' || redirect) {
@@ -655,21 +652,19 @@ export default function App() {
       );
     }
     if (route.kind === 'landing') {
-      return (
-        <>
-          <LandingPage onSignIn={() => navigate('/signin')} currentPath="/" navigate={navigate} />
-          <CookieBanner />
-        </>
-      );
+      return <LandingPage onSignIn={() => navigate('/signin')} currentPath="/" navigate={navigate} />;
     }
     if (route.kind === 'demo') {
-      return <DemoPage currentPath="/demo" navigate={navigate} onSignIn={() => navigate('/signin')} />;
+      return (
+        <Suspense fallback={<LoadingScreen message="Loading interactive demo…" />}>
+          <DemoPage currentPath="/demo" navigate={navigate} onSignIn={() => navigate('/signin')} />
+        </Suspense>
+      );
     }
     if (route.kind === 'pricing') {
       return (
         <>
           <PricingPage currentPath="/pricing" navigate={navigate} onSignIn={() => navigate('/signin')} />
-          <CookieBanner />
         </>
       );
     }
@@ -677,7 +672,6 @@ export default function App() {
       return (
         <>
           <AboutPage currentPath="/about" navigate={navigate} onSignIn={() => navigate('/signin')} />
-          <CookieBanner />
         </>
       );
     }
@@ -685,7 +679,6 @@ export default function App() {
       return (
         <>
           <ContactPage currentPath="/contact" navigate={navigate} onSignIn={() => navigate('/signin')} />
-          <CookieBanner />
         </>
       );
     }
@@ -693,7 +686,6 @@ export default function App() {
       return (
         <>
           <PrivacyPage currentPath="/privacy" navigate={navigate} onSignIn={() => navigate('/signin')} />
-          <CookieBanner />
         </>
       );
     }
@@ -701,7 +693,6 @@ export default function App() {
       return (
         <>
           <TermsPage currentPath="/terms" navigate={navigate} onSignIn={() => navigate('/signin')} />
-          <CookieBanner />
         </>
       );
     }
@@ -779,47 +770,47 @@ export default function App() {
         )}
 
         <main>
-          {/* An address the app does not serve renders the 404 here, inside the
-              shell, so the navigation that exists stays reachable — and never a
-              random screen. */}
-          {notFoundPath ? (
-            <NotFoundView
-              embedded path={notFoundPath} authenticated
-              onHome={() => navigate(pathForTab('dashboard'))}
-              onSignIn={() => navigate('/signin')}
-            />
-          ) : (
-            <>
-              {activeTab === 'dashboard' && (
-                <DashboardView
-                  books={books} range={range} onRangeChange={updateRange} calendar={calendar}
-                  onQuickAction={openQuickAction}
-                  onGoToHealth={() => navigate(pathForTab('health'))}
-                />
-              )}
-              {currentDocKind && (
-                <DocumentsView
-                  kind={currentDocKind} books={books} calendar={calendar}
-                  onNew={() => openQuickAction(quickActionForTab[currentDocKind]!)}
-                  onCollect={(saleId) => openCollect(saleId)}
-                  onReceive={(saleId) => openSettle(saleId, 'INCOMING')}
-                  onSettle={(purchaseId) => openSettle(purchaseId, 'OUTGOING')}
-                  onDone={notify}
-                />
-              )}
-              {activeTab === 'reports' && (
-                <ReportsView books={books} range={range} onRangeChange={updateRange} calendar={calendar} />
-              )}
-              {activeTab === 'health' && <HealthView books={books} onDone={notify} />}
-              {activeTab === 'settings' && (
-                <SettingsView
-                  books={books} onDone={notify}
-                  calendar={calendar} onCalendarChange={changeCalendar}
-                  onSignOut={exitSession} signingOut={signingOut}
-                />
-              )}
-            </>
-          )}
+          <Suspense fallback={<LoadingScreen message="Loading your books…" />}>
+            {/* Unknown URLs stay inside the app shell so its navigation remains available. */}
+            {notFoundPath ? (
+              <NotFoundView
+                embedded path={notFoundPath} authenticated
+                onHome={() => navigate(pathForTab('dashboard'))}
+                onSignIn={() => navigate('/signin')}
+              />
+            ) : (
+              <>
+                {activeTab === 'dashboard' && (
+                  <DashboardView
+                    books={books} range={range} onRangeChange={updateRange} calendar={calendar}
+                    onQuickAction={openQuickAction}
+                    onGoToHealth={() => navigate(pathForTab('health'))}
+                  />
+                )}
+                {currentDocKind && (
+                  <DocumentsView
+                    kind={currentDocKind} books={books} calendar={calendar}
+                    onNew={() => openQuickAction(quickActionForTab[currentDocKind]!)}
+                    onCollect={(saleId) => openCollect(saleId)}
+                    onReceive={(saleId) => openSettle(saleId, 'INCOMING')}
+                    onSettle={(purchaseId) => openSettle(purchaseId, 'OUTGOING')}
+                    onDone={notify}
+                  />
+                )}
+                {activeTab === 'reports' && (
+                  <ReportsView books={books} range={range} onRangeChange={updateRange} calendar={calendar} />
+                )}
+                {activeTab === 'health' && <HealthView books={books} onDone={notify} />}
+                {activeTab === 'settings' && (
+                  <SettingsView
+                    books={books} onDone={notify}
+                    calendar={calendar} onCalendarChange={changeCalendar}
+                    onSignOut={exitSession} signingOut={signingOut}
+                  />
+                )}
+              </>
+            )}
+          </Suspense>
         </main>
       </div>
 

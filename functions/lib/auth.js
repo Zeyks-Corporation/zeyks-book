@@ -171,6 +171,9 @@ exports.verifyOtp = (0, https_1.onCall)(async (request) => {
         catch {
             user = await auth.createUser({ email, emailVerified: true, displayName: undefined });
         }
+        if (!user.emailVerified) {
+            user = await auth.updateUser(user.uid, { emailVerified: true });
+        }
         const token = await auth.createCustomToken(user.uid);
         return { success: true, custom_token: token, user_id: user.uid, email };
     }

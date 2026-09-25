@@ -13,6 +13,7 @@ import { redact, redactDetail } from './redact.js';
 
 let adminAuth;
 let adminDb;
+let isAdminConfigured = false;
 try {
   if (getApps().length === 0) {
     const projectId = process.env.VITE_FIREBASE_PROJECT_ID || 'zeyksbook-fa70a';
@@ -20,6 +21,7 @@ try {
   }
   adminAuth = getAuth();
   adminDb = getFirestore();
+  isAdminConfigured = true;
 } catch {
   adminAuth = { verifyIdToken: async () => { throw new Error('Auth not configured'); } };
   adminDb = { collection: () => { throw new Error('Firestore not configured'); } };
@@ -29,7 +31,7 @@ try {
  * Can this process authenticate a caller at all?
  */
 export function authConfigured() {
-  return true;
+  return isAdminConfigured;
 }
 
 /**
@@ -143,7 +145,12 @@ export async function requireCaller(req, res, next) {
 
   try {
     const decodedToken = await adminAuth.verifyIdToken(parsed.token);
-    req.caller = { id: decodedToken.uid, email: decodedToken.email ?? null, token: parsed.token };
+    req.caller = {
+      id: decodedToken.uid,
+      email: decodedToken.email ?? null,
+      emailVerified: decodedToken.email_verified === true,
+      token: parsed.token,
+    };
     return next();
   } catch (e) {
     console.warn(`[payments] session check failed: ${redactDetail(e)}`);

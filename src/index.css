@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&display=swap');
 @import "tailwindcss";
 
 /* -------------------------------------------------------------------------- */
@@ -9,9 +8,8 @@
   :root {
     color-scheme: light !important;
     /* ---- Typography ---- */
-    --font-lovelace: 'Lovelace', 'Playfair Display', Georgia, serif;
-    --font-logam: 'Logam', 'Lagom', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
-    --font-sf: var(--font-logam);
+    --font-display: 'Playfair Display', Georgia, serif;
+    --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 
     /* ---- Semantic Colors: Light ---- */
     --bg: #FFFFFF;
@@ -60,7 +58,7 @@
   }
 
   body {
-    font-family: var(--font-logam);
+    font-family: var(--font-body);
     color: var(--label);
     background-color: var(--bg-secondary);
     -webkit-font-smoothing: antialiased;
@@ -72,6 +70,10 @@
       env(safe-area-inset-left);
   }
 
+  html {
+    scroll-padding-top: 4rem;
+  }
+
   /* Keyboard focus: accent-colored ring aligned with Apple conventions. */
   :focus-visible {
     outline: none;
@@ -80,12 +82,8 @@
   }
 }
 
-.font-lovelace {
-  font-family: var(--font-lovelace) !important;
-}
-
-.font-logam {
-  font-family: var(--font-logam) !important;
+.font-display {
+  font-family: var(--font-display);
 }
 
 /* -------------------------------------------------------------------------- */

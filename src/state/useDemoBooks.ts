@@ -15,6 +15,7 @@ import { newId } from '../lib/ids';
 import type { ActionResult, GatewayStartResult } from './useBooks';
 
 const DEMO_STORAGE_KEY = 'zeyks.demo_snapshot';
+const demoAccountId = (code: string) => `acc_${code}`;
 
 const initialDemoBusiness: BusinessProfile = {
   id: 'biz_demo',
@@ -35,6 +36,46 @@ const initialDemoBusiness: BusinessProfile = {
   trackInventory: true,
   createdAt: '2026-04-14T00:00:00Z',
 };
+
+const initialDemoAccounts: Account[] = defaultAccounts.map((account) => ({
+  ...account,
+  businessId: initialDemoBusiness.id,
+}));
+
+function readStoredDemoSnapshot(): Partial<BooksSnapshot> | null {
+  try {
+    const stored = localStorage.getItem(DEMO_STORAGE_KEY);
+    return stored ? JSON.parse(stored) as Partial<BooksSnapshot> : null;
+  } catch {
+    return null;
+  }
+}
+
+function accountsFromDemoSnapshot(snapshot: Partial<BooksSnapshot> | null): Account[] {
+  return (Array.isArray(snapshot?.accounts) ? snapshot.accounts : initialDemoAccounts)
+    .map((account) => ({ ...account, businessId: initialDemoBusiness.id }));
+}
+
+function journalsFromDemoSnapshot(
+  snapshot: Partial<BooksSnapshot> | null,
+  accounts: Account[],
+): JournalEntry[] {
+  const entries = Array.isArray(snapshot?.journalEntries) ? snapshot.journalEntries : initialDemoJournals;
+  const accountIds = new Set(accounts.map((account) => account.id));
+  const accountIdByCode = new Map(accounts.map((account) => [account.code, account.id]));
+  return entries.map((entry) => ({
+    ...entry,
+    businessId: initialDemoBusiness.id,
+    lines: entry.lines.map((line) => ({
+      ...line,
+      // Older demo seeds stored account codes in accountId; resolve them to
+      // the stable demo chart IDs so the health check and reports agree.
+      accountId: accountIds.has(line.accountId)
+        ? line.accountId
+        : accountIdByCode.get(line.accountId) ?? line.accountId,
+    })),
+  }));
+}
 
 const initialDemoCustomers: Customer[] = [
   { id: 'cust_1', businessId: 'biz_demo', name: 'Apex Hardware & Supplies', email: 'info@apex.np', phone: '9841223344', address: 'Kathmandu', panNumber: '601234567', createdAt: '2026-04-14T00:00:00Z' },
@@ -155,9 +196,9 @@ const initialDemoJournals: JournalEntry[] = [
     createdAt: '2026-07-29T10:00:00Z',
     createdBy: 'demo_user',
     lines: [
-      { id: 'jl_1', journalEntryId: 'je_sale_1', accountId: ACCOUNT_CODES.RECEIVABLE, accountName: 'Accounts receivable', accountType: 'ASSET', debit: 45200, credit: 0 },
-      { id: 'jl_2', journalEntryId: 'je_sale_1', accountId: ACCOUNT_CODES.SALES, accountName: 'Sales revenue', accountType: 'REVENUE', debit: 0, credit: 40000 },
-      { id: 'jl_3', journalEntryId: 'je_sale_1', accountId: ACCOUNT_CODES.VAT_PAYABLE, accountName: 'VAT payable (output tax)', accountType: 'LIABILITY', debit: 0, credit: 5200 },
+      { id: 'jl_1', journalEntryId: 'je_sale_1', accountId: demoAccountId(ACCOUNT_CODES.RECEIVABLE), accountName: 'Accounts receivable', accountType: 'ASSET', debit: 45200, credit: 0 },
+      { id: 'jl_2', journalEntryId: 'je_sale_1', accountId: demoAccountId(ACCOUNT_CODES.SALES), accountName: 'Sales revenue', accountType: 'REVENUE', debit: 0, credit: 40000 },
+      { id: 'jl_3', journalEntryId: 'je_sale_1', accountId: demoAccountId(ACCOUNT_CODES.VAT_PAYABLE), accountName: 'VAT payable (output tax)', accountType: 'LIABILITY', debit: 0, credit: 5200 },
     ],
   },
   {
@@ -172,9 +213,9 @@ const initialDemoJournals: JournalEntry[] = [
     createdAt: '2026-08-12T11:00:00Z',
     createdBy: 'demo_user',
     lines: [
-      { id: 'jl_4', journalEntryId: 'je_pur_1', accountId: ACCOUNT_CODES.INVENTORY, accountName: 'Inventory', accountType: 'ASSET', debit: 65000, credit: 0 },
-      { id: 'jl_5', journalEntryId: 'je_pur_1', accountId: ACCOUNT_CODES.VAT_RECEIVABLE, accountName: 'VAT receivable (input tax)', accountType: 'ASSET', debit: 8450, credit: 0 },
-      { id: 'jl_6', journalEntryId: 'je_pur_1', accountId: ACCOUNT_CODES.PAYABLE, accountName: 'Accounts payable', accountType: 'LIABILITY', debit: 0, credit: 73450 },
+      { id: 'jl_4', journalEntryId: 'je_pur_1', accountId: demoAccountId(ACCOUNT_CODES.INVENTORY), accountName: 'Inventory', accountType: 'ASSET', debit: 65000, credit: 0 },
+      { id: 'jl_5', journalEntryId: 'je_pur_1', accountId: demoAccountId(ACCOUNT_CODES.VAT_RECEIVABLE), accountName: 'VAT receivable (input tax)', accountType: 'ASSET', debit: 8450, credit: 0 },
+      { id: 'jl_6', journalEntryId: 'je_pur_1', accountId: demoAccountId(ACCOUNT_CODES.PAYABLE), accountName: 'Accounts payable', accountType: 'LIABILITY', debit: 0, credit: 73450 },
     ],
   },
   {
@@ -190,7 +231,7 @@ const initialDemoJournals: JournalEntry[] = [
     createdBy: 'demo_user',
     lines: [
       { id: 'jl_7', journalEntryId: 'je_exp_1', accountId: 'acc_5040', accountName: 'Rent', accountType: 'EXPENSE', debit: 15000, credit: 0 },
-      { id: 'jl_8', journalEntryId: 'je_exp_1', accountId: ACCOUNT_CODES.BANK, accountName: 'Bank account', accountType: 'ASSET', debit: 0, credit: 15000 },
+      { id: 'jl_8', journalEntryId: 'je_exp_1', accountId: demoAccountId(ACCOUNT_CODES.BANK), accountName: 'Bank account', accountType: 'ASSET', debit: 0, credit: 15000 },
     ],
   },
   {
@@ -205,22 +246,16 @@ const initialDemoJournals: JournalEntry[] = [
     createdAt: '2026-08-06T14:00:00Z',
     createdBy: 'demo_user',
     lines: [
-      { id: 'jl_9', journalEntryId: 'je_pay_1', accountId: ACCOUNT_CODES.BANK, accountName: 'Bank account', accountType: 'ASSET', debit: 45200, credit: 0 },
-      { id: 'jl_10', journalEntryId: 'je_pay_1', accountId: ACCOUNT_CODES.RECEIVABLE, accountName: 'Accounts receivable', accountType: 'ASSET', debit: 0, credit: 45200 },
+      { id: 'jl_9', journalEntryId: 'je_pay_1', accountId: demoAccountId(ACCOUNT_CODES.BANK), accountName: 'Bank account', accountType: 'ASSET', debit: 45200, credit: 0 },
+      { id: 'jl_10', journalEntryId: 'je_pay_1', accountId: demoAccountId(ACCOUNT_CODES.RECEIVABLE), accountName: 'Accounts receivable', accountType: 'ASSET', debit: 0, credit: 45200 },
     ],
   },
 ];
 
 export function useDemoBooks() {
+  const [storedSnapshot] = useState(readStoredDemoSnapshot);
   const [business, setBusiness] = useState<BusinessProfile>(() => {
-    try {
-      const stored = localStorage.getItem(DEMO_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed.business) return parsed.business;
-      }
-    } catch { /* fallback */ }
-    return initialDemoBusiness;
+    return storedSnapshot?.business ?? initialDemoBusiness;
   });
 
   const [user, setUser] = useState<UserProfile | null>({
@@ -230,16 +265,7 @@ export function useDemoBooks() {
     createdAt: '2026-04-14T00:00:00Z',
   });
 
-  const [accounts, setAccounts] = useState<Account[]>(() => {
-    try {
-      const stored = localStorage.getItem(DEMO_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed.accounts)) return parsed.accounts;
-      }
-    } catch { /* fallback */ }
-    return defaultAccounts;
-  });
+  const [accounts, setAccounts] = useState<Account[]>(() => accountsFromDemoSnapshot(storedSnapshot));
 
   const [customers, setCustomers] = useState<Customer[]>(() => {
     try {
@@ -309,16 +335,9 @@ export function useDemoBooks() {
 
   const [gatewayTxns] = useState<GatewayTransaction[]>([]);
 
-  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>(() => {
-    try {
-      const stored = localStorage.getItem(DEMO_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed.journalEntries)) return parsed.journalEntries;
-      }
-    } catch { /* fallback */ }
-    return initialDemoJournals;
-  });
+  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>(() =>
+    journalsFromDemoSnapshot(storedSnapshot, accounts),
+  );
 
   // Save to localStorage on every change
   useEffect(() => {
@@ -466,11 +485,11 @@ export function useDemoBooks() {
     };
 
     const lines: JournalEntry['lines'] = [
-      { id: newId('jl'), journalEntryId: jeId, accountId: ACCOUNT_CODES.RECEIVABLE, accountName: 'Accounts receivable', accountType: 'ASSET', debit: draft.totalAmount, credit: 0 },
-      { id: newId('jl'), journalEntryId: jeId, accountId: ACCOUNT_CODES.SALES, accountName: 'Sales revenue', accountType: 'REVENUE', debit: 0, credit: draft.subtotal },
+      { id: newId('jl'), journalEntryId: jeId, accountId: accounts.find((account) => account.code === ACCOUNT_CODES.RECEIVABLE)?.id ?? demoAccountId(ACCOUNT_CODES.RECEIVABLE), accountName: 'Accounts receivable', accountType: 'ASSET', debit: draft.totalAmount, credit: 0 },
+      { id: newId('jl'), journalEntryId: jeId, accountId: accounts.find((account) => account.code === ACCOUNT_CODES.SALES)?.id ?? demoAccountId(ACCOUNT_CODES.SALES), accountName: 'Sales revenue', accountType: 'REVENUE', debit: 0, credit: draft.subtotal },
     ];
     if (draft.taxAmount > 0) {
-      lines.push({ id: newId('jl'), journalEntryId: jeId, accountId: ACCOUNT_CODES.VAT_PAYABLE, accountName: 'VAT payable (output tax)', accountType: 'LIABILITY', debit: 0, credit: draft.taxAmount });
+      lines.push({ id: newId('jl'), journalEntryId: jeId, accountId: accounts.find((account) => account.code === ACCOUNT_CODES.VAT_PAYABLE)?.id ?? demoAccountId(ACCOUNT_CODES.VAT_PAYABLE), accountName: 'VAT payable (output tax)', accountType: 'LIABILITY', debit: 0, credit: draft.taxAmount });
     }
 
     const newJe: JournalEntry = {
@@ -504,7 +523,7 @@ export function useDemoBooks() {
     }
 
     return { ok: true, message: `Invoice ${invNo} recorded in Demo mode.` };
-  }, [customers, journalEntries.length, refFor]);
+  }, [accounts, customers, journalEntries.length, refFor]);
 
   const addPurchase = useCallback(async (draft: PurchaseDraft): Promise<ActionResult> => {
     const poNo = refFor('PO', draft.date);
@@ -544,12 +563,12 @@ export function useDemoBooks() {
     };
 
     const lines: JournalEntry['lines'] = [
-      { id: newId('jl'), journalEntryId: jeId, accountId: ACCOUNT_CODES.INVENTORY, accountName: 'Inventory', accountType: 'ASSET', debit: draft.subtotal, credit: 0 },
+      { id: newId('jl'), journalEntryId: jeId, accountId: accounts.find((account) => account.code === ACCOUNT_CODES.INVENTORY)?.id ?? demoAccountId(ACCOUNT_CODES.INVENTORY), accountName: 'Inventory', accountType: 'ASSET', debit: draft.subtotal, credit: 0 },
     ];
     if (draft.taxAmount > 0) {
-      lines.push({ id: newId('jl'), journalEntryId: jeId, accountId: ACCOUNT_CODES.VAT_RECEIVABLE, accountName: 'VAT receivable (input tax)', accountType: 'ASSET', debit: draft.taxAmount, credit: 0 });
+      lines.push({ id: newId('jl'), journalEntryId: jeId, accountId: accounts.find((account) => account.code === ACCOUNT_CODES.VAT_RECEIVABLE)?.id ?? demoAccountId(ACCOUNT_CODES.VAT_RECEIVABLE), accountName: 'VAT receivable (input tax)', accountType: 'ASSET', debit: draft.taxAmount, credit: 0 });
     }
-    lines.push({ id: newId('jl'), journalEntryId: jeId, accountId: ACCOUNT_CODES.PAYABLE, accountName: 'Accounts payable', accountType: 'LIABILITY', debit: 0, credit: draft.totalAmount });
+    lines.push({ id: newId('jl'), journalEntryId: jeId, accountId: accounts.find((account) => account.code === ACCOUNT_CODES.PAYABLE)?.id ?? demoAccountId(ACCOUNT_CODES.PAYABLE), accountName: 'Accounts payable', accountType: 'LIABILITY', debit: 0, credit: draft.totalAmount });
 
     const newJe: JournalEntry = {
       id: jeId,
@@ -582,7 +601,7 @@ export function useDemoBooks() {
     }
 
     return { ok: true, message: `Purchase ${poNo} recorded in Demo mode.` };
-  }, [journalEntries.length, refFor, suppliers]);
+  }, [accounts, journalEntries.length, refFor, suppliers]);
 
   const addExpense = useCallback(async (draft: {
     accountId: string; date: string; description: string; amount: number;
@@ -626,7 +645,7 @@ export function useDemoBooks() {
       createdBy: 'demo_user',
       lines: [
         { id: newId('jl'), journalEntryId: jeId, accountId: draft.accountId, accountName: catName, accountType: 'EXPENSE', debit: draft.totalAmount, credit: 0 },
-        { id: newId('jl'), journalEntryId: jeId, accountId: ACCOUNT_CODES.BANK, accountName: 'Bank account', accountType: 'ASSET', debit: 0, credit: draft.totalAmount },
+        { id: newId('jl'), journalEntryId: jeId, accountId: accounts.find((account) => account.code === ACCOUNT_CODES.BANK)?.id ?? demoAccountId(ACCOUNT_CODES.BANK), accountName: 'Bank account', accountType: 'ASSET', debit: 0, credit: draft.totalAmount },
       ],
     };
 
@@ -685,11 +704,11 @@ export function useDemoBooks() {
       createdAt: new Date().toISOString(),
       createdBy: 'demo_user',
       lines: paymentType === 'INCOMING' ? [
-        { id: newId('jl'), journalEntryId: jeId, accountId: ACCOUNT_CODES.BANK, accountName: 'Bank account', accountType: 'ASSET', debit: draft.amount, credit: 0 },
-        { id: newId('jl'), journalEntryId: jeId, accountId: ACCOUNT_CODES.RECEIVABLE, accountName: 'Accounts receivable', accountType: 'ASSET', debit: 0, credit: draft.amount },
+        { id: newId('jl'), journalEntryId: jeId, accountId: accounts.find((account) => account.code === ACCOUNT_CODES.BANK)?.id ?? demoAccountId(ACCOUNT_CODES.BANK), accountName: 'Bank account', accountType: 'ASSET', debit: draft.amount, credit: 0 },
+        { id: newId('jl'), journalEntryId: jeId, accountId: accounts.find((account) => account.code === ACCOUNT_CODES.RECEIVABLE)?.id ?? demoAccountId(ACCOUNT_CODES.RECEIVABLE), accountName: 'Accounts receivable', accountType: 'ASSET', debit: 0, credit: draft.amount },
       ] : [
-        { id: newId('jl'), journalEntryId: jeId, accountId: ACCOUNT_CODES.PAYABLE, accountName: 'Accounts payable', accountType: 'LIABILITY', debit: draft.amount, credit: 0 },
-        { id: newId('jl'), journalEntryId: jeId, accountId: ACCOUNT_CODES.BANK, accountName: 'Bank account', accountType: 'ASSET', debit: 0, credit: draft.amount },
+        { id: newId('jl'), journalEntryId: jeId, accountId: accounts.find((account) => account.code === ACCOUNT_CODES.PAYABLE)?.id ?? demoAccountId(ACCOUNT_CODES.PAYABLE), accountName: 'Accounts payable', accountType: 'LIABILITY', debit: draft.amount, credit: 0 },
+        { id: newId('jl'), journalEntryId: jeId, accountId: accounts.find((account) => account.code === ACCOUNT_CODES.BANK)?.id ?? demoAccountId(ACCOUNT_CODES.BANK), accountName: 'Bank account', accountType: 'ASSET', debit: 0, credit: draft.amount },
       ],
     };
 
@@ -697,7 +716,7 @@ export function useDemoBooks() {
     setJournalEntries((prev) => [newJe, ...prev]);
 
     return { ok: true, message: `Settlement ${ref} recorded in Demo mode.` };
-  }, [journalEntries.length, rawPurchases, rawSales, refFor]);
+  }, [accounts, journalEntries.length, rawPurchases, rawSales, refFor]);
 
   const voidDocument = useCallback(async (kind: VoidableDocumentKind, id: string): Promise<ActionResult> => {
     if (kind === 'sale') setSales((prev) => prev.map((s) => s.id === id ? { ...s, status: 'VOIDED' } : s));
@@ -748,22 +767,25 @@ export function useDemoBooks() {
 
   const restore = useCallback((data: unknown): ActionResult => {
     const snap = data as Partial<BooksSnapshot>;
-    if (snap.business) setBusiness(snap.business);
-    if (Array.isArray(snap.accounts)) setAccounts(snap.accounts);
+    if (snap.business) setBusiness({ ...snap.business, id: initialDemoBusiness.id });
+    const restoredAccounts = accountsFromDemoSnapshot(snap);
+    setAccounts(restoredAccounts);
     if (Array.isArray(snap.customers)) setCustomers(snap.customers);
     if (Array.isArray(snap.suppliers)) setSuppliers(snap.suppliers);
     if (Array.isArray(snap.sales)) setSales(snap.sales);
     if (Array.isArray(snap.purchases)) setPurchases(snap.purchases);
     if (Array.isArray(snap.expenses)) setExpenses(snap.expenses);
     if (Array.isArray(snap.payments)) setPayments(snap.payments);
-    if (Array.isArray(snap.journalEntries)) setJournalEntries(snap.journalEntries);
+    if (Array.isArray(snap.journalEntries)) {
+      setJournalEntries(journalsFromDemoSnapshot(snap, restoredAccounts));
+    }
     return { ok: true, message: 'Demo state restored.' };
   }, []);
 
   const resetAll = useCallback(() => {
     try { localStorage.removeItem(DEMO_STORAGE_KEY); } catch { /* Non-fatal */ }
     setBusiness(initialDemoBusiness);
-    setAccounts(defaultAccounts);
+    setAccounts(initialDemoAccounts);
     setCustomers(initialDemoCustomers);
     setSuppliers(initialDemoSuppliers);
     setSales(initialDemoSales);

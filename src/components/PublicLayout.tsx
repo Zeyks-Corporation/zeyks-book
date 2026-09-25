@@ -20,7 +20,7 @@ export const PublicLayout: React.FC<{
   return (
     <div className="min-h-screen bg-[var(--bg-secondary)] text-[var(--label)] transition-colors duration-300">
       {/* ── Liquid Glass Navigation Bar ── */}
-      <header className="sticky top-0 z-30 border-b border-[var(--separator)] glass-regular transition-colors duration-300">
+      <header className="sticky top-0 z-30 border-b border-[var(--separator)] bg-[var(--bg)]">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4 sm:px-6">
           {/* Logo */}
           <button

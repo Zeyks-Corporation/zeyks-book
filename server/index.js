@@ -6,11 +6,11 @@
  * secret can forge a signature and mark any amount as paid, so every signing
  * and verification step happens here.
  *
- * Endpoints — every one requires a verified Firebase session as of Stage 14
- * (`Authorization: Bearer <access token>`; see ./auth.js). There is no public
- * route on this server today. Provider webhooks will be a *separate* mount with
- * their own signature check, because eSewa and Khalti call those without a user
- * session — nothing below has to change for that.
+ * Payment routes and the Supabase session bridge require a verified Firebase
+ * session (`Authorization: Bearer <ID token>`; see ./auth.js). Contact and
+ * service-status routes are public and rate limited. Provider webhooks need
+ * separate signature verification because providers call them without a user
+ * session.
  *
  *   GET  /api/payments/config              which providers are usable
  *   POST /api/payments/esewa/initiate      returns a signed form payload
@@ -41,6 +41,7 @@
 
 import 'dotenv/config';
 import express from 'express';
+import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { esewa } from './esewa.js';
@@ -55,6 +56,7 @@ import { supabaseAdmin, createAnonClient } from './supabase.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+app.set('trust proxy', 1);
 const PORT = Number(process.env.PORT ?? 4000);
 const MODE = process.env.PAYMENT_MODE === 'live' ? 'live' : 'sandbox';
 
@@ -88,7 +90,7 @@ const HIT_MAX_KEYS = 5_000;
 /** One limiter per route family, keyed by source address. */
 function rateLimit({ name, windowMs, max }) {
   return (req, res, next) => {
-    const key = `${name}:${req.ip ?? 'unknown'}`;
+    const key = `${name}:${req.caller?.id ?? req.ip ?? 'unknown'}`;
     const now = Date.now();
     const window = (HIT_WINDOWS.get(key) ?? []).filter((t) => now - t < windowMs);
     if (window.length >= max) {
@@ -299,146 +301,70 @@ app.post('/api/payments/khalti/lookup', requireCaller, async (req, res) => {
 
 /* ------------------------- Supabase Session Bridge ------------------------ */
 
-app.post('/api/auth/supabase-session', async (req, res) => {
-  const payload = req.body ?? {};
-  const email = payload.email;
-  const name = payload.name;
-  if (!email || typeof email !== 'string') {
-    return fail(res, 400, 'Valid email is required.');
+app.post('/api/auth/supabase-session', requireCaller, rateLimit({ name: 'supabase-session', windowMs: 60_000, max: 12 }), async (req, res) => {
+  const email = req.caller.email?.trim().toLowerCase();
+  if (!req.caller.emailVerified || !email) {
+    return fail(res, 403, 'Verify your email before opening your books.');
   }
-  const cleanEmail = email.trim().toLowerCase();
+  const requestedName = req.body?.name;
+  const name = typeof requestedName === 'string' ? requestedName.trim().slice(0, 120) : '';
+
   try {
-    const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
-    let user = listData?.users?.find((u) => u.email?.toLowerCase() === cleanEmail);
-    if (!user) {
-      const { data: createData, error: createErr } = await supabaseAdmin.auth.admin.createUser({
-        email: cleanEmail,
-        email_confirm: true,
-        user_metadata: { full_name: name || '' },
-      });
-      if (createErr) throw createErr;
-      user = createData.user;
-    }
-
-    await supabaseAdmin.from('profiles').upsert({
-      id: user.id,
-      email: user.email,
-      full_name: name || user.user_metadata?.full_name || cleanEmail.split('@')[0],
-    }, { onConflict: 'id' });
-
-    const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
-      type: 'magiclink',
-      email: user.email,
-    });
-    if (linkErr) throw linkErr;
-
-    // Use ephemeral anon client on server side to exchange token_hash into real session access_token and refresh_token
-    let session = null;
-    try {
-      const verifyClient = createAnonClient();
-      const { data: verifyData } = await verifyClient.auth.verifyOtp({
-        token_hash: linkData.properties.hashed_token,
-        type: linkData.properties.verification_type,
-      });
-      session = verifyData?.session || null;
-    } catch {
-      // ignore, fall back to returning token info
-    }
-
-    res.json({
-      access_token: session?.access_token || null,
-      refresh_token: session?.refresh_token || null,
-      email: user.email,
-      email_otp: linkData.properties.email_otp,
-      token_hash: linkData.properties.hashed_token,
-      verification_type: linkData.properties.verification_type,
-      user_id: user.id,
-    });
-  } catch (e) {
-    return fail(res, 500, e?.message || 'Could not synchronize session.', e);
-  }
-});
-
-/* ------------------------ Business Memberships Fallback ------------------- */
-
-app.post('/api/business/my-memberships', async (req, res) => {
-  const payload = req.body ?? {};
-  const mail = payload.email;
-  if (!mail || typeof mail !== 'string') {
-    return fail(res, 400, 'Email is required.');
-  }
-  try {
-    const cleanEmail = mail.trim().toLowerCase();
-    const { data: profile } = await supabaseAdmin
+    // The Firebase ID token is the authority for identity. Never accept an
+    // email or user ID supplied only in the request body.
+    const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('id')
-      .eq('email', cleanEmail)
+      .select('id,email,full_name')
+      .eq('email', email)
       .maybeSingle();
+    if (profileError) throw profileError;
 
-    if (!profile?.id) {
-      return res.json({ memberships: [] });
+    let userId = profile?.id;
+    let fullName = profile?.full_name || '';
+    if (!userId) {
+      const { data, error } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        email_confirm: true,
+        user_metadata: { full_name: name },
+      });
+      if (error) throw error;
+      userId = data.user.id;
+      fullName = name;
+      const { error: upsertError } = await supabaseAdmin.from('profiles').upsert({
+        id: userId,
+        email,
+        full_name: fullName || email.split('@')[0],
+      }, { onConflict: 'id' });
+      if (upsertError) throw upsertError;
     }
 
-    const { data: memberships, error } = await supabaseAdmin
-      .from('business_memberships')
-      .select('business_id, user_id, role, created_at')
-      .eq('user_id', profile.id);
+    // Earlier bridge versions assigned a password derived from the email.
+    // Replace it before issuing any new session to this verified Firebase user.
+    const { error: passwordError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+      password: randomBytes(48).toString('base64url'),
+    });
+    if (passwordError) throw passwordError;
 
-    if (error) throw error;
-    res.json({
-      memberships: (memberships || []).map((m) => ({
-        businessId: m.business_id,
-        userId: m.user_id,
-        role: m.role || 'OWNER',
-        createdAt: m.created_at || '',
-      })),
+    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'magiclink',
+      email,
+    });
+    if (linkError) throw linkError;
+
+    const verifyClient = createAnonClient();
+    const { data: sessionData, error: verifyError } = await verifyClient.auth.verifyOtp({
+      token_hash: linkData.properties.hashed_token,
+      type: linkData.properties.verification_type,
+    });
+    if (verifyError || !sessionData.session) throw verifyError ?? new Error('No session returned.');
+
+    return res.json({
+      access_token: sessionData.session.access_token,
+      refresh_token: sessionData.session.refresh_token,
     });
   } catch (e) {
-    return fail(res, 500, e?.message || 'Could not fetch memberships', e);
-  }
-});
-
-app.post('/api/business/get', async (req, res) => {
-  const payload = req.body ?? {};
-  const targetId = payload.businessId;
-  const mail = payload.email;
-  if (!targetId || typeof targetId !== 'string') {
-    return fail(res, 400, 'Business ID is required.');
-  }
-  try {
-    if (mail) {
-      const cleanEmail = mail.trim().toLowerCase();
-      const { data: profile } = await supabaseAdmin
-        .from('profiles')
-        .select('id')
-        .eq('email', cleanEmail)
-        .maybeSingle();
-
-      if (profile?.id) {
-        const { data: member } = await supabaseAdmin
-          .from('business_memberships')
-          .select('role')
-          .eq('business_id', targetId)
-          .eq('user_id', profile.id)
-          .maybeSingle();
-
-        if (!member) {
-          return fail(res, 403, 'You are not a member of this business.');
-        }
-      }
-    }
-
-    const { data: business, error } = await supabaseAdmin
-      .from('businesses')
-      .select('*')
-      .eq('id', targetId)
-      .maybeSingle();
-
-    if (error) throw error;
-    if (!business) return fail(res, 404, 'Business not found.');
-    res.json({ business });
-  } catch (e) {
-    return fail(res, 500, e?.message || 'Could not load business', e);
+    console.error('[Supabase Auth] Session sync failed:', redactDetail(e));
+    return fail(res, 503, 'Could not synchronize your account. Please retry.');
   }
 });
 

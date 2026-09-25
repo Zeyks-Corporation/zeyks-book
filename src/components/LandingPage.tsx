@@ -55,7 +55,7 @@ export const LandingPage: React.FC<{
         <div className="mx-auto max-w-5xl px-4 sm:px-6">
           {/* Hero Headline & Subtitle */}
           <div className="text-center">
-            <h1 className="mx-auto max-w-4xl text-[36px] font-extrabold leading-[44px] tracking-[-0.03em] sm:text-[58px] sm:leading-[66px] text-[var(--label)] font-lovelace">
+            <h1 className="mx-auto max-w-4xl text-[36px] font-extrabold leading-[44px] tracking-[-0.03em] sm:text-[58px] sm:leading-[66px] text-[var(--label)] font-display">
               Accounting software for Nepal, built around the Bikram Sambat calendar.
             </h1>
 
@@ -111,13 +111,13 @@ export const LandingPage: React.FC<{
         <div className="mx-auto max-w-5xl px-4 sm:px-6">
           <div className="max-w-2xl">
             <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[var(--label-tertiary)]">
-              Engineered for Certainty
+              From entries to reports
             </p>
             <h2 className="mt-3 text-[36px] font-extrabold leading-[44px] tracking-[-0.02em] text-[var(--label)]">
-              Architecture that refuses to drift.
+              See how each balance is built.
             </h2>
             <p className="mt-4 text-[17px] leading-[26px] text-[var(--label-secondary)]">
-              Accounting software should not guess. Every balance in Zeyks Book derives strictly from posted ledger rows.
+              Posted journal entries feed the reports. The data health screen flags missing links and mismatches for review.
             </p>
           </div>
 
@@ -131,8 +131,8 @@ export const LandingPage: React.FC<{
                 Double entry, by construction
               </h3>
               <p className="mt-2.5 max-w-xl text-[15px] leading-[24px] text-[var(--label-secondary)]">
-                Every invoice, bill, expense and settlement writes balanced debit and credit entries.
-                The ledger is the single source of truth — never a detached running total that can silently drift.
+                Sales, purchases, expenses and settlements create debit and credit lines.
+                Review the journal and data health screen before relying on a report.
               </p>
               <div className="mt-6 rounded-2xl border border-[var(--separator)] bg-[var(--bg-secondary)]/60 p-4 font-mono text-[13px] shadow-2xs">
                 <div className="flex justify-between text-[var(--label-secondary)]">
@@ -173,7 +173,7 @@ export const LandingPage: React.FC<{
                 <Wallet size={24} strokeWidth={1.8} />
               </div>
               <h3 className="mt-6 text-[22px] font-bold text-[var(--label)]">
-                Honest settlements
+                Track settlements
               </h3>
               <p className="mt-2.5 text-[15px] leading-[24px] text-[var(--label-secondary)]">
                 Part payments, voids, and reversals. What is owed is always the document total less valid settlement rows.
@@ -186,7 +186,7 @@ export const LandingPage: React.FC<{
                 <FileSpreadsheet size={24} strokeWidth={1.8} />
               </div>
               <h3 className="mt-6 text-[22px] font-bold text-[var(--label)]">
-                Statements you can file
+                Statements you can review and print
               </h3>
               <p className="mt-2.5 text-[15px] leading-[24px] text-[var(--label-secondary)]">
                 Profit & Loss, Balance Sheet, VAT returns, Trial Balance, Cash & Bank statements laid out as 210mm A4 sheets.
@@ -313,7 +313,7 @@ export const LandingPage: React.FC<{
         <div className="mx-auto max-w-5xl px-4 sm:px-6">
           <div className="relative overflow-hidden rounded-[28px] border border-[var(--separator)] bg-[var(--bg-secondary)] px-6 py-14 text-center shadow-xl sm:px-14 sm:py-20">
             <h2 className="text-[30px] font-extrabold leading-[36px] tracking-[-0.02em] text-[var(--label)] sm:text-[42px] sm:leading-[50px]">
-              Ready for honest accounting in Nepal?
+              Try the workflow with sample books.
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-[17px] leading-[26px] text-[var(--label-secondary)]">
               Explore sample books in the interactive demo, review the pricing and data policies, and contact us with questions before you move real records.

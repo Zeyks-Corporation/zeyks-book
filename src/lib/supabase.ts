@@ -20,16 +20,28 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 
 let syncPromise: Promise<boolean> | null = null;
+let syncingEmail: string | null = null;
 
 /**
  * Synchronize the Firebase Auth user into a Supabase authenticated session.
  * This establishes auth.uid() in PostgreSQL so that RLS and accounting RPCs succeed.
  */
 export async function syncSupabaseSession(
-  user?: { email?: string | null; displayName?: string | null } | null,
+  user?: {
+    email?: string | null;
+    displayName?: string | null;
+    getIdToken?: () => Promise<string>;
+  } | null,
 ): Promise<boolean> {
   const email = user?.email?.trim().toLowerCase();
   if (!email) return false;
+
+  // A previous account may still be completing its bridge request during a
+  // sign-out/sign-in switch. Do not reuse its result for the new account.
+  if (syncPromise) {
+    if (syncingEmail === email) return syncPromise;
+    await syncPromise;
+  }
 
   try {
     const { data: { session } } = await supabase.auth.getSession();
@@ -40,32 +52,19 @@ export async function syncSupabaseSession(
     // continue to sync
   }
 
-  if (syncPromise) return syncPromise;
-
+  syncingEmail = email;
   syncPromise = (async () => {
-    const deterministicPassword = `zb_auth_bridge_${email}_v1!`;
-
     try {
-      // 0. Direct client-side bridge (works without any server API roundtrip for existing users)
-      try {
-        const { data: pwData, error: pwErr } = await supabase.auth.signInWithPassword({
-          email,
-          password: deterministicPassword,
-        });
-        if (!pwErr && pwData?.session) {
-          return true;
-        }
-      } catch {
-        // Proceed to server bridge
-      }
+      if (!user?.getIdToken) return false;
+      const firebaseIdToken = await user.getIdToken();
 
       const res = await fetch('/api/auth/supabase-session', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          name: user?.displayName || '',
-        }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${firebaseIdToken}`,
+        },
+        body: JSON.stringify({ name: user.displayName || '' }),
       });
 
       if (!res.ok) {
@@ -87,50 +86,13 @@ export async function syncSupabaseSession(
         console.warn('[Supabase Auth] setSession failed:', error?.message);
       }
 
-      // 2. Fallback: verifyOtp with token_hash and verification_type
-      if (json?.token_hash && json?.verification_type) {
-        const { data, error } = await supabase.auth.verifyOtp({
-          token_hash: json.token_hash,
-          type: json.verification_type,
-        });
-        if (!error && data?.session) {
-          return true;
-        }
-        console.warn('[Supabase Auth] verifyOtp(token_hash) failed:', error?.message);
-      }
-
-      // 3. Fallback: verifyOtp with email and numeric email_otp
-      if (json?.email_otp) {
-        const { data, error } = await supabase.auth.verifyOtp({
-          email: json.email || email,
-          token: json.email_otp,
-          type: json.verification_type || 'magiclink',
-        });
-        if (!error && data?.session) {
-          return true;
-        }
-        console.warn('[Supabase Auth] verifyOtp(email_otp) failed:', error?.message);
-      }
-
-      // 4. Retry direct password sign-in after server created/updated user
-      try {
-        const { data: retryData, error: retryErr } = await supabase.auth.signInWithPassword({
-          email,
-          password: deterministicPassword,
-        });
-        if (!retryErr && retryData?.session) {
-          return true;
-        }
-      } catch {
-        // ignore
-      }
-
       return false;
     } catch (e) {
       console.warn('[Supabase Auth] Session sync network error:', e);
       return false;
     } finally {
       syncPromise = null;
+      syncingEmail = null;
     }
   })();
 
