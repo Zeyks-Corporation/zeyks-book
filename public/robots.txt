@@ -7,6 +7,7 @@
 User-agent: *
 Allow: /
 Allow: /signin
+Allow: /demo
 
 # Private application routes. Each renders nothing without a session, and none
 # of them belongs in a search index.

@@ -51,51 +51,48 @@ export interface PageMetadata {
 }
 
 const PRODUCT_DESCRIPTION =
-  'Double-entry accounting for small businesses in Nepal: invoices and bills, '
-  + 'settlement tracking, aged receivables and payables, BS/AD dates, and printable A4 statements.';
+  'Zeyks Book is accounting software for small businesses in Nepal, with double-entry bookkeeping, Bikram Sambat and AD dates, NPR amounts, invoices, bills, and printable A4 financial reports.';
 
 const PUBLIC_PAGES: Record<string, PageMetadata> = {
   '/': {
-    title: 'Zeyks Book — double-entry accounting for Nepali businesses',
+    title: 'Accounting Software for Nepal | BS Calendar & NPR — Zeyks Book',
     description: PRODUCT_DESCRIPTION,
     path: '/',
     indexable: true,
   },
   '/signin': {
     title: 'Sign in — Zeyks Book',
-    description: 'Sign in to Zeyks Book with an emailed one-time code to reach your books.',
+    description: 'Sign in to Zeyks Book with a one-time code sent to your email address.',
     path: '/signin',
-    indexable: true,
+    indexable: false,
   },
   '/demo': {
-    title: 'Interactive demo — Zeyks Book',
-    description:
-      'Walk through Zeyks Book with sample figures: sales, purchases, settlements and reports, '
-      + 'all in the browser and none of it saved.',
+    title: 'Interactive Accounting Software Demo for Nepal — Zeyks Book',
+    description: 'Walk through Zeyks Book with sample books: sales, purchases, settlements, reports, and Bikram Sambat dates. Demo changes stay in this browser.',
     path: '/demo',
     indexable: true,
   },
   '/pricing': {
     title: 'Pricing — Zeyks Book',
-    description: 'Simple, honest pricing for Zeyks Book, the double-entry accounting app for Nepali businesses.',
+    description: 'Zeyks Book costs NPR 999 per month for Nepali businesses. See the included bookkeeping features, managed cloud storage, backup limits, and answers about trials and refunds.',
     path: '/pricing',
     indexable: true,
   },
   '/about': {
     title: 'About — Zeyks Book',
-    description: 'Why Zeyks Book exists: books that reconcile, BS/AD dates, and NPR amounts for Nepali businesses.',
+    description: 'Web-based double-entry accounting for businesses in Nepal with Bikram Sambat and AD dates, NPR records, and printable A4 reports.',
     path: '/about',
     indexable: true,
   },
   '/contact': {
     title: 'Contact — Zeyks Book',
-    description: 'Talk to the Zeyks Book team about setup, migration, or a question about your books.',
+    description: 'Contact Zeyks Book in Kathmandu about the accounting demo, NPR 999 monthly plan, data storage, or moving your business books.',
     path: '/contact',
     indexable: true,
   },
   '/privacy': {
     title: 'Privacy — Zeyks Book',
-    description: 'How Zeyks Book isolates and protects your accounting data, and what it never does with it.',
+    description: 'Learn how Zeyks Book stores accounting records in a managed Supabase database, uses Firebase sign-in, and handles demo data, downloadable backups, and service providers.',
     path: '/privacy',
     indexable: true,
   },
@@ -133,7 +130,8 @@ export function metadataForPath(pathname: string): PageMetadata {
     };
   }
   const publicPath = route.kind === 'landing' ? '/' : `/${route.kind}`;
-  return PUBLIC_PAGES[publicPath] ?? PUBLIC_PAGES['/']!;
+  const page = PUBLIC_PAGES[publicPath] ?? PUBLIC_PAGES['/']!;
+  return route.kind === 'signin' ? { ...page, indexable: false } : page;
 }
 
 /* -------------------------------------------------------------------------- */

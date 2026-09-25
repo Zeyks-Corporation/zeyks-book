@@ -36,31 +36,25 @@ export const PRERENDER_PAGES = [
     path: '/pricing',
     title: 'Pricing — Zeyks Book',
     description:
-      'Honest pricing for Nepali businesses: the Community Edition is self-hosted, with no per-seat charges '
-      + 'and no vendor lock-in.',
+      'Zeyks Book costs NPR 999 per month for Nepali businesses. See the included bookkeeping features, managed cloud storage, backup limits, and answers about trials and refunds.',
   },
   {
     slug: 'about',
     path: '/about',
     title: 'About — Zeyks Book',
-    description:
-      'Why Zeyks Book exists: accurate double-entry accounting for Nepali enterprises, built around the '
-      + 'Bikram Sambat calendar instead of working around it.',
+    description: 'Web-based double-entry accounting for businesses in Nepal with Bikram Sambat and AD dates, NPR records, and printable A4 reports.',
   },
   {
     slug: 'contact',
     path: '/contact',
     title: 'Contact — Zeyks Book',
-    description:
-      'Questions about deploying Zeyks Book, or about setting up your double-entry ledger? Send us a message.',
+    description: 'Contact Zeyks Book in Kathmandu about the accounting demo, NPR 999 monthly plan, data storage, or moving your business books.',
   },
   {
     slug: 'privacy',
     path: '/privacy',
     title: 'Privacy — Zeyks Book',
-    description:
-      'How Zeyks Book handles your books: row level security per business, no third-party analytics, '
-      + 'no telemetry, and your data exportable at any time.',
+    description: 'Learn how Zeyks Book stores accounting records in a managed Supabase database, uses Firebase sign-in, and handles demo data, downloadable backups, and service providers.',
   },
   {
     slug: 'terms',
@@ -78,12 +72,23 @@ export const PRERENDER_PAGES = [
   {
     slug: 'demo',
     path: '/demo',
-    title: 'Demo — Zeyks Book',
+    title: 'Interactive Accounting Software Demo for Nepal — Zeyks Book',
     description:
       'Walk through Zeyks Book with sample books that live only in your browser. No account, and no data '
       + 'leaves the device.',
   },
 ];
+
+/** Small, route-specific copy visible before JavaScript runs. */
+const SEO_CONTENT = {
+  '/pricing': '<main class="seo-fallback"><p>Pricing for Nepal</p><h1>Simple pricing for Nepali business accounting</h1><p>Zeyks Book has one plan at NPR 999 per month. The plan includes double-entry bookkeeping, Bikram Sambat and AD dates, NPR records, and A4 reports.</p><h2>Know what is included</h2><p>Business records are held in a managed Supabase database and Firebase handles sign-in. Download a JSON backup from Settings; restore is not available yet. Trial terms, refund policy, and IRD approval status are not currently published.</p><p><a href="/demo">Explore sample books in the interactive demo</a> or <a href="/contact">contact Zeyks Book</a> before subscribing.</p></main>',
+  '/about': '<main class="seo-fallback"><p>About Zeyks Book</p><h1>Double-entry bookkeeping for businesses in Nepal</h1><p>Zeyks Book is a web-based accounting app for Nepali businesses. It supports Bikram Sambat and Gregorian dates, NPR amounts, sales, purchases, expenses, settlements, and printable A4 reports.</p><h2>Designed around local bookkeeping needs</h2><p>Explore sample books in the interactive demo. The public site currently lists Kathmandu, Nepal and contact details; registered company details and uptime commitments are not published.</p><p><a href="/demo">Try the demo</a> · <a href="/pricing">See pricing</a> · <a href="/contact">Contact</a></p></main>',
+  '/contact': '<main class="seo-fallback"><p>Contact Zeyks Book</p><h1>Questions about accounting software in Nepal?</h1><p>Contact the Zeyks Book team about the interactive demo, NPR 999 monthly plan, data storage, or moving your books.</p><p>Location: Kathmandu, Nepal. Email: contact@zeyksbook.app. Phone: +977 9767784817.</p><p><a href="/demo">Try the interactive demo</a> · <a href="/pricing">Read pricing and terms</a></p></main>',
+  '/privacy': '<main class="seo-fallback"><p>Privacy and data storage</p><h1>Where Zeyks Book stores accounting data</h1><p>Zeyks Book uses a managed Supabase database for business records and Firebase for sign-in. This is managed cloud storage, not a database in the customer’s own cloud account. The interactive demo uses sample books stored in the browser.</p><h2>Backups and recovery</h2><p>Users can download a JSON backup from Settings. Restoring a backup is not available yet, and automatic backup and recovery commitments are not published.</p><p><a href="/pricing">See pricing</a> · <a href="/contact">Ask a question</a></p></main>',
+  '/terms': '<main class="seo-fallback"><p>Terms of use</p><h1>Using Zeyks Book for business accounts</h1><p>Zeyks Book provides web-based bookkeeping, Bikram Sambat and AD dates, NPR records, and printable reports. Review your accounting outputs with a qualified professional before statutory filing. The public site does not claim IRD certification or approval.</p><p><a href="/pricing">Pricing and subscription questions</a> · <a href="/privacy">Data and backup details</a> · <a href="/contact">Contact</a></p></main>',
+  '/signin': '<main class="seo-fallback"><p>Zeyks Book sign in</p><h1>Sign in to your business books</h1><p>Sign in to Zeyks Book with a one-time code sent to your email address.</p><p>Want to explore first? <a href="/demo">Open the interactive demo with sample books</a>.</p></main>',
+  '/demo': '<main class="seo-fallback"><p>Interactive product demo</p><h1>Explore Nepali accounting software with sample books</h1><p>Walk through Zeyks Book’s double-entry ledger, invoices, purchases, settlements, reports, and Bikram Sambat dates using sample books. Demo changes stay in this browser.</p><p><a href="/pricing">See the NPR 999 monthly plan</a> · <a href="/privacy">Read about data storage</a></p></main>',
+};
 
 /** Escape a value for an HTML attribute, since every string here is copy. */
 function escapeHtml(value) {
@@ -157,6 +162,14 @@ export function renderPageHtml(shellHtml, page) {
     `<link rel="canonical" href="${canonical}" />`,
     'canonical link',
   );
+  if (page.path === '/signin') {
+    html = replaceOnce(html, /<meta\s+name="robots"[^>]*\/>/, '<meta name="robots" content="noindex, nofollow" />', 'robots directive');
+  }
+
+  const content = SEO_CONTENT[page.path];
+  if (content) {
+    html = replaceOnce(html, /<div id="root">[\s\S]*?<\/div>/, `<div id="root">${content}</div>`, 'root content');
+  }
 
   return html;
 }

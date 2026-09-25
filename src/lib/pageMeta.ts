@@ -29,8 +29,7 @@ export const CANONICAL_ORIGIN = 'https://zeyksbook.app';
 export const SITE_NAME = 'Zeyks Book';
 
 export const SITE_DESCRIPTION =
-  'Double-entry accounting for small businesses in Nepal: invoices and bills, settlement tracking, '
-  + 'aged receivables and payables, BS/AD dates, and printable A4 statements.';
+  'Zeyks Book is accounting software for small businesses in Nepal, with double-entry bookkeeping, Bikram Sambat and AD dates, NPR amounts, invoices, bills, and printable A4 financial reports.';
 
 export interface PublicPageMeta {
   /** The document the build writes; the landing page is the app shell itself. */
@@ -48,16 +47,13 @@ export interface PublicPageMeta {
 /**
  * Every public page, in the order the sitemap lists them.
  *
- * `/demo` is deliberately not in the sitemap: it is a walkthrough rather than a
- * page anyone searches for, and its sample books live in the visitor's own
- * browser. It still ships a document of its own so a shared link is described
- * correctly.
+ * The demo is a public product walkthrough and is included in the sitemap.
  */
 export const PUBLIC_PAGE_META: PublicPageMeta[] = [
   {
     slug: '',
     path: '/',
-    title: `${SITE_NAME} — double-entry accounting for Nepali businesses`,
+    title: `Accounting Software for Nepal | BS Calendar & NPR — ${SITE_NAME}`,
     description: SITE_DESCRIPTION,
     sitemap: true,
     changefreq: 'monthly',
@@ -68,8 +64,7 @@ export const PUBLIC_PAGE_META: PublicPageMeta[] = [
     path: '/pricing',
     title: `Pricing — ${SITE_NAME}`,
     description:
-      'Honest pricing for Nepali businesses: the Community Edition is self-hosted, with no per-seat charges '
-      + 'and no vendor lock-in.',
+      `${SITE_NAME} costs NPR 999 per month for Nepali businesses. See the included bookkeeping features, managed cloud storage, backup limits, and answers about trials and refunds.`,
     sitemap: true,
     changefreq: 'monthly',
     priority: '0.8',
@@ -78,9 +73,7 @@ export const PUBLIC_PAGE_META: PublicPageMeta[] = [
     slug: 'about',
     path: '/about',
     title: `About — ${SITE_NAME}`,
-    description:
-      'Why Zeyks Book exists: accurate double-entry accounting for Nepali enterprises, built around the '
-      + 'Bikram Sambat calendar instead of working around it.',
+    description: 'Web-based double-entry accounting for businesses in Nepal with Bikram Sambat and AD dates, NPR records, and printable A4 reports.',
     sitemap: true,
     changefreq: 'monthly',
     priority: '0.7',
@@ -89,8 +82,7 @@ export const PUBLIC_PAGE_META: PublicPageMeta[] = [
     slug: 'contact',
     path: '/contact',
     title: `Contact — ${SITE_NAME}`,
-    description:
-      'Questions about deploying Zeyks Book, or about setting up your double-entry ledger? Send us a message.',
+    description: 'Contact Zeyks Book in Kathmandu about the accounting demo, NPR 999 monthly plan, data storage, or moving your business books.',
     sitemap: true,
     changefreq: 'yearly',
     priority: '0.6',
@@ -100,8 +92,7 @@ export const PUBLIC_PAGE_META: PublicPageMeta[] = [
     path: '/privacy',
     title: `Privacy — ${SITE_NAME}`,
     description:
-      'How Zeyks Book handles your books: row level security per business, no third-party analytics, '
-      + 'no telemetry, and your data exportable at any time.',
+      'Learn how Zeyks Book stores accounting records in a managed Supabase database, uses Firebase sign-in, and handles demo data, downloadable backups, and service providers.',
     sitemap: true,
     changefreq: 'yearly',
     priority: '0.5',
@@ -121,18 +112,18 @@ export const PUBLIC_PAGE_META: PublicPageMeta[] = [
     path: '/signin',
     title: `Sign in — ${SITE_NAME}`,
     description: 'Sign in to Zeyks Book with a one-time code sent to your email address.',
-    sitemap: true,
+    sitemap: false,
     changefreq: 'yearly',
     priority: '0.3',
   },
   {
     slug: 'demo',
     path: '/demo',
-    title: `Demo — ${SITE_NAME}`,
+    title: `Interactive Accounting Software Demo for Nepal — ${SITE_NAME}`,
     description:
       'Walk through Zeyks Book with sample books that live only in your browser. No account, and no data '
       + 'leaves the device.',
-    sitemap: false,
+    sitemap: true,
     changefreq: 'monthly',
     priority: '0.6',
   },
@@ -191,7 +182,7 @@ export function metaForRoute(route: Route): PageMeta {
     title: page.title,
     description: page.description,
     canonical: `${CANONICAL_ORIGIN}${page.path === '/' ? '/' : page.path}`,
-    indexable: true,
+    indexable: page.path !== '/signin',
   };
 }
 

@@ -17,12 +17,12 @@ export const AboutPage: React.FC<{
     {
       icon: ShieldCheck,
       title: 'Data sovereignty',
-      body: 'Your financial books belong to you. We store data directly in your own private database without third-party vendor lock-in.',
+      body: 'Your books are stored in a managed cloud database. You can download a JSON backup from Settings; restore is not available yet.',
     },
     {
       icon: Award,
       title: 'Built for Nepal',
-      body: 'Designed specifically around the Bikram Sambat calendar, fiscal year starting Shrawan 1, NPR formatting, and IRD compliance standards.',
+      body: 'Designed around the Bikram Sambat calendar, a fiscal year starting Shrawan 1, NPR formatting, and reports that support accounting workflows. IRD approval is not claimed.',
     },
   ];
 
@@ -37,7 +37,7 @@ export const AboutPage: React.FC<{
             Accurate accounting for Nepali enterprises
           </h1>
           <p className="mt-5 text-[17px] leading-[26px] text-[var(--label-secondary)]">
-            Zeyks Book was crafted to solve a fundamental problem: Nepali businesses needed double-entry accounting software that respects the Bikram Sambat calendar without forcing fragile workarounds or complex setup fees.
+            Zeyks Book is a web-based double-entry bookkeeping app for businesses in Nepal. It supports Bikram Sambat and Gregorian dates, NPR amounts, and printable A4 reports. The interactive demo lets you explore sample books before signing up.
           </p>
         </div>
 
@@ -63,12 +63,30 @@ export const AboutPage: React.FC<{
         <div className="mt-16 bg-[var(--bg)] border border-[var(--separator)] rounded-[14px] p-8">
           <h2 className="text-[22px] font-bold text-[var(--label)]">Designed with precision</h2>
           <p className="mt-3 text-[15px] leading-[24px] text-[var(--label-secondary)]">
-            Unlike generic web apps, Zeyks Book enforces rigid accounting rules at the database and application levels. Journal entries are immutable once posted, settlements are tracked against document totals, and statement reports match standard A4 paper specifications for straightforward filing with banks, IRD, or external auditors.
+            Zeyks Book stores business records in a managed Supabase database and uses Firebase for sign-in. Posted journal entries and settlements follow the app's accounting rules. Downloadable JSON backups are available in Settings; restore and a published recovery guarantee are not available. A4 reports are provided as working documents, and should be reviewed with an accountant before statutory use.
           </p>
           <div className="mt-6">
             <Button variant="primary" size="md" onClick={onSignIn}>
               Start using Zeyks Book
             </Button>
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-5 rounded-[14px] border border-[var(--separator)] bg-[var(--bg-secondary)] p-6 sm:grid-cols-2 sm:p-8">
+          <div>
+            <h2 className="text-[18px] font-bold text-[var(--label)]">Company and service details</h2>
+            <p className="mt-2 text-[14px] leading-[22px] text-[var(--label-secondary)]">
+              The site lists Kathmandu, Nepal and contact details. It does not currently publish a registered company identity, uptime guarantee, or recovery-time commitment.
+            </p>
+          </div>
+          <div>
+            <h3 className="text-[15px] font-semibold text-[var(--label)]">Before subscribing</h3>
+            <p className="mt-2 text-[14px] leading-[22px] text-[var(--label-secondary)]">
+              Try the sample demo, confirm the trial and refund terms with us, and check whether a downloadable JSON backup meets your recovery needs. Restore is not available yet.
+            </p>
+            <a href="/contact" className="mt-3 inline-flex min-h-[44px] items-center text-[14px] font-semibold text-[var(--accent)] underline underline-offset-4">
+              Ask about your requirements
+            </a>
           </div>
         </div>
       </section>

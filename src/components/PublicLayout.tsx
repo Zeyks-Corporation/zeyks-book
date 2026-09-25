@@ -3,6 +3,7 @@ import { Menu, X } from 'lucide-react';
 import { Button } from './ui';
 
 const NAV_LINKS = [
+  { path: '/demo', label: 'Demo' },
   { path: '/pricing', label: 'Pricing' },
   { path: '/about', label: 'About' },
   { path: '/contact', label: 'Contact' },
@@ -135,7 +136,7 @@ export const PublicLayout: React.FC<{
                 <span className="text-[16px] font-bold text-[var(--label)]">Zeyks Book</span>
               </div>
               <p className="mt-3 text-[13px] leading-[20px] text-[var(--label-secondary)]">
-                Nepal's first native double-entry accounting engine. Built for Bikram Sambat, Shrawan 1 fiscal years, and immutable ledger integrity.
+                Double-entry bookkeeping for Nepali businesses, with Bikram Sambat dates, NPR amounts, and printable A4 reports.
               </p>
             </div>
 

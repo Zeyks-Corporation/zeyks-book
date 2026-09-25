@@ -20,12 +20,11 @@ export const PrivacyPage: React.FC<{
             </span>
 
             <h1 className="mt-6 text-[36px] font-extrabold leading-[44px] tracking-[-0.03em] sm:text-[48px] sm:leading-[56px] text-[var(--label)]">
-              Your accounting data belongs to you.{' '}
-              <span className="apple-text-gradient block mt-1">Period.</span>
+              Know where your accounting data lives.
             </h1>
 
             <p className="mx-auto mt-4 max-w-2xl text-[16px] leading-[26px] text-[var(--label-secondary)] sm:text-[18px]">
-              Zeyks Book is designed from the ground up for strict data isolation, zero third-party telemetry, and total privacy.
+              Zeyks Book is a managed cloud app. Business records use Supabase; sign-in uses Firebase. Here is what that means in practice.
             </p>
           </div>
 
@@ -37,7 +36,7 @@ export const PrivacyPage: React.FC<{
                 1. Data Ownership & Storage Isolation
               </h2>
               <p className="mt-2">
-                Every business record created in Zeyks Book is bound exclusively to your account using PostgreSQL Row Level Security (RLS). No other user or business on the platform can inspect, query, or access your financial records.
+                Business records are stored in a managed Supabase database. The app uses PostgreSQL row level security (RLS) to limit access to records based on the signed-in user's business membership. This is cloud storage, not a database hosted in your own account. Firebase provides account sign-in. Both services are third parties that process information needed to operate the app.
               </p>
             </div>
 
@@ -47,7 +46,7 @@ export const PrivacyPage: React.FC<{
                 2. Zero Third-Party Telemetry & Tracking
               </h2>
               <p className="mt-2">
-                We do not sell, rent, share, or monetize your business data, transaction history, customer identities, or financial balances. We do not use third-party analytics trackers, behavioral ad pixels, or session recording tools. Even the two typefaces this app is set in are served from our own origin — loading a page makes no request to any third party.
+                The app does not use behavioral ad pixels or session recording tools. Core app functions rely on Supabase and Firebase, and contact messages are sent through the configured email service. Google Fonts may be contacted to load typefaces. These providers receive the technical information required for their services; review their policies for their handling practices.
               </p>
             </div>
 
@@ -57,7 +56,7 @@ export const PrivacyPage: React.FC<{
                 3. Demo Mode Local Storage
               </h2>
               <p className="mt-2">
-                When operating in Demo Mode, all created invoices, purchases, settlements, and settings are stored entirely inside your local browser storage (<code className="rounded bg-[var(--fill-secondary)] px-1.5 py-0.5 text-[13px] font-mono">local browser storage</code>). No cloud database communication occurs while in Demo Mode.
+                The interactive demo starts with sample books and keeps demo changes in this browser. Demo data is separate from a signed-in business account. Clearing browser storage removes the local demo changes.
               </p>
             </div>
 
@@ -67,17 +66,17 @@ export const PrivacyPage: React.FC<{
                 4. IRD Compliance & Export Rights
               </h2>
               <p className="mt-2">
-                You retain the right to export your complete books, general journal entries, tax registers, and audit logs at any time in standard CSV or JSON formats for Inland Revenue Department (IRD) audits or local backups.
+                Settings provides a downloadable JSON snapshot of your books. It is a manual backup; automatic backup frequency, recovery time, and restore are not currently documented, and restore is not available in the app. Reports and exports do not establish IRD approval or replace advice from a qualified accountant.
               </p>
             </div>
 
             <div className="border-t border-[var(--separator)] pt-6">
               <h2 className="text-[20px] font-bold text-[var(--label)] flex items-center gap-2">
                 <Check size={18} className="text-[var(--success)]" />
-                5. Third-Party Requests: Google Fonts
+                5. Company, trial, and service commitments
               </h2>
               <p className="mt-2">
-                Zeyks Book makes exactly one third-party request: the two typefaces this site is set in are loaded from Google Fonts (fonts.googleapis.com / fonts.gstatic.com). This request carries your IP address and browser user agent to Google. No financial data, account details, or app usage information is included in it, and no other third-party service is contacted.
+                The public site lists Kathmandu, Nepal and contact details, but does not currently publish a registered company identity, uptime guarantee, trial terms, or refund policy. Contact us before subscribing if these details affect your decision.
               </p>
             </div>
           </div>

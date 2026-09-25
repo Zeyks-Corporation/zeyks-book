@@ -14,9 +14,9 @@ export const PricingPage: React.FC<{
     'Aged receivables & payables (30, 60, 90 days)',
     'A4 print-ready financial statements & tax reports',
     'Automatic ledger & document health checks',
-    'Managed cloud database, isolated per business',
+    'Managed cloud database with business level access controls',
     'One simple plan — no per-user fees',
-    'Full control over your financial data',
+    'Downloadable JSON backup from Settings',
   ];
 
   const FAQS = [
@@ -26,11 +26,19 @@ export const PricingPage: React.FC<{
     },
     {
       q: 'Where are my financial records stored?',
-      a: 'In Zeyks Book\'s managed cloud database. Access to your records is restricted to your account by the database\'s own security rules, and you can export everything at any time.',
+      a: 'Business records are stored in a managed Supabase database; Firebase handles sign-in. You can download a JSON snapshot from Settings. Restoring a backup is not available yet.',
     },
     {
       q: 'Can I export statements for my bank or auditor?',
       a: 'Yes. Profit & Loss, Balance Sheet, Trial Balance, General Ledger, VAT return, and Cash/Bank statements are designed as standard A4 sheets ready to print or export as PDF.',
+    },
+    {
+      q: 'Is there a free trial or refund policy?',
+      a: 'Trial terms and a refund policy are not currently published. Please contact us to confirm the current subscription terms before paying.',
+    },
+    {
+      q: 'Is Zeyks Book approved by Nepal’s IRD?',
+      a: 'The site does not publish an IRD approval or verification status. VAT reports and A4 statements are product features, not proof of government approval. Confirm your compliance requirements with the IRD or your accountant.',
     },
   ];
 
@@ -83,7 +91,7 @@ export const PricingPage: React.FC<{
         {/* FAQ Section */}
         <div className="mt-20 border-t border-[var(--separator)] pt-14">
           <h2 className="text-[22px] font-semibold text-[var(--label)] text-center">Frequently asked questions</h2>
-          <div className="mt-8 grid gap-6 sm:grid-cols-3">
+          <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {FAQS.map(({ q, a }) => (
               <div key={q} className="bg-[var(--bg)] border border-[var(--separator)] rounded-[12px] p-5">
                 <div className="flex items-center gap-2 text-[15px] font-semibold text-[var(--label)]">
