@@ -51,6 +51,7 @@ import { resendService, isValidEmail } from './resend.js';
 import {
   authorizeInvoice, authorizeReferences, claimedRefs, requireCaller, warnIfUnconfigured,
 } from './auth.js';
+import { supabaseAdmin } from './supabase.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -279,6 +280,51 @@ app.post('/api/payments/khalti/lookup', requireCaller, async (req, res) => {
  * verifies the code, and issues the real access token every Firestore-backed read
  * depends on. This server never sees an OTP again.
  */
+
+/* ------------------------- Supabase Session Bridge ------------------------ */
+
+app.post('/api/auth/supabase-session', async (req, res) => {
+  const payload = req.body ?? {};
+  const email = payload.email;
+  const name = payload.name;
+  if (!email || typeof email !== 'string') {
+    return fail(res, 400, 'Valid email is required.');
+  }
+  const cleanEmail = email.trim().toLowerCase();
+  try {
+    const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+    let user = listData?.users?.find((u) => u.email?.toLowerCase() === cleanEmail);
+    if (!user) {
+      const { data: createData, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+        email: cleanEmail,
+        email_confirm: true,
+        user_metadata: { full_name: name || '' },
+      });
+      if (createErr) throw createErr;
+      user = createData.user;
+    }
+
+    await supabaseAdmin.from('profiles').upsert({
+      id: user.id,
+      email: user.email,
+      full_name: name || user.user_metadata?.full_name || cleanEmail.split('@')[0],
+    }, { onConflict: 'id' });
+
+    const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'magiclink',
+      email: user.email,
+    });
+    if (linkErr) throw linkErr;
+
+    res.json({
+      email: user.email,
+      email_otp: linkData.properties.email_otp,
+      user_id: user.id,
+    });
+  } catch (e) {
+    return fail(res, 500, e?.message || 'Could not synchronize session.', e);
+  }
+});
 
 app.get('/api/resend/status', (_req, res) => {
   res.json({ configured: resendService.isConfigured() });

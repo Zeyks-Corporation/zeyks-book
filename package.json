@@ -14,6 +14,7 @@
     "test": "node tests/run.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.2",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "firebase": "^11.10.0",

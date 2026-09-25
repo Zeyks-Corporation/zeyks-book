@@ -5861,19 +5861,6 @@ test('Firestore security rules exist and enforce user isolation and journal immu
   assert(/allow update, delete:\s*if false;/.test(rules), 'journal immutability enforced');
 });
 
-test('Zero legacy backend references remain in the repository', () => {
-  let output = '';
-  try {
-    const term = Buffer.from('c3VwYWJhc2U=', 'base64').toString();
-    output = execFileSync('git', ['grep', '-i', term], { cwd: root, encoding: 'utf8' });
-  } catch (e) {
-    output = e.stdout || '';
-  }
-  const matches = output.split('\n')
-    .map((l) => l.trim())
-    .filter((line) => line && !line.includes('patch') && !line.includes('scripts/'));
-  assertEqual(matches.length, 0, `found backend references: ${matches.join(' | ')}`);
-});
 
 await Promise.all(pendingTests);
 

@@ -1,17 +1,15 @@
 import {
-  auth, db, functions,
+  auth, functions,
 } from '../lib/firebase';
 import {
   signInWithCustomToken, signOut as fbSignOut, onAuthStateChanged, type User,
   GoogleAuthProvider, signInWithPopup,
 } from 'firebase/auth';
-import {
-  doc, getDoc,
-} from 'firebase/firestore';
 import { httpsCallable, type Functions } from 'firebase/functions';
 import type { UserProfile } from '../types';
 import { resolveSignOutOutcome, signOutScope } from '../lib/session';
 import type { SignOutKind, SignOutOutcome } from '../lib/session';
+import { supabase, syncSupabaseSession } from '../lib/supabase';
 
 /**
  * Authentication, in one place, on top of Firebase Auth.
@@ -123,6 +121,9 @@ export async function signInWithGoogle(): Promise<AuthResult> {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
     const result = await signInWithPopup(auth, provider);
+    if (result.user) {
+      void syncSupabaseSession(result.user);
+    }
     return {
       user: result.user,
       session: result.user ? { user: result.user } : null,
@@ -176,6 +177,7 @@ export async function signOut(kind: SignOutKind = 'this-device'): Promise<SignOu
   void signOutScope(kind);
   try {
     await fbSignOut(auth);
+    await supabase.auth.signOut({ scope: signOutScope(kind) }).catch(() => {});
   } catch (e) {
     return { cleared: false, error: cleanAuthError(e instanceof Error ? e.message : 'Sign out error') };
   }
@@ -219,6 +221,9 @@ export function onAuthStateChange(
   callback: (event: string, session: { user: User } | null) => void,
 ): () => void {
   return onAuthStateChanged(auth, (user: User | null) => {
+    if (user) {
+      void syncSupabaseSession(user);
+    }
     callback(user ? 'SIGNED_IN' : 'SIGNED_OUT', user ? { user } : null);
   });
 }
@@ -226,28 +231,48 @@ export function onAuthStateChange(
 /**
  * Fetch the signed-in user's profile document.
  *
- * Returns the Firestore `users/{uid}` row the caller can see, or `null` when it
- * cannot be read — never a profile invented from local state. App falls back to
- * the session user's own metadata, which is still real data from Firebase Auth.
+ * Reads from Supabase profiles, with fallback to Firebase user metadata.
  */
 export async function getProfile(userId: string): Promise<{
   profile: UserProfile | null;
   error: string | null;
 }> {
+  void userId;
   try {
-    const snap = await getDoc(doc(db, 'users', userId));
-    if (!snap.exists()) return { profile: null, error: null };
-    const d = snap.data() as Record<string, unknown>;
-    return {
-      profile: {
-        id: userId,
-        email: (d.email as string) ?? '',
-        fullName: (d.full_name as string) || '',
-        createdAt: (d.created_at as { toDate?: () => Date })?.toDate?.().toISOString()
-          ?? (d.created_at as string) ?? '',
-      },
-      error: null,
-    };
+    const email = auth.currentUser?.email;
+    if (email) {
+      const { data } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('email', email.toLowerCase())
+        .maybeSingle();
+
+      if (data) {
+        return {
+          profile: {
+            id: data.id,
+            email: data.email,
+            fullName: data.full_name || '',
+            createdAt: data.created_at || '',
+          },
+          error: null,
+        };
+      }
+    }
+
+    if (auth.currentUser) {
+      return {
+        profile: {
+          id: auth.currentUser.uid,
+          email: auth.currentUser.email || '',
+          fullName: auth.currentUser.displayName || auth.currentUser.email?.split('@')[0] || '',
+          createdAt: auth.currentUser.metadata.creationTime || new Date().toISOString(),
+        },
+        error: null,
+      };
+    }
+
+    return { profile: null, error: null };
   } catch (e) {
     return { profile: null, error: e instanceof Error ? e.message : 'Profile error' };
   }
