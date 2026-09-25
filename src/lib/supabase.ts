@@ -54,26 +54,52 @@ export async function syncSupabaseSession(
       });
 
       if (!res.ok) {
+        console.warn(`[Supabase Auth] Session bridge responded with status ${res.status}`);
         return false;
       }
 
       const json = await res.json();
-      if (!json?.email_otp) {
-        return false;
+
+      // 1. Direct session tokens provided by the server
+      if (json?.access_token && json?.refresh_token) {
+        const { data, error } = await supabase.auth.setSession({
+          access_token: json.access_token,
+          refresh_token: json.refresh_token,
+        });
+        if (!error && data?.session) {
+          return true;
+        }
+        console.warn('[Supabase Auth] setSession failed:', error?.message);
       }
 
-      const { data, error } = await supabase.auth.verifyOtp({
-        email: json.email || email,
-        token: json.email_otp,
-        type: 'magiclink',
-      });
-
-      if (error) {
-        return false;
+      // 2. Fallback: verifyOtp with token_hash and verification_type
+      if (json?.token_hash && json?.verification_type) {
+        const { data, error } = await supabase.auth.verifyOtp({
+          token_hash: json.token_hash,
+          type: json.verification_type,
+        });
+        if (!error && data?.session) {
+          return true;
+        }
+        console.warn('[Supabase Auth] verifyOtp(token_hash) failed:', error?.message);
       }
 
-      return !!data.session;
-    } catch {
+      // 3. Fallback: verifyOtp with email and numeric email_otp
+      if (json?.email_otp) {
+        const { data, error } = await supabase.auth.verifyOtp({
+          email: json.email || email,
+          token: json.email_otp,
+          type: json.verification_type || 'magiclink',
+        });
+        if (!error && data?.session) {
+          return true;
+        }
+        console.warn('[Supabase Auth] verifyOtp(email_otp) failed:', error?.message);
+      }
+
+      return false;
+    } catch (e) {
+      console.warn('[Supabase Auth] Session sync network error:', e);
       return false;
     } finally {
       syncPromise = null;
@@ -82,3 +108,17 @@ export async function syncSupabaseSession(
 
   return syncPromise;
 }
+
+/**
+ * Ensure Supabase has an active session before database queries run.
+ */
+export async function ensureSupabaseSession(): Promise<boolean> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) return true;
+  } catch {
+    // ignore
+  }
+  return false;
+}
+

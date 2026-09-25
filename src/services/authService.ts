@@ -122,7 +122,9 @@ export async function signInWithGoogle(): Promise<AuthResult> {
     provider.setCustomParameters({ prompt: 'select_account' });
     const result = await signInWithPopup(auth, provider);
     if (result.user) {
-      void syncSupabaseSession(result.user);
+      await syncSupabaseSession(result.user).catch((e) => {
+        console.warn('[Auth] syncSupabaseSession error during Google sign-in:', e);
+      });
     }
     return {
       user: result.user,

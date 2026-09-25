@@ -51,7 +51,7 @@ import { resendService, isValidEmail } from './resend.js';
 import {
   authorizeInvoice, authorizeReferences, claimedRefs, requireCaller, warnIfUnconfigured,
 } from './auth.js';
-import { supabaseAdmin } from './supabase.js';
+import { supabaseAdmin, createAnonClient } from './supabase.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -59,6 +59,22 @@ const PORT = Number(process.env.PORT ?? 4000);
 const MODE = process.env.PAYMENT_MODE === 'live' ? 'live' : 'sandbox';
 
 app.use(express.json({ limit: '256kb' }));
+
+// Ensure serverless rewrites without /api prefix reach the Express routes
+app.use((req, _res, next) => {
+  if (req.url && !req.url.startsWith('/api')) {
+    if (
+      req.url.startsWith('/auth/') ||
+      req.url.startsWith('/payments/') ||
+      req.url.startsWith('/contact') ||
+      req.url.startsWith('/resend/') ||
+      req.url.startsWith('/business/')
+    ) {
+      req.url = '/api' + req.url;
+    }
+  }
+  next();
+});
 
 // Small in-memory guard so a scripted client cannot hammer a route.
 //
@@ -316,13 +332,113 @@ app.post('/api/auth/supabase-session', async (req, res) => {
     });
     if (linkErr) throw linkErr;
 
+    // Use ephemeral anon client on server side to exchange token_hash into real session access_token and refresh_token
+    let session = null;
+    try {
+      const verifyClient = createAnonClient();
+      const { data: verifyData } = await verifyClient.auth.verifyOtp({
+        token_hash: linkData.properties.hashed_token,
+        type: linkData.properties.verification_type,
+      });
+      session = verifyData?.session || null;
+    } catch {
+      // ignore, fall back to returning token info
+    }
+
     res.json({
+      access_token: session?.access_token || null,
+      refresh_token: session?.refresh_token || null,
       email: user.email,
       email_otp: linkData.properties.email_otp,
+      token_hash: linkData.properties.hashed_token,
+      verification_type: linkData.properties.verification_type,
       user_id: user.id,
     });
   } catch (e) {
     return fail(res, 500, e?.message || 'Could not synchronize session.', e);
+  }
+});
+
+/* ------------------------ Business Memberships Fallback ------------------- */
+
+app.post('/api/business/my-memberships', async (req, res) => {
+  const payload = req.body ?? {};
+  const mail = payload.email;
+  if (!mail || typeof mail !== 'string') {
+    return fail(res, 400, 'Email is required.');
+  }
+  try {
+    const cleanEmail = mail.trim().toLowerCase();
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('email', cleanEmail)
+      .maybeSingle();
+
+    if (!profile?.id) {
+      return res.json({ memberships: [] });
+    }
+
+    const { data: memberships, error } = await supabaseAdmin
+      .from('business_memberships')
+      .select('business_id, user_id, role, created_at')
+      .eq('user_id', profile.id);
+
+    if (error) throw error;
+    res.json({
+      memberships: (memberships || []).map((m) => ({
+        businessId: m.business_id,
+        userId: m.user_id,
+        role: m.role || 'OWNER',
+        createdAt: m.created_at || '',
+      })),
+    });
+  } catch (e) {
+    return fail(res, 500, e?.message || 'Could not fetch memberships', e);
+  }
+});
+
+app.post('/api/business/get', async (req, res) => {
+  const payload = req.body ?? {};
+  const targetId = payload.businessId;
+  const mail = payload.email;
+  if (!targetId || typeof targetId !== 'string') {
+    return fail(res, 400, 'Business ID is required.');
+  }
+  try {
+    if (mail) {
+      const cleanEmail = mail.trim().toLowerCase();
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .eq('email', cleanEmail)
+        .maybeSingle();
+
+      if (profile?.id) {
+        const { data: member } = await supabaseAdmin
+          .from('business_memberships')
+          .select('role')
+          .eq('business_id', targetId)
+          .eq('user_id', profile.id)
+          .maybeSingle();
+
+        if (!member) {
+          return fail(res, 403, 'You are not a member of this business.');
+        }
+      }
+    }
+
+    const { data: business, error } = await supabaseAdmin
+      .from('businesses')
+      .select('*')
+      .eq('id', targetId)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!business) return fail(res, 404, 'Business not found.');
+    res.json({ business });
+  } catch (e) {
+    return fail(res, 500, e?.message || 'Could not load business', e);
   }
 });
 
