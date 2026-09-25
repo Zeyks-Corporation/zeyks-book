@@ -43,7 +43,22 @@ export async function syncSupabaseSession(
   if (syncPromise) return syncPromise;
 
   syncPromise = (async () => {
+    const deterministicPassword = `zb_auth_bridge_${email}_v1!`;
+
     try {
+      // 0. Direct client-side bridge (works without any server API roundtrip for existing users)
+      try {
+        const { data: pwData, error: pwErr } = await supabase.auth.signInWithPassword({
+          email,
+          password: deterministicPassword,
+        });
+        if (!pwErr && pwData?.session) {
+          return true;
+        }
+      } catch {
+        // Proceed to server bridge
+      }
+
       const res = await fetch('/api/auth/supabase-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -95,6 +110,19 @@ export async function syncSupabaseSession(
           return true;
         }
         console.warn('[Supabase Auth] verifyOtp(email_otp) failed:', error?.message);
+      }
+
+      // 4. Retry direct password sign-in after server created/updated user
+      try {
+        const { data: retryData, error: retryErr } = await supabase.auth.signInWithPassword({
+          email,
+          password: deterministicPassword,
+        });
+        if (!retryErr && retryData?.session) {
+          return true;
+        }
+      } catch {
+        // ignore
       }
 
       return false;

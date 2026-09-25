@@ -71,6 +71,23 @@ export default async function handler(req, res) {
 
       const userId = linkData.id || linkData.user?.id;
 
+      // Update user with deterministic bridge password and confirmed status
+      const deterministicPassword = `zb_auth_bridge_${cleanEmail}_v1!`;
+      if (userId) {
+        await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+          method: 'PUT',
+          headers: {
+            apikey: SUPABASE_KEY,
+            Authorization: `Bearer ${SUPABASE_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            password: deterministicPassword,
+            email_confirm: true,
+          }),
+        }).catch(() => {});
+      }
+
       // Upsert profile row
       if (userId) {
         await fetch(`${SUPABASE_URL}/rest/v1/profiles`, {
@@ -206,9 +223,15 @@ export default async function handler(req, res) {
 
     // 5. Delegate remaining routes to Express server
     req.url = url;
-    const mod = await import('../server/index.js');
-    const app = mod.default;
-    return app(req, res);
+    try {
+      const serverPath = '../server/index.js';
+      const mod = await import(/* @vite-ignore */ serverPath);
+      const app = mod.default;
+      return app(req, res);
+    } catch (importErr) {
+      console.error('[Server Import Error]:', importErr);
+      return sendJson(res, 503, { error: 'Payment services are temporarily unavailable.' });
+    }
   } catch (err) {
     console.error('[API Handler Error]:', err);
     return sendJson(res, 500, { error: err?.message || 'Internal server error' });
