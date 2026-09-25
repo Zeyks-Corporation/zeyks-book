@@ -169,7 +169,7 @@ export const CollectOnlineModal: React.FC<{
 
         {!anyOn && (
           <Callout tone="warn">
-            No gateway is configured. Start the API server and set <code className="font-mono">KHALTI_SECRET_KEY</code>{' '}
+            No gateway is configured. Start the API server and set Khalti credentials{' '}
             (and your eSewa merchant code) in <code className="font-mono">.env</code>.
           </Callout>
         )}

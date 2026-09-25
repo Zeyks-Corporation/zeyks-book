@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Download, Printer } from 'lucide-react';
 import { DateRange, LedgerEntry } from '../types';
 import { Books } from '../state/useBooks';
-import { AccountingEngine } from '../services/accountingEngine';
+import { AccountingEngine, UNLINKED_ACCOUNT_CODE } from '../services/accountingEngine';
 import { Button, Callout, DateField, inputClass } from './ui';
 import { PeriodPicker } from './PeriodPicker';
 import {
@@ -395,7 +395,7 @@ export const ReportsView: React.FC<{
     report === 'pnl' ? pnl.totalRevenue !== 0 || pnl.totalExpenses !== 0
     : report === 'balance_sheet' ? balanceSheet.assetAccounts.length > 0 || balanceSheet.liabilityAccounts.length > 0
     : report === 'trial_balance' ? trialBalance.rows.length > 0
-    : report === 'vat' ? vat.outputVat !== 0 || vat.inputVat !== 0
+    : report === 'vat' ? vat.outputVat !== 0 || vat.inputVat !== 0 || vat.taxableSales !== 0 || vat.taxablePurchases !== 0
     : report === 'ledger' ? ledger.length > 0
     : report === 'cashbank' ? cashBank.rows.length > 0
     : report === 'sales' ? salesRows.rows.length > 0
@@ -493,7 +493,7 @@ export const ReportsView: React.FC<{
         label="Trial balance"
         columns={[
           { key: 'code', header: 'Code', quiet: true, render: (r: typeof trialBalance.rows[number]) => r.account.code },
-          { key: 'account', header: 'Account', render: (r) => r.account.name + (r.account.code === '????' ? ' — unlinked account' : '') },
+          { key: 'account', header: 'Account', render: (r) => (r.account.code === UNLINKED_ACCOUNT_CODE ? (r.account.name.includes('unlinked') ? r.account.name : `${r.account.name} (unlinked)`) : r.account.name) },
           { key: 'type', header: 'Type', quiet: true, render: (r) => r.account.type.toLowerCase() },
           { key: 'debit', header: 'Debit', numeric: true, render: (r) => <ReportAmount value={r.debit} /> },
           { key: 'credit', header: 'Credit', numeric: true, render: (r) => <ReportAmount value={r.credit} /> },

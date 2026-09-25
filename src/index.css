@@ -1,61 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&display=swap');
 @import "tailwindcss";
-
-/* -------------------------------------------------------------------------- */
-/* Type — self-hosted, so a page load makes no third-party request            */
-/* -------------------------------------------------------------------------- */
-/*
- * Both families used to be fetched from fonts.googleapis.com on every visit,
- * which told a third party which screen of an accounting product someone
- * opened — while the privacy page promised no third-party telemetry, and no
- * policy disclosed the request. The two files per family are the Latin subsets
- * as published on Google Fonts; they live in `public/fonts/`, are served from
- * this origin, and their license (SIL OFL 1.1) ships beside them as
- * `public/fonts/OFL.txt`.
- */
-
-@font-face {
-  font-family: 'Plus Jakarta Sans';
-  font-style: normal;
-  font-weight: 300 800;
-  font-display: swap;
-  src: url('/fonts/plus-jakarta-sans-latin-normal.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
-    U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
-@font-face {
-  font-family: 'Plus Jakarta Sans';
-  font-style: italic;
-  font-weight: 300 800;
-  font-display: swap;
-  src: url('/fonts/plus-jakarta-sans-latin-italic.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
-    U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
-@font-face {
-  font-family: 'Playfair Display';
-  font-style: normal;
-  font-weight: 400 900;
-  font-display: swap;
-  src: url('/fonts/playfair-display-latin-normal.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
-    U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
-@font-face {
-  font-family: 'Playfair Display';
-  font-style: italic;
-  font-weight: 400 900;
-  font-display: swap;
-  src: url('/fonts/playfair-display-latin-italic.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
-    U+2212, U+2215, U+FEFF, U+FFFD;
-}
 
 /* -------------------------------------------------------------------------- */
 /* Typography & Design Tokens                                                 */
@@ -74,14 +18,12 @@
     --bg-secondary: #F2F2F7;
     --bg-tertiary: #FFFFFF;
     --label: #000000;
-    /* Secondary and tertiary copy is normal-size text (11–17px) throughout the
-       app, so both tokens must clear 4.5:1 on white and on --bg-secondary,
-       which is where most of that copy sits. The old composites —
-       rgba(60, 60, 67, 0.6) ≈ 3.4:1 and rgba(60, 60, 67, 0.3) ≈ 1.8:1 — did
-       not. Same hue, opaque: #5F5F64 measures 6.3:1 on white and 5.7:1 on
-       #F2F2F7; #6B6B70 measures 5.3:1 and 4.8:1. */
-    --label-secondary: #5F5F64;
-    --label-tertiary: #6B6B70;
+    /* Contrast, not taste: the old 0.6 / 0.3 composites measured ~3.5:1 and
+       ~1.8:1 on white, under the 4.5:1 WCAG AA floor for the 11–17px copy that
+       uses them. These composites clear 4.5:1 on both white and --bg-secondary,
+       while keeping tertiary quieter than secondary. */
+    --label-secondary: rgba(60, 60, 67, 0.82);
+    --label-tertiary: rgba(60, 60, 67, 0.75);
     --separator: rgba(60, 60, 67, 0.29);
     --separator-opaque: #C6C6C8;
     --accent: #007AFF;
@@ -108,12 +50,11 @@
     --duration-sheet: 380ms;
   }
 
-  /* Increased contrast: a person who asks for more contrast gets opaque system
-     grays rather than the darkest accessible composites above. */
+  /* Increased contrast: tighter ratios for accessibility */
   @media (prefers-contrast: more) {
     :root {
-      --label-secondary: #3C3C43;
-      --label-tertiary: #51515A;
+      --label-secondary: rgba(60, 60, 67, 0.92);
+      --label-tertiary: rgba(60, 60, 67, 0.85);
       --separator: rgba(60, 60, 67, 0.5);
     }
   }

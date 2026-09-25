@@ -1,5 +1,5 @@
 /**
- * Snake_case ↔ camelCase mappers for Supabase database rows.
+ * Snake_case ↔ camelCase mappers for Firestore database documents.
  *
  * The database uses snake_case column names. The app uses camelCase.
  * These pure functions convert between the two representations.
@@ -43,7 +43,7 @@ function persistedDate(value: unknown, table: string, column: string): string {
       + `${value === undefined ? 'no value at all' : value === null ? 'NULL' : JSON.stringify(value)}. `
       + `Zeyks Book cannot compute a document's due date or age what it outstanding without it, `
       + `so the book was not opened. This means this project's schema is behind the deployed `
-      + `application: apply the repository's migrations (supabase/migrations/015_credit_terms.sql `
+      + `application: update the backend to the repository's current release `
       + `adds ${table}.${column}). Nothing has been changed.`,
     );
   }

@@ -1,7 +1,7 @@
 /**
  * Voiding: cloud request shaping and the pure state transition.
  *
- * Kept free of React and of the Supabase client so the wire contract with
+ * Kept free of React and of the Firebase SDK so the wire contract with
  * void_document (migration 008) and the guarantee that a void never deletes a
  * row can be tested directly.
  */

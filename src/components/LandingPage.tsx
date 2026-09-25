@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { PublicLayout } from './PublicLayout';
 import { Button } from './ui';
+import { bsToAd, formatAd } from '../lib/nepaliDate';
 
 const COMPARISON = [
   {
@@ -164,7 +165,7 @@ export const LandingPage: React.FC<{
               </p>
               <div className="mt-6 flex items-center justify-between rounded-xl border border-[var(--separator)] bg-[var(--bg-secondary)]/60 px-4 py-3 shadow-2xs">
                 <span className="text-[14px] font-semibold text-[var(--label)]">२०८३ श्रावण १</span>
-                <span className="text-[12px] text-[var(--label-tertiary)]">⇄ 2026 July 16</span>
+                <span className="text-[12px] text-[var(--label-tertiary)]">⇄ {formatAd(bsToAd(2083, 4, 1), 'long')}</span>
               </div>
             </div>
 
@@ -194,7 +195,7 @@ export const LandingPage: React.FC<{
               </p>
             </div>
 
-            {/* Bento Card 5: Self-Hosted on Supabase */}
+            {/* Bento Card 5: Self-Hosted on Firebase */}
             <div className="apple-card p-8">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--fill-secondary)] text-[var(--accent)] shadow-xs">
                 <Database size={24} strokeWidth={1.8} />

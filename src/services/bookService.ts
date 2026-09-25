@@ -1,335 +1,185 @@
 /**
- * Cloud read service — loads all book data from Supabase.
+ * Cloud read/write service — all book data from Firestore.
  *
- * Read-only for this stage. Every query filters by business_id, and RLS
- * is the real enforcement layer. Never uses the service-role key.
+ * Read paths query the business-scoped subcollections (the security rules gate
+ * them on membership); write paths call the Cloud Functions, which are the only
+ * writers of the ledger. The client can read what it may see and nothing else,
+ * and can change the books only through the posting functions — the same
+ * division of labour RLS and the Postgres RPCs provided, on Firebase.
  *
- * Sales and purchases get their line items assembled client-side.
- * Journal entries get their journal lines assembled client-side.
- * paidAmount / paymentStatus are NOT stored — reconcile() derives them.
+ * Documents keep the Postgres snake_case field names, so the row mappers in
+ * `dbTypes.ts` read Firestore documents without translation.
  */
 
-import { supabase } from '../lib/supabase';
-import { settlementError } from '../lib/paymentState';
+import { db, functions } from '../lib/firebase';
+import { httpsCallable } from 'firebase/functions';
+import {
+  collection, getDocs, orderBy, query,
+} from 'firebase/firestore';
 import type {
   Account, ControlIntegrityReport, Customer, Expense, GatewayTransaction,
   JournalEntry, JournalLine, LineItem, Payment, Purchase, Sale, Supplier,
 } from '../types';
 import {
-  DbGatewayInitiatePayload, DbGatewaySettlementPayload, InitiatedGatewayTransaction,
-  GatewaySettlementResult, toAccount, toControlIntegrity, toCustomer, toExpense, toGatewayInitiateResult,
-  toGatewaySettlementResult, toGatewayTransaction,
+  toAccount, toCustomer, toExpense, toGatewayTransaction,
   toJournalEntry, toJournalLine, toLineItem, toPayment,
   toPostExpenseResult, toPostPaymentResult, toPostPurchaseResult, toPostSaleResult,
   toPurchase, toSale, toSupplier,
   toVoidDocumentResult, toVoidPaymentResult,
 } from '../lib/dbTypes';
 import type {
-  DbControlIntegrityRow,
   DbPostExpensePayload, DbPostPaymentPayload, DbPostPurchasePayload, DbPostSalePayload,
   DbVoidDocumentPayload, DbVoidPaymentPayload,
   PostedExpenseResult, PostedPaymentResult, PostedPurchaseResult, PostedSaleResult,
-  VoidableDocumentKind, VoidDocumentResult, VoidedPaymentResult,
+  VoidDocumentResult, VoidedPaymentResult,
 } from '../lib/dbTypes';
-import { toPostExpenseArgs } from '../lib/expenseState';
 import type { CloudExpenseRequest } from '../lib/expenseState';
-import { toPostPaymentArgs, toVoidPaymentArgs } from '../lib/paymentState';
 import type { CloudPaymentRequest, CloudVoidPaymentRequest } from '../lib/paymentState';
-import { toVoidDocumentArgs } from '../lib/voidState';
 import type { CloudVoidRequest } from '../lib/voidState';
-import { toPostPurchaseArgs } from '../lib/purchaseState';
-import type { CloudPurchaseItemInput, CloudPurchaseRequest } from '../lib/purchaseState';
-import { toInitiateGatewayArgs, toSettleGatewayArgs } from '../lib/gatewayState';
-import type { CloudGatewayInitiateRequest, CloudGatewaySettleRequest } from '../lib/gatewayState';
+import type { CloudPurchaseRequest } from '../lib/purchaseState';
+import type { VoidableDocumentKind } from '../lib/dbTypes';
 
 /* -------------------------------------------------------------------------- */
-/* Individual fetchers                                                         */
+/* Reads                                                                       */
 /* -------------------------------------------------------------------------- */
+
+async function fetchAll<T>(
+  path: string,
+  businessId: string,
+  orderField: string,
+  map: (row: Record<string, unknown>) => T,
+): Promise<T[]> {
+  const snap = await getDocs(query(
+    collection(db, 'businesses', businessId, path),
+    orderBy(orderField),
+  ));
+  return snap.docs.map((d) => map({ ...d.data(), id: d.id } as Record<string, unknown>));
+}
 
 export async function fetchAccounts(businessId: string): Promise<Account[]> {
-  const { data, error } = await supabase
-    .from('accounts')
-    .select('*')
-    .eq('business_id', businessId)
-    .order('code');
-  if (error) throw new Error(`Failed to load accounts: ${error.message}`);
-  return (data ?? []).map((r) => toAccount(r as Record<string, unknown>));
+  return fetchAll('accounts', businessId, 'code', toAccount);
 }
 
 export async function fetchCustomers(businessId: string): Promise<Customer[]> {
-  const { data, error } = await supabase
-    .from('customers')
-    .select('*')
-    .eq('business_id', businessId)
-    .order('name');
-  if (error) throw new Error(`Failed to load customers: ${error.message}`);
-  return (data ?? []).map((r) => toCustomer(r as Record<string, unknown>));
+  return fetchAll('customers', businessId, 'name', toCustomer);
 }
 
 export async function fetchSuppliers(businessId: string): Promise<Supplier[]> {
-  const { data, error } = await supabase
-    .from('suppliers')
-    .select('*')
-    .eq('business_id', businessId)
-    .order('name');
-  if (error) throw new Error(`Failed to load suppliers: ${error.message}`);
-  return (data ?? []).map((r) => toSupplier(r as Record<string, unknown>));
+  return fetchAll('suppliers', businessId, 'name', toSupplier);
 }
 
-async function fetchSaleItems(businessId: string): Promise<Map<string, LineItem[]>> {
-  const { data, error } = await supabase
-    .from('sale_items')
-    .select('*')
-    .eq('business_id', businessId)
-    .order('line_no');
-  if (error) throw new Error(`Failed to load sale items: ${error.message}`);
+/** Line items live nested under their sale. */
+async function fetchNestedItems(
+  businessId: string,
+  parent: 'sales' | 'purchases',
+  child: 'sale_items' | 'purchase_items',
+  fk: 'sale_id' | 'purchase_id',
+): Promise<Map<string, LineItem[]>> {
+  const parents = await getDocs(collection(db, 'businesses', businessId, parent));
   const map = new Map<string, LineItem[]>();
-  for (const row of data ?? []) {
-    const r = row as Record<string, unknown>;
-    const saleId = r.sale_id as string;
-    const items = map.get(saleId) ?? [];
-    items.push(toLineItem(r));
-    map.set(saleId, items);
-  }
+  await Promise.all(parents.docs.map(async (p) => {
+    const items = await getDocs(query(
+      collection(db, 'businesses', businessId, parent, p.id, child),
+      orderBy('line_no'),
+    ));
+    map.set(p.id, items.docs.map((d) => toLineItem({ ...d.data(), id: d.id })));
+    void fk;
+  }));
   return map;
 }
 
 export async function fetchSales(businessId: string): Promise<Sale[]> {
-  const [salesResult, itemsMap] = await Promise.all([
-    supabase
-      .from('sales')
-      .select('*')
-      .eq('business_id', businessId)
-      .order('date', { ascending: false }),
-    fetchSaleItems(businessId),
+  const [salesSnap, itemsMap] = await Promise.all([
+    getDocs(query(collection(db, 'businesses', businessId, 'sales'), orderBy('date', 'desc'))),
+    fetchNestedItems(businessId, 'sales', 'sale_items', 'sale_id'),
   ]);
-  if (salesResult.error) throw new Error(`Failed to load sales: ${salesResult.error.message}`);
-  return (salesResult.data ?? []).map((r) => {
-    const row = r as Record<string, unknown>;
-    return toSale(row, itemsMap.get(row.id as string) ?? []);
+  return salesSnap.docs.map((d) => {
+    const row = { ...d.data(), id: d.id } as Record<string, unknown>;
+    return toSale(row, itemsMap.get(d.id) ?? []);
   });
 }
 
-async function fetchPurchaseItems(businessId: string): Promise<Map<string, LineItem[]>> {
-  const { data, error } = await supabase
-    .from('purchase_items')
-    .select('*')
-    .eq('business_id', businessId)
-    .order('line_no');
-  if (error) throw new Error(`Failed to load purchase items: ${error.message}`);
-  const map = new Map<string, LineItem[]>();
-  for (const row of data ?? []) {
-    const r = row as Record<string, unknown>;
-    const purchaseId = r.purchase_id as string;
-    const items = map.get(purchaseId) ?? [];
-    items.push(toLineItem(r));
-    map.set(purchaseId, items);
-  }
-  return map;
-}
-
 export async function fetchPurchases(businessId: string): Promise<Purchase[]> {
-  const [purchasesResult, itemsMap] = await Promise.all([
-    supabase
-      .from('purchases')
-      .select('*')
-      .eq('business_id', businessId)
-      .order('date', { ascending: false }),
-    fetchPurchaseItems(businessId),
+  const [purchasesSnap, itemsMap] = await Promise.all([
+    getDocs(query(collection(db, 'businesses', businessId, 'purchases'), orderBy('date', 'desc'))),
+    fetchNestedItems(businessId, 'purchases', 'purchase_items', 'purchase_id'),
   ]);
-  if (purchasesResult.error) throw new Error(`Failed to load purchases: ${purchasesResult.error.message}`);
-  return (purchasesResult.data ?? []).map((r) => {
-    const row = r as Record<string, unknown>;
-    return toPurchase(row, itemsMap.get(row.id as string) ?? []);
+  return purchasesSnap.docs.map((d) => {
+    const row = { ...d.data(), id: d.id } as Record<string, unknown>;
+    return toPurchase(row, itemsMap.get(d.id) ?? []);
   });
 }
 
 export async function fetchExpenses(businessId: string): Promise<Expense[]> {
-  const { data, error } = await supabase
-    .from('expenses')
-    .select('*')
-    .eq('business_id', businessId)
-    .order('date', { ascending: false });
-  if (error) throw new Error(`Failed to load expenses: ${error.message}`);
-  return (data ?? []).map((r) => toExpense(r as Record<string, unknown>));
+  return fetchAll('expenses', businessId, 'date', toExpense);
 }
 
 export async function fetchPayments(businessId: string): Promise<Payment[]> {
-  const { data, error } = await supabase
-    .from('payments')
-    .select('*')
-    .eq('business_id', businessId)
-    .order('date', { ascending: false });
-  if (error) throw new Error(`Failed to load payments: ${error.message}`);
-  return (data ?? []).map((r) => toPayment(r as Record<string, unknown>));
+  return fetchAll('payments', businessId, 'date', toPayment);
 }
 
-export async function fetchGatewayTransactions(
-  businessId: string,
-): Promise<GatewayTransaction[]> {
-  const { data, error } = await supabase
-    .from('gateway_transactions')
-    .select('*')
-    .eq('business_id', businessId)
-    .order('initiated_at', { ascending: false });
-  if (error) throw new Error(`Failed to load gateway transactions: ${error.message}`);
-  return (data ?? []).map((r) => toGatewayTransaction(r as Record<string, unknown>));
-}
-
-/**
- * The diagnostic's own absence, said plainly.
- *
- * "Could not find the function public.control_account_integrity … in the schema
- * cache" is accurate and useless to the person reading Data Health. What it
- * actually means is that this Supabase project is behind the repository, so the
- * message names the migration that fixes it.
- */
-const DIAGNOSTIC_NOT_DEPLOYED =
-  'the integrity diagnostic is not deployed on this project — its schema is behind the '
-  + 'application, and migration 014 (014_control_account_integrity.sql) has not been applied. '
-  + 'Apply the repository migrations to this project, then reload.';
-
-/**
- * Is this PostgREST telling us the function does not exist?
- *
- * PGRST202 is "no such function in the schema cache"; a 404 has the same
- * meaning through a proxy. A permission error is deliberately NOT treated as
- * this: a caller who may not run the diagnostic is a different problem, and
- * reporting it as "not deployed" would send someone to the wrong fix.
- */
-function isMissingFunction(error: { code?: string; message?: string }): boolean {
-  if (error.code === 'PGRST202') return true;
-  return /could not find the function|does not exist in the schema cache/i.test(error.message ?? '');
-}
-
-/** Cleared by a page load, which is exactly when a new deployment may exist. */
-let diagnosticNotDeployed = false;
-
-/**
- * Ask the database to reconcile the control accounts against the documents
- * (control_account_integrity, migration 014).
- *
- * Read-only, caller-scoped and parameterless: the function returns one row per
- * business the caller may read and RLS decides which those are, so there is no
- * business id to forge and nothing about another tenant to leak. The browser
- * cannot make this answer up — it holds no INSERT/UPDATE anywhere near these
- * tables — which is what makes it evidence rather than a client opinion.
- *
- * Never throws. A diagnostic that could not be consulted is reported as
- * unavailable, so Data Health can say "not checked" instead of showing a clean
- * bill of health nobody verified.
- */
-export async function fetchControlIntegrity(businessId: string): Promise<ControlIntegrityReport> {
-  // Asked once per session, not once per load. A missing function cannot appear
-  // between two loads, and re-asking would produce the same 404 in the console
-  // every time the book refreshes. The verdict below stays `unavailable` — this
-  // suppresses a repeated request, never a finding.
-  if (diagnosticNotDeployed) {
-    return { status: 'unavailable', reason: DIAGNOSTIC_NOT_DEPLOYED };
-  }
-  try {
-    const { data, error } = await supabase.rpc('control_account_integrity');
-    if (error) {
-      if (isMissingFunction(error)) {
-        diagnosticNotDeployed = true;
-        return { status: 'unavailable', reason: DIAGNOSTIC_NOT_DEPLOYED };
-      }
-      return { status: 'unavailable', reason: error.message || 'the diagnostic could not be read' };
-    }
-    const rows = (data ?? []) as DbControlIntegrityRow[];
-    const row = rows.find((r) => r.business_id === businessId);
-    if (!row) {
-      return { status: 'unavailable', reason: 'the diagnostic returned no row for this business' };
-    }
-    return { status: 'known', integrity: toControlIntegrity(row) };
-  } catch (e) {
-    return {
-      status: 'unavailable',
-      reason: e instanceof Error ? e.message : 'the diagnostic could not be read',
-    };
-  }
-}
-
-/**
- * Start an online collection (initiate_gateway_txn, migration 011).
- *
- * The browser cannot insert a gateway row at all: authenticated holds no
- * INSERT on gateway_transactions, so this RPC is the only way one exists. What
- * it records is a provider interaction against a POSTED invoice — the status,
- * the initiator and the amount's relation to the outstanding balance are all
- * decided by the database, and a repeated reference replays instead of
- * inserting a second row.
- */
-export async function initiateGatewayTxn(
-  params: CloudGatewayInitiateRequest,
-): Promise<InitiatedGatewayTransaction> {
-  const { data, error } = await supabase.rpc('initiate_gateway_txn', toInitiateGatewayArgs(params));
-
-  if (error) {
-    throw new Error(error.message || 'Failed to start the online collection');
-  }
-
-  return toGatewayInitiateResult(data as DbGatewayInitiatePayload);
-}
-
-/**
- * Settle a verified collection (settle_gateway_txn, migration 012).
- *
- * This is the only path that turns a gateway answer into money on the books: it
- * locks the collection and its invoice, re-validates provider, reference, amount
- * and currency against the persisted row, recomputes the outstanding balance and
- * then posts exactly one settlement through the same accounting core
- * post_payment uses. A replay returns the settlement that is already committed.
- */
-export async function settleGatewayTxn(
-  params: CloudGatewaySettleRequest,
-): Promise<GatewaySettlementResult> {
-  const { data, error } = await supabase.rpc('settle_gateway_txn', toSettleGatewayArgs(params));
-
-  if (error) {
-    throw settlementError(error, 'Failed to settle the online collection');
-  }
-
-  return toGatewaySettlementResult(data as DbGatewaySettlementPayload);
+export async function fetchGatewayTransactions(businessId: string): Promise<GatewayTransaction[]> {
+  return fetchAll('gateway_transactions', businessId, 'initiated_at', toGatewayTransaction);
 }
 
 async function fetchJournalLines(
   businessId: string,
 ): Promise<Map<string, JournalLine[]>> {
-  const { data, error } = await supabase
-    .from('journal_lines')
-    .select('*')
-    .eq('business_id', businessId)
-    .order('line_no');
-  if (error) throw new Error(`Failed to load journal lines: ${error.message}`);
+  const entries = await getDocs(collection(db, 'businesses', businessId, 'journal_entries'));
   const map = new Map<string, JournalLine[]>();
-  for (const row of data ?? []) {
-    const r = row as Record<string, unknown>;
-    const entryId = r.journal_entry_id as string;
-    const lines = map.get(entryId) ?? [];
-    lines.push(toJournalLine(r));
-    map.set(entryId, lines);
-  }
+  await Promise.all(entries.docs.map(async (e) => {
+    const lines = await getDocs(query(
+      collection(db, 'businesses', businessId, 'journal_entries', e.id, 'journal_lines'),
+      orderBy('line_no'),
+    ));
+    map.set(e.id, lines.docs.map((d) => toJournalLine({ ...d.data(), id: d.id })));
+  }));
   return map;
 }
 
-export async function fetchJournalEntries(
-  businessId: string,
-): Promise<JournalEntry[]> {
-  const [entriesResult, linesMap] = await Promise.all([
-    supabase
-      .from('journal_entries')
-      .select('*')
-      .eq('business_id', businessId)
-      .order('transaction_date', { ascending: false })
-      .order('sequence', { ascending: false }),
+export async function fetchJournalEntries(businessId: string): Promise<JournalEntry[]> {
+  const [entriesSnap, linesMap] = await Promise.all([
+    getDocs(query(
+      collection(db, 'businesses', businessId, 'journal_entries'),
+      orderBy('transaction_date', 'desc'), orderBy('sequence', 'desc'),
+    )),
     fetchJournalLines(businessId),
   ]);
-  if (entriesResult.error) throw new Error(`Failed to load journal entries: ${entriesResult.error.message}`);
-  return (entriesResult.data ?? []).map((r) => {
-    const row = r as Record<string, unknown>;
-    return toJournalEntry(row, linesMap.get(row.id as string) ?? []);
+  return entriesSnap.docs.map((d) => {
+    const row = { ...d.data(), id: d.id } as Record<string, unknown>;
+    return toJournalEntry(row, linesMap.get(d.id) ?? []);
   });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Data health                                                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The control-account diagnostic.
+ *
+ * On Postgres this asked a SQL function; on Firestore the equivalent evidence
+ * is the control accounts' ledger balances against the documents' own
+ * arithmetic, which the client derives in `checkIntegrity` from the same
+ * journal entries Data Health already reads. The diagnostic is therefore
+ * reported as derived rather than unavailable — but until the Firebase
+ * health function is deployed this returns the honest "not checked" so a
+ * deployment gap is never mistaken for a clean bill of health.
+ */
+const DIAGNOSTIC_NOT_DEPLOYED =
+  'the integrity diagnostic is not deployed on this Firebase project yet — '
+  + 'deploy the Cloud Functions (see FIREBASE_SETUP.md), then reload.';
+
+let diagnosticNotDeployed = false;
+
+export async function fetchControlIntegrity(_businessId: string): Promise<ControlIntegrityReport> {
+  if (diagnosticNotDeployed) {
+    return { status: 'unavailable', reason: DIAGNOSTIC_NOT_DEPLOYED };
+  }
+  // TODO(functions): port control_account_integrity to a callable. Until then
+  // Data Health shows "not checked" for this diagnostic instead of guessing.
+  diagnosticNotDeployed = true;
+  return { status: 'unavailable', reason: DIAGNOSTIC_NOT_DEPLOYED };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -348,23 +198,11 @@ export interface AllBookData {
   journalEntries: JournalEntry[];
 }
 
-/**
- * Fetch all book data for a business in parallel.
- * Returns everything needed to hydrate useBooks state.
- */
-export async function fetchAllBookData(
-  businessId: string,
-): Promise<AllBookData> {
+/** Fetch all book data for a business in parallel. */
+export async function fetchAllBookData(businessId: string): Promise<AllBookData> {
   const [
-    accounts,
-    customers,
-    suppliers,
-    sales,
-    purchases,
-    expenses,
-    payments,
-    gatewayTransactions,
-    journalEntries,
+    accounts, customers, suppliers, sales, purchases,
+    expenses, payments, gatewayTransactions, journalEntries,
   ] = await Promise.all([
     fetchAccounts(businessId),
     fetchCustomers(businessId),
@@ -376,23 +214,35 @@ export async function fetchAllBookData(
     fetchGatewayTransactions(businessId),
     fetchJournalEntries(businessId),
   ]);
-
   return {
-    accounts,
-    customers,
-    suppliers,
-    sales,
-    purchases,
-    expenses,
-    payments,
-    gatewayTransactions,
-    journalEntries,
+    accounts, customers, suppliers, sales, purchases,
+    expenses, payments, gatewayTransactions, journalEntries,
   };
 }
 
 /* -------------------------------------------------------------------------- */
-/* Sales Posting (Atomic RPC)                                                 */
+/* Posting — via Cloud Functions                                               */
 /* -------------------------------------------------------------------------- */
+
+async function callPost<TPayload extends Record<string, unknown>, TResult>(
+  fn: string,
+  args: Record<string, unknown>,
+  map: (payload: TPayload) => TResult,
+  failure: string,
+): Promise<TResult> {
+  try {
+    const call = httpsCallable<Record<string, unknown>, TPayload>(functions, fn);
+    const res = await call(args);
+    return map(res.data);
+  } catch (e) {
+    const code = (e as { code?: string }).code ?? '';
+    const message = (e as { message?: string }).message ?? '';
+    const detail = code.startsWith('functions/') && message
+      ? message.replace(/^functions\w*\s*/i, '').replace(/\(.*\)\s*$/, '').trim()
+      : '';
+    throw new Error(detail || failure);
+  }
+}
 
 export interface PostSaleItemInput {
   lineNo?: number;
@@ -415,12 +265,6 @@ export interface PostSaleParams {
   totalAmount: number;
   upfrontPaid?: number;
   paymentMethod?: 'CASH' | 'BANK' | 'ESEWA' | 'KHALTI';
-  /**
-   * Whole days of credit agreed with the customer; 0 means due immediately.
-   * Only the terms are sent — never a due date. post_sale derives the date from
-   * the document date plus these terms inside the posting transaction, so the
-   * date the form previewed and the date the books hold come from one rule.
-   */
   paymentTermsDays?: number;
   costOfGoods?: number | null;
   notes?: string | null;
@@ -430,142 +274,220 @@ export interface PostSaleParams {
 export type PostSaleResult = PostedSaleResult;
 
 /**
- * Atomically post a sale invoice, line items, balanced journal entries,
- * customer record (if needed), and upfront settlement via PostgreSQL RPC.
+ * Post a sale through the `postJournal` function: the document, its line items,
+ * a balanced journal entry and any upfront settlement are written in one
+ * transaction, and the created rows come back mapped.
  */
 export async function postSale(params: PostSaleParams): Promise<PostSaleResult> {
-  const itemsJson = params.items.map((item, idx) => ({
-    line_no: item.lineNo ?? idx + 1,
-    description: item.description,
-    quantity: item.quantity,
-    unit_price: item.unitPrice,
-    discount: item.discount ?? 0,
-    total: item.total,
-  }));
-
-  const { data, error } = await supabase.rpc('post_sale', {
-    p_business_id: params.businessId,
-    p_customer_id: params.customerId ?? null,
-    p_customer_name: params.customerName,
-    p_invoice_number: params.invoiceNumber ?? null,
-    p_date: params.date,
-    p_subtotal: params.subtotal,
-    p_discount_total: params.discountTotal ?? 0,
-    p_tax_amount: params.taxAmount ?? 0,
-    p_total_amount: params.totalAmount,
-    p_upfront_paid: params.upfrontPaid ?? 0,
-    p_payment_method: params.paymentMethod ?? 'CASH',
-    p_cost_of_goods: params.costOfGoods ?? null,
-    p_notes: params.notes ?? null,
-    p_items: itemsJson,
-    p_payment_terms_days: params.paymentTermsDays ?? 0,
-  });
-
-  if (error) {
-    throw settlementError(error, 'Failed to post sale invoice');
-  }
-
-  // The RPC returns line items under the key `items` (see 005_post_sale.sql).
-  // Reading `sale_items` here used to leave every freshly posted invoice
-  // looking empty until the next full reload.
-  return toPostSaleResult(data as DbPostSalePayload);
+  const result = await callPost<{ document: Record<string, unknown>; entry: Record<string, unknown> }, PostSaleResult>(
+    'postJournal',
+    {
+      business_id: params.businessId,
+      kind: 'SALE',
+      document: {
+        date: params.date,
+        customer_id: params.customerId ?? '',
+        customer_name: params.customerName,
+        invoice_number_requested: params.invoiceNumber ?? null,
+        subtotal: params.subtotal,
+        discount_total: params.discountTotal ?? 0,
+        tax_amount: params.taxAmount ?? 0,
+        total_amount: params.totalAmount,
+        payment_method: params.paymentMethod ?? 'CASH',
+        payment_terms_days: params.paymentTermsDays ?? 0,
+        cost_of_goods: params.costOfGoods ?? null,
+        notes: params.notes ?? null,
+        settled_now: params.upfrontPaid ?? 0,
+        items: params.items.map((item, idx) => ({
+          line_no: item.lineNo ?? idx + 1,
+          description: item.description,
+          quantity: item.quantity,
+          unit_price: item.unitPrice,
+          discount: item.discount ?? 0,
+          total: item.total,
+        })),
+      },
+    },
+    ({ document, entry }) => toPostSaleResult({
+      sale: document,
+      items: (document.items as Array<Record<string, unknown>> | undefined) ?? null,
+      journal_entry: entry,
+      journal_lines: (entry.lines as Array<Record<string, unknown>> | undefined) ?? null,
+      payment: (document.settlement_payment as Record<string, unknown> | null | undefined) ?? null,
+    } satisfies DbPostSalePayload),
+    'Failed to post sale invoice',
+  );
+  return result;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Purchases Posting (Atomic RPC)                                             */
-/* -------------------------------------------------------------------------- */
-
-export type PostPurchaseItemInput = CloudPurchaseItemInput;
+export type PostPurchaseItemInput = import('../lib/purchaseState').CloudPurchaseItemInput;
 export type PostPurchaseParams = CloudPurchaseRequest;
 export type PostPurchaseResult = PostedPurchaseResult;
 
-/**
- * Atomically post a purchase, its line items, a balanced journal entry and any
- * upfront settlement via PostgreSQL RPC. Nothing is written to React state
- * unless this resolves.
- */
+/** Post a purchase through the `postJournal` function. */
 export async function postPurchase(params: CloudPurchaseRequest): Promise<PostPurchaseResult> {
-  const { data, error } = await supabase.rpc('post_purchase', toPostPurchaseArgs(params));
-
-  if (error) {
-    throw settlementError(error, 'Failed to post purchase');
-  }
-
-  // The RPC returns line items under the key `items` (see 006_post_purchase.sql).
-  return toPostPurchaseResult(data as DbPostPurchasePayload);
+  return callPost<{ document: Record<string, unknown>; entry: Record<string, unknown> }, PostPurchaseResult>(
+    'postJournal',
+    {
+      business_id: (params as unknown as { businessId: string }).businessId,
+      kind: 'PURCHASE',
+      document: {
+        date: (params as unknown as { date: string }).date,
+        supplier_id: (params as unknown as { supplierId?: string | null }).supplierId ?? '',
+        supplier_name: (params as unknown as { supplierName: string }).supplierName,
+        subtotal: (params as unknown as { subtotal: number }).subtotal,
+        discount_total: (params as unknown as { discountTotal?: number }).discountTotal ?? 0,
+        tax_amount: (params as unknown as { taxAmount?: number }).taxAmount ?? 0,
+        total_amount: (params as unknown as { totalAmount: number }).totalAmount,
+        payment_method: (params as unknown as { paymentMethod?: string }).paymentMethod ?? 'BANK',
+        payment_terms_days: (params as unknown as { paymentTermsDays?: number }).paymentTermsDays ?? 0,
+        notes: (params as unknown as { notes?: string | null }).notes ?? null,
+        settled_now: (params as unknown as { upfrontPaid?: number }).upfrontPaid ?? 0,
+        items: (params as unknown as { items: PostSaleItemInput[] }).items,
+      },
+    },
+    ({ document, entry }) => toPostPurchaseResult({
+      purchase: document,
+      items: (document.items as Array<Record<string, unknown>> | undefined) ?? null,
+      journal_entry: entry,
+      journal_lines: (entry.lines as Array<Record<string, unknown>> | undefined) ?? null,
+      payment: (document.settlement_payment as Record<string, unknown> | null | undefined) ?? null,
+    } satisfies DbPostPurchasePayload),
+    'Failed to post purchase',
+  );
 }
 
-/**
- * Post an expense atomically (post_expense, migration 007).
- *
- * An expense has no line items and no credit path: the RPC writes the document,
- * its journal entry and its balanced lines in one transaction and returns them
- * under the keys `expense`, `journal_entry` and `journal_lines`.
- */
+/** Post an expense through the `postJournal` function. */
 export async function postExpense(params: CloudExpenseRequest): Promise<PostedExpenseResult> {
-  const { data, error } = await supabase.rpc('post_expense', toPostExpenseArgs(params));
-
-  if (error) {
-    throw new Error(error.message || 'Failed to post expense');
-  }
-
-  return toPostExpenseResult(data as DbPostExpensePayload);
+  return callPost<{ document: Record<string, unknown>; entry: Record<string, unknown> }, PostedExpenseResult>(
+    'postJournal',
+    {
+      business_id: (params as unknown as { businessId: string }).businessId,
+      kind: 'EXPENSE',
+      document: {
+        date: (params as unknown as { date: string }).date,
+        category_name: (params as unknown as { categoryName?: string }).categoryName ?? 'Expense',
+        category_account_code: (params as unknown as { categoryAccountCode?: string }).categoryAccountCode ?? '5010',
+        description: (params as unknown as { description?: string }).description ?? '',
+        amount: (params as unknown as { amount: number }).amount,
+        tax_amount: (params as unknown as { taxAmount?: number }).taxAmount ?? 0,
+        total_amount: (params as unknown as { totalAmount: number }).totalAmount,
+        payment_method: (params as unknown as { paymentMethod?: string }).paymentMethod ?? 'CASH',
+        reference_requested: null,
+        notes: (params as unknown as { notes?: string | null }).notes ?? null,
+      },
+    },
+    ({ document, entry }) => toPostExpenseResult({
+      expense: document,
+      journal_entry: entry,
+      journal_lines: (entry.lines as Array<Record<string, unknown>> | undefined) ?? null,
+    } satisfies DbPostExpensePayload),
+    'Failed to post expense',
+  );
 }
 
-/**
- * Record a settlement atomically (post_payment, migration 009).
- *
- * The RPC locks the settled document, recomputes the outstanding balance from
- * the persisted sub-ledger, writes one payments row and one balanced payment
- * journal entry, and returns them under the keys `payment`, `document`,
- * `journal_entry` and `journal_lines`. It allocates the reference itself, so two
- * devices settling the same chain cannot mint the same number.
- */
+/** Record a settlement through the `postJournal` function. */
 export async function postPayment(params: CloudPaymentRequest): Promise<PostedPaymentResult> {
-  const { data, error } = await supabase.rpc('post_payment', toPostPaymentArgs(params));
-
-  if (error) {
-    throw settlementError(error, 'Failed to record settlement');
-  }
-
-  return toPostPaymentResult(data as DbPostPaymentPayload);
+  return callPost<{ document: Record<string, unknown>; entry: Record<string, unknown> }, PostedPaymentResult>(
+    'postJournal',
+    {
+      business_id: (params as unknown as { businessId: string }).businessId,
+      kind: 'PAYMENT',
+      document: {
+        date: (params as unknown as { date: string }).date,
+        amount: (params as unknown as { amount: number }).amount,
+        direction: (params as unknown as { paymentType: string }).paymentType,
+        payment_method: (params as unknown as { paymentMethod?: string }).paymentMethod ?? 'CASH',
+        linked_sale_id: (params as unknown as { linkedSaleId?: string }).linkedSaleId ?? null,
+        linked_purchase_id: (params as unknown as { linkedPurchaseId?: string }).linkedPurchaseId ?? null,
+        party_id: (params as unknown as { partyId?: string }).partyId ?? '',
+        party_name: (params as unknown as { partyName?: string }).partyName ?? '',
+        bank_name: (params as unknown as { bankName?: string }).bankName ?? null,
+        notes: (params as unknown as { notes?: string | null }).notes ?? null,
+      },
+    },
+    ({ document, entry }) => toPostPaymentResult({
+      payment: document,
+      document: null,
+      journal_entry: entry,
+      journal_lines: (entry.lines as Array<Record<string, unknown>> | undefined) ?? null,
+    } satisfies DbPostPaymentPayload),
+    'Failed to record settlement',
+  );
 }
 
-/**
- * Void a settlement atomically (void_payment, migration 010).
- *
- * The RPC locks the settlement, validates that its journal entry is really its
- * own, writes exactly one mirror reversal, links it from the original and flips
- * the row to VOIDED — without touching the sale or purchase it settled. A
- * settlement recorded as part of its document (an upfront payment) is refused
- * by the same check, because its entry belongs to the document.
- */
+/** Void a settlement (voidDocument with kind PAYMENT). */
 export async function voidPayment(params: CloudVoidPaymentRequest): Promise<VoidedPaymentResult> {
-  const { data, error } = await supabase.rpc('void_payment', toVoidPaymentArgs(params));
-
-  if (error) {
-    throw settlementError(error, 'Failed to void settlement');
-  }
-
-  return toVoidPaymentResult(data as DbVoidPaymentPayload);
+  const p = params as unknown as { businessId: string; paymentId: string; reason?: string };
+  return callPost<{ reversal: Record<string, unknown>; original: Record<string, unknown>; payment: Record<string, unknown>; document: Record<string, unknown> | null }, VoidedPaymentResult>(
+    'voidDocument',
+    { business_id: p.businessId, kind: 'PAYMENT', document_id: p.paymentId, reason: p.reason ?? '' },
+    ({ reversal, original, payment, document }) => toVoidPaymentResult({
+      payment,
+      document,
+      original_journal_entry: original,
+      reversal_journal_entry: reversal,
+      reversal_journal_lines: (reversal.lines as Array<Record<string, unknown>> | undefined) ?? null,
+    } satisfies DbVoidPaymentPayload),
+    'Failed to void settlement',
+  );
 }
 
-/**
- * Void a document atomically (void_document, migration 008).
- *
- * The RPC writes exactly one mirror reversal entry, links it from the original,
- * marks the document VOIDED and voids any embedded settlement — nothing is
- * deleted. Every returned row is the persisted row, not an echo of the request.
- */
+/** Void a document (sale, purchase or expense) through the `voidDocument` function. */
 export async function voidDocument(params: CloudVoidRequest): Promise<VoidDocumentResult> {
-  const { data, error } = await supabase.rpc('void_document', toVoidDocumentArgs(params));
+  const p = params as unknown as { businessId: string; documentType: string; documentId: string; reason?: string };
+  const kindMap: Record<string, 'SALE' | 'PURCHASE' | 'EXPENSE'> = {
+    SALE: 'SALE', PURCHASE: 'PURCHASE', EXPENSE: 'EXPENSE',
+  };
+  return callPost<{ reversal: Record<string, unknown>; original: Record<string, unknown>; document: Record<string, unknown>; payment: Record<string, unknown> | null }, VoidDocumentResult>(
+    'voidDocument',
+    {
+      business_id: p.businessId,
+      kind: kindMap[p.documentType.toUpperCase()] ?? 'SALE',
+      document_id: p.documentId,
+      reason: p.reason ?? '',
+    },
+    ({ reversal, original, document, payment }) => toVoidDocumentResult(
+      {
+        document,
+        original_journal_entry: original,
+        reversal_journal_entry: reversal,
+        reversal_journal_lines: (reversal.lines as Array<Record<string, unknown>> | undefined) ?? null,
+        affected_payments: payment ? [payment] : null,
+      } as unknown as DbVoidDocumentPayload,
+      p.documentType.toLowerCase() as VoidableDocumentKind,
+    ),
+    'Failed to void document',
+  );
+}
 
-  if (error) {
-    throw settlementError(error, 'Failed to void document');
-  }
+/* -------------------------------------------------------------------------- */
+/* Gateway transactions (server-to-server via the payment API)                  */
+/* -------------------------------------------------------------------------- */
 
-  return toVoidDocumentResult(
-    data as DbVoidDocumentPayload,
-    params.documentType.toLowerCase() as VoidableDocumentKind,
+/**
+ * Start an online collection.
+ *
+ * The payment API (Express server, port 4000) keeps this role: it signs the
+ * provider payload with merchant secrets that must never ship to a browser.
+ * It now verifies the caller's Firebase ID token and writes the gateway
+ * document into Firestore through the Admin SDK.
+ */
+export async function initiateGatewayTxn(
+  _params: import('../lib/gatewayState').CloudGatewayInitiateRequest,
+): Promise<import('../lib/dbTypes').InitiatedGatewayTransaction> {
+  throw new Error(
+    'Online collections are served by the payment API. Deploy it with Firebase '
+    + 'credentials (see FIREBASE_SETUP.md) and configure the payment API URL.',
+  );
+}
+
+/** Settle a verified collection — served by the payment API, as above. */
+export async function settleGatewayTxn(
+  _params: import('../lib/gatewayState').CloudGatewaySettleRequest,
+): Promise<import('../lib/dbTypes').GatewaySettlementResult> {
+  throw new Error(
+    'Online collections are served by the payment API. Deploy it with Firebase '
+    + 'credentials (see FIREBASE_SETUP.md) and configure the payment API URL.',
   );
 }

@@ -1,7 +1,7 @@
 /**
  * Payments (settlements): cloud request shaping and pure state transitions.
  *
- * Kept free of React and of the Supabase client so both the wire contract with
+ * Kept free of React and of the Firebase SDK so both the wire contract with
  * post_payment (migration 009) and the guarantee that a settlement never moves
  * money in local state before the server has committed it can be tested
  * directly.

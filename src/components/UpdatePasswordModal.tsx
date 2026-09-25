@@ -3,7 +3,7 @@ import { updatePassword } from '../services/authService';
 import { Button, Callout, Field, inputClass, Modal } from './ui';
 
 /**
- * Shown when Supabase raises PASSWORD_RECOVERY (the user followed a reset
+ * Shown when Firebase raises PASSWORD_RECOVERY (the user followed a reset
  * link). Setting the new password uses the recovery session; finishing or
  * cancelling signs out so the app returns to a clean sign-in.
  */

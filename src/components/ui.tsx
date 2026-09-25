@@ -1,6 +1,5 @@
-import React, { useCallback, useId, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
-import { useDialogFocus } from '../lib/dialogFocus';
 import { formatNpr } from '../lib/money';
 import { adToBs, bsToAd, bsDaysInMonth, BS_MONTHS, formatAd, todayNpt, BS_MIN_YEAR, BS_MAX_YEAR } from '../lib/nepaliDate';
 
@@ -16,12 +15,76 @@ export const Money: React.FC<{
     lg: 'text-[20px] font-semibold tracking-tight', xl: 'text-[28px] lg:text-[34px] font-semibold tracking-tight',
   };
   const tone = muted ? 'text-[var(--label-secondary)]' : value < 0 ? 'text-[var(--destructive)]' : 'text-[var(--label)]';
-  return <span className={`tabular-nums ${sizes[size]} ${tone} ${className}`}>{formatNpr(value, symbol)}</span>;
+  return <span className={`whitespace-nowrap tabular-nums ${sizes[size]} ${tone} ${className}`}>{formatNpr(value, symbol)}</span>;
 };
 
 /* -------------------------------------------------------------------------- */
 /* Modal — focus trap, Escape, focus restore, aria wiring                      */
 /* -------------------------------------------------------------------------- */
+
+const FOCUSABLE = 'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
+/**
+ * Shared dialog focus behaviour.
+ *
+ * Place focus inside the container on open, trap Tab within it, restore focus
+ * to whatever was focused before on close, and (optionally) lock body scroll.
+ * Extracted so `Modal` and the document print overlay cannot drift apart in how
+ * they behave: both declare `aria-modal`, so both must actually trap.
+ */
+export function useDialogFocus({
+  isOpen,
+  panelRef,
+  onEscape,
+  lockScroll = true,
+}: {
+  isOpen: boolean;
+  panelRef: React.RefObject<HTMLElement | null>;
+  onEscape?: () => void;
+  lockScroll?: boolean;
+}): void {
+  const restoreTo = useRef<HTMLElement | null>(null);
+  const onEscapeRef = useRef(onEscape);
+  // Keep the latest callback without restarting the effect on every render.
+  // Restarting it on every keystroke steals focus from the text inputs, because
+  // many callers pass an inline onClose callback.
+  onEscapeRef.current = onEscape;
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    restoreTo.current = document.activeElement as HTMLElement;
+
+    // Preserve autofocus (for example, the first field in the setup dialog).
+    // Only move focus when nothing inside the dialog is already focused.
+    const active = document.activeElement as HTMLElement | null;
+    const alreadyFocusedInside = Boolean(active && panelRef.current?.contains(active) && active.matches(FOCUSABLE));
+    if (!alreadyFocusedInside) {
+      const first = panelRef.current?.querySelector<HTMLElement>(FOCUSABLE);
+      (first ?? panelRef.current)?.focus();
+    }
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopPropagation(); onEscapeRef.current?.(); return; }
+      if (e.key !== 'Tab' || !panelRef.current) return;
+      const items = Array.from(panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE))
+        .filter((el) => el.offsetParent !== null);
+      if (items.length === 0) return;
+      const first_ = items[0]!;
+      const last = items[items.length - 1]!;
+      if (e.shiftKey && document.activeElement === first_) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first_.focus(); }
+    };
+
+    document.addEventListener('keydown', onKeyDown, true);
+    const previousOverflow = document.body.style.overflow;
+    if (lockScroll) document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKeyDown, true);
+      if (lockScroll) document.body.style.overflow = previousOverflow;
+      restoreTo.current?.focus();
+    };
+  }, [isOpen, lockScroll, panelRef]);
+}
 
 export const Modal: React.FC<{
   isOpen: boolean; onClose: () => void; title: string; description?: string;
@@ -37,10 +100,11 @@ export const Modal: React.FC<{
   const titleId = useId();
   const descId = useId();
 
-  // Focus placement, the Tab cycle, Escape and the trip back to the trigger all
-  // live in one place — lib/dialogFocus.ts — which the printable-document
-  // overlay shares. `aria-modal="true"` is a promise the keyboard has to keep.
-  useDialogFocus({ isOpen, panel, onEscape: dismissible ? onClose : null });
+  useDialogFocus({
+    isOpen,
+    panelRef: panel,
+    onEscape: dismissible ? onClose : undefined,
+  });
 
   if (!isOpen) return null;
   const widths = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-3xl' };

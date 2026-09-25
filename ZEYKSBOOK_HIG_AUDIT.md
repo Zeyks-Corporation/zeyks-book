@@ -36,7 +36,7 @@
 |-----------|--------|-------|
 | **Purpose** | ✅ PASS | Landing: "Books that reconcile, in the calendar Nepal actually uses." Immediately understandable. Primary task obvious. No ornamental UI. |
 | **Agency** | ⚠️ PARTIAL | Has sign in, but landing doesn't show obvious back/cancel/undo patterns. Need to audit app interior. |
-| **Responsibility** | ✅ PASS | Excellent: "Your books live in your own Supabase project. Nothing on this page reads them." Transparent, privacy-first. |
+| **Responsibility** | ✅ PASS | Excellent: "Your books live in your own Firebase project. Nothing on this page reads them." Transparent, privacy-first. |
 | **Familiarity** | ⚠️ PARTIAL | Uses standard web patterns, but not Apple platform patterns (no large titles, no tab bar). |
 | **Flexibility** | ❌ FAIL | Only light mode. No dark, no Dynamic Type, no RTL, `color-scheme: light` hardcoded. |
 | **Simplicity** | ✅ PASS | Very simple, progressive disclosure good. |
@@ -238,5 +238,5 @@ FINAL: 5.2/10 Apple-likeness
 Want me to generate a **fixed version** of your landing page in pure Apple HIG style using the Ultimate Guide tokens? I can produce a single HTML file you can drop in.
 
 ---
-**Audit artifacts:** CSS analyzed: 38KB Tailwind v4, zinc palette, Plus Jakarta Sans. JS: React SPA, Supabase auth.
+**Audit artifacts:** CSS analyzed: 38KB Tailwind v4, zinc palette, Plus Jakarta Sans. JS: React SPA, Firebase auth.
 **References:** APPLE_HIG_ULTIMATE_AGENT_GUIDE.md Section 3-10, 18-19 Quality Gate.

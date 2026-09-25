@@ -3,6 +3,7 @@ import { CheckCircle2, Plus, XCircle } from 'lucide-react';
 import { ViewTab } from '../types';
 import { useDemoBooks } from '../state/useDemoBooks';
 import { Sidebar, Header } from './Shell';
+import { HealthView } from './HealthView';
 import { DashboardView } from './DashboardView';
 import { DocumentsView } from './DocumentsView';
 import { ReportsView } from './ReportsView';
@@ -140,7 +141,6 @@ export const DemoPage: React.FC<{
           isOpenMobile={mobileSidebarOpen}
           onCloseMobile={() => setMobileSidebarOpen(false)}
           issueCount={integrityIssues.filter((i) => i.severity === 'ERROR').length}
-          hideTabs={['health']}
         />
 
         <div className="lg:pl-60">
@@ -158,8 +158,8 @@ export const DemoPage: React.FC<{
                 onRangeChange={updateRange}
                 calendar={calendar}
                 onQuickAction={openQuickAction}
-                onGoToHealth={() => {}}
-                hideHealthBanner={true}
+                onGoToHealth={() => setActiveTab('health')}
+                hideHealthBanner={false}
               />
             )}
             {currentDocKind && (
@@ -183,6 +183,9 @@ export const DemoPage: React.FC<{
                 onRangeChange={updateRange}
                 calendar={calendar}
               />
+            )}
+            {activeTab === 'health' && (
+              <HealthView books={books} onDone={notify} />
             )}
             {activeTab === 'settings' && (
               <SettingsView

@@ -5,7 +5,7 @@
  * settlements (`post_payment`), voiding (`void_document` for documents,
  * `void_payment` for settlements) and online collection
  * (`initiate_gateway_txn` + `settle_gateway_txn` for eSewa/Khalti) are backed by
- * Supabase RPCs. Chart-of-accounts edits and backup restore have no RPC yet, so
+ * Cloud Functions / Firestore. Chart-of-accounts edits and backup restore have no Function yet, so
  * their write paths would change React state only and be lost on refresh. Those
  * write paths are disabled in cloud mode until their RPCs ship.
  *

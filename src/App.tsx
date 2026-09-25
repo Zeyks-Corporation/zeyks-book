@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, Home, Plus, XCircle } from 'lucide-react';
-import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
+import type { User } from 'firebase/auth';
 import { UserProfile, ViewTab } from './types';
 import { useBooks } from './state/useBooks';
 import { Sidebar, Header } from './components/Shell';
@@ -26,13 +26,13 @@ import { NotFoundView } from './components/NotFoundView';
 import { gateway, GatewayConfig, takePending } from './services/paymentGateway';
 import { useRoute } from './lib/useRoute';
 import { parseRoute, pathForTab, redirectFor } from './lib/routes';
+import { TITLES, applyPageMetadata, metadataForPath } from './lib/pageMetadata';
 import { readCalendarPreference, writeCalendarPreference } from './lib/preferences';
 import type { CalendarPreference } from './lib/preferences';
 import {
   PAYMENT_API_DISABLED_MESSAGE, onlineCollectionAvailable, paymentApiConfigured,
 } from './lib/paymentApi';
 import { todayNpt } from './lib/nepaliDate';
-import { applyPageMeta } from './lib/pageMeta';
 import * as authService from './services/authService';
 import * as businessService from './services/businessService';
 import {
@@ -46,11 +46,6 @@ import type { Capability } from './lib/capabilities';
 import { isCurrentEpoch, nextEpoch } from './lib/session';
 import type { SignOutKind } from './lib/session';
 
-const TITLES: Record<ViewTab, string> = {
-  dashboard: 'Dashboard', sales: 'Sales', purchases: 'Purchases', expenses: 'Expenses',
-  payments: 'Payments', reports: 'Reports', health: 'Data health', settings: 'Settings',
-};
-
 /** Which capability each transaction kind needs before it can be recorded. */
 const CAPABILITY_FOR_TXN: Record<TxnKind, Capability> = {
   sale: 'sales', purchase: 'purchases', expense: 'expenses', payment: 'payments',
@@ -61,12 +56,12 @@ const TXN_LABELS: Record<TxnKind, string> = {
   expense: 'Recording an expense', payment: 'Recording a settlement',
 };
 
-function profileFromAuthUser(authUser: Session['user']): UserProfile {
+function profileFromAuthUser(authUser: User): UserProfile {
   return {
-    id: authUser.id,
+    id: authUser.uid,
     email: authUser.email ?? '',
-    fullName: (authUser.user_metadata?.full_name as string) || authUser.email?.split('@')[0] || '',
-    createdAt: authUser.created_at ?? new Date().toISOString(),
+    fullName: (authUser.displayName as string | null) || authUser.email?.split('@')[0] || '',
+    createdAt: authUser.metadata?.creationTime ?? new Date().toISOString(),
   };
 }
 
@@ -195,7 +190,7 @@ export default function App() {
   const [membership, setMembership] = useState<MembershipState>({ kind: 'pending' });
   const [dataState, setDataState] = useState<DataState>({ kind: 'idle' });
   const [recovery, setRecovery] = useState(false);
-  const [authEvent, setAuthEvent] = useState<{ action: AuthAction; session: Session | null; key: number } | null>(null);
+  const [authEvent, setAuthEvent] = useState<{ action: AuthAction; session: { user: User } | null; key: number } | null>(null);
   const [resolving, setResolving] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   /**
@@ -229,15 +224,12 @@ export default function App() {
   const { path, navigate } = useRoute();
   const route = useMemo(() => parseRoute(path), [path]);
 
-  /**
-   * The document's title, description and canonical URL follow the route.
-   *
-   * The static documents the build writes (scripts/prerender.mjs) carry the
-   * right head for a crawler that does not run JavaScript; this keeps the same
-   * three facts correct in the tab, and for one that does. Private screens lose
-   * the canonical link and gain `noindex`.
-   */
-  useEffect(() => { applyPageMeta(route); }, [route]);
+  // The document's title, description and canonical URL follow the route, so
+  // each public page describes itself instead of all of them claiming the home
+  // page. Signed-in screens are marked noindex here as well as in robots.txt.
+  useEffect(() => {
+    applyPageMetadata(metadataForPath(path));
+  }, [path]);
   const [range, setRange] = useState(defaultRange);
   const [rangeTouched, setRangeTouched] = useState(false);
   /**
@@ -355,7 +347,7 @@ export default function App() {
       setAuthEvent({ action: 'bootstrap', session, key: Date.now() });
     })();
 
-    const unsubscribe = authService.onAuthStateChange((event: AuthChangeEvent, session) => {
+    const unsubscribe = authService.onAuthStateChange((event: string, session) => {
       if (!mounted) return;
       if (event === 'INITIAL_SESSION') return; // covered by the getSession() above
       const action = resolveAuthEvent(event);
@@ -377,7 +369,7 @@ export default function App() {
     void (async () => {
       const { action, session } = authEvent;
 
-      // The event is the safety net: if Supabase ends the session by itself
+      // The event is the safety net: if Firebase ends the session by itself
       // (expiry, revocation elsewhere), the state is cleared the same way as it
       // is for a sign-out the person asked for.
       if (action === 'sign-out') {
@@ -404,7 +396,7 @@ export default function App() {
       setSessionNotice(null);
       try {
         const authUser = session.user;
-        const { profile } = await authService.getProfile(authUser.id);
+        const { profile } = await authService.getProfile(authUser.uid);
         if (cancelled) return;
         setUser(profile ?? profileFromAuthUser(authUser));
         setSessionPhase('authenticated');
@@ -776,6 +768,7 @@ export default function App() {
         <Header
           title={notFoundPath ? 'Not found' : TITLES[activeTab]}
           onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
+          mobileSidebarOpen={mobileSidebarOpen}
           actions={headerActions}
         />
 

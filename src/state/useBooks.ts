@@ -702,7 +702,7 @@ export function useBooks() {
   /**
    * Clear the in-memory application state.
    *
-   * Used on sign-out only — it never touches Supabase and is never presented
+   * Used on sign-out only — it never touches Firestore and is never presented
    * as "erasing" the cloud books.
    */
   const resetAll = useCallback(() => {
@@ -714,7 +714,7 @@ export function useBooks() {
   }, []);
 
   /**
-   * Persist business settings through Supabase (RLS enforces OWNER).
+   * Persist business settings through Firestore (Security Rules enforce OWNER).
    *
    * The database row returned by the update becomes the canonical state, so a
    * rejected write (for example a non-owner) never leaves the UI claiming the

@@ -14,11 +14,6 @@ dist/
 .env.*
 !.env.example
 
-# Supabase CLI machine state: local runtime secrets (anon/service/JWT), the
-# linked remote project ref and pooler URL. Regenerated per machine by
-# `supabase start` — never source of truth, never committed.
-supabase/.temp/
-
 # Tooling
 .vercel/
 .freebuff/

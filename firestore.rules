@@ -1,0 +1,157 @@
+rules_version = '2';
+
+// Zeyks Book — Firestore security rules.
+//
+// The database is the security boundary, exactly as Row Level Security was on
+// Postgres. Three invariants:
+//
+//   1. A person reads and writes only the businesses they are a member of.
+//      Membership lives in `businessMemberships/{uid}_{businessId}` and is
+//      created exclusively by the `createBusiness` / invite Cloud Functions.
+//   2. Financial truth is append-only. Journal entries are written by the
+//      `postJournal` function (which enforces Dr = Cr, the open fiscal year and
+//      the posting rules); no client can update or delete one. Corrections are
+//      posted as reversals — also through the function.
+//   3. Sign-in state is invisible to clients. `otpChallenges` holds hashed
+//      codes with attempt counters; no client role reads or writes it.
+//
+// Cloud Functions run as the Admin SDK, which bypasses these rules entirely.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* ------------------------------------------------------------------ */
+    /* Helpers                                                            */
+    /* ------------------------------------------------------------------ */
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isMember(businessId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/businessMemberships/$(request.auth.uid + '_' + businessId));
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Identity                                                           */
+    /* ------------------------------------------------------------------ */
+
+    // A user's profile document: readable by its owner, writable only through
+    // functions and the Auth trigger (client edits go via their own profile
+    // fields, so this stays read-only for the client).
+    match /users/{uid} {
+      allow get, list: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* OTP sign-in                                                        */
+    /* ------------------------------------------------------------------ */
+
+    // Hashed codes, expiries and attempt counters. Clients never touch this
+    // collection; the callables are the only door.
+    match /otpChallenges/{id} {
+      allow read, write: if false;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Businesses                                                         */
+    /* ------------------------------------------------------------------ */
+
+    match /businesses/{businessId} {
+      allow get, list: if isMember(businessId);
+      // Settings changes (name, VAT registration, fiscal month, …) go through
+      // the `updateBusiness` callable so the server can validate them; direct
+      // client writes are refused.
+      allow create, update, delete: if false;
+
+      // Business-owned documents. All reads are membership-gated; all writes
+      // go through Cloud Functions (posting, voiding, settlement). Nothing
+      // financial is ever deleted.
+      match /accounts/{accountId} {
+        allow get, list: if isMember(businessId);
+        allow write: if false;
+      }
+      match /customers/{customerId} {
+        allow get, list: if isMember(businessId);
+        allow write: if false;
+      }
+      match /suppliers/{supplierId} {
+        allow get, list: if isMember(businessId);
+        allow write: if false;
+      }
+      // Source documents under the domain names the app has always used.
+      // Sales and purchases carry nested line-item collections, which inherit
+      // this rule (a nested match without its own rule is unreachable).
+      match /sales/{saleId} {
+        allow get, list: if isMember(businessId);
+        allow write: if false;
+        match /sale_items/{itemId} {
+          allow get, list: if isMember(businessId);
+          allow write: if false;
+        }
+      }
+      match /purchases/{purchaseId} {
+        allow get, list: if isMember(businessId);
+        allow write: if false;
+        match /purchase_items/{itemId} {
+          allow get, list: if isMember(businessId);
+          allow write: if false;
+        }
+      }
+      match /expenses/{expenseId} {
+        allow get, list: if isMember(businessId);
+        allow write: if false;
+      }
+      match /payments/{paymentId} {
+        allow get, list: if isMember(businessId);
+        allow write: if false;
+      }
+      match /gatewayTransactions/{txnId} {
+        allow get, list: if isMember(businessId);
+        allow write: if false;
+      }
+      match /fiscalYears/{fyId} {
+        allow get, list: if isMember(businessId);
+        allow write: if false;
+      }
+
+      // The ledger itself: read by members, written only by postJournal's
+      // Admin context. Corrections are reversal entries, never edits. Lines
+      // are nested and inherit the same immutability.
+      match /journal_entries/{journalId} {
+        allow get, list: if isMember(businessId);
+        allow write: if false;
+        allow update, delete: if false;
+        match /journal_lines/{lineId} {
+          allow get, list: if isMember(businessId);
+          allow write: if false;
+          allow update, delete: if false;
+        }
+      }
+
+      // Document-number counters, maintained inside Firestore transactions by
+      // the posting functions.
+      match /sequences/{name} {
+        allow read: if isMember(businessId);
+        allow write: if false;
+      }
+    }
+
+    // Membership rows are keyed `{uid}_{businessId}`; the functions create and
+    // (for revoked members) delete them. Members may list their own rows, which
+    // is how the signed-in screen resolves "my businesses".
+    match /businessMemberships/{membershipId} {
+      allow get, list: if signedIn() && membershipId.matches(request.auth.uid + '_.*');
+      allow write: if false;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Everything else: denied.                                           */
+    /* ------------------------------------------------------------------ */
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

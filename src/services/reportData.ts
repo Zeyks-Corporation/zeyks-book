@@ -1,7 +1,7 @@
 /**
  * Report and document data shaping.
  *
- * Pure functions only — no React, no Supabase client, no formatting of
+ * Pure functions only — no React, no Firebase SDK, no formatting of
  * currency symbols. The accounting *truth* stays where it already was:
  * `accountingEngine` computes every statement, `posting` owns the one
  * settlement sum, and `reconcile` already writes `paidAmount` from those rows.

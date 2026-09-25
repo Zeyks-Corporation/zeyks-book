@@ -88,7 +88,7 @@ export type AuthAction =
   | 'recovery'
   | 'ignore';
 
-/** Map a Supabase auth event to a deferred action (never run inside the callback). */
+/** Map a Firebase auth event to a deferred action (never run inside the callback). */
 export function resolveAuthEvent(event: string): AuthAction {
   switch (event) {
     case 'INITIAL_SESSION': return 'bootstrap';

@@ -40,6 +40,14 @@ export const ACCOUNT_CODES = {
 } as const;
 
 /**
+ * Placeholder code for an account a journal line names but the chart of
+ * accounts does not contain. Deliberately printable — an em dash reads as
+ * "no code" on an A4 sheet, where the old four-question-mark sentinel
+ * rendered as literal "???? Inventory" and looked like a broken font.
+ */
+export const UNLINKED_ACCOUNT_CODE = '—';
+
+/**
  * The accounts a statement treats as money: cash in hand, the bank account and
  * the two wallets. Named once so the cash & bank report, the printed movement
  * statement and any opening-balance figure cannot disagree about what counts.
@@ -237,7 +245,7 @@ export class AccountingEngine {
         resolved.push({
           id: line.accountId,
           businessId: entry.businessId,
-          code: '????',
+          code: UNLINKED_ACCOUNT_CODE,
           name: `${line.accountName} (unlinked)`,
           type: line.accountType,
           isActive: false,
@@ -450,6 +458,12 @@ export class AccountingEngine {
     const salesAcc = accounts.find((a) => a.code === ACCOUNT_CODES.SALES);
     const purchaseAcc = accounts.find((a) => a.code === ACCOUNT_CODES.COGS);
 
+    const matchesAcc = (acc: Account | undefined, lineAccountId: string, code: string) => {
+      if (lineAccountId === code) return true;
+      if (acc && (lineAccountId === acc.id || lineAccountId === acc.code)) return true;
+      return false;
+    };
+
     let outputVat = 0;
     let inputVat = 0;
     let taxableSales = 0;
@@ -457,10 +471,18 @@ export class AccountingEngine {
 
     for (const entry of entries) {
       for (const line of entry.lines) {
-        if (outputAcc && line.accountId === outputAcc.id) outputVat += line.credit - line.debit;
-        if (inputAcc && line.accountId === inputAcc.id) inputVat += line.debit - line.credit;
-        if (salesAcc && line.accountId === salesAcc.id) taxableSales += line.credit - line.debit;
-        if (purchaseAcc && line.accountId === purchaseAcc.id) taxablePurchases += line.debit - line.credit;
+        if (matchesAcc(outputAcc, line.accountId, ACCOUNT_CODES.VAT_PAYABLE)) {
+          outputVat += line.credit - line.debit;
+        }
+        if (matchesAcc(inputAcc, line.accountId, ACCOUNT_CODES.VAT_RECEIVABLE)) {
+          inputVat += line.debit - line.credit;
+        }
+        if (matchesAcc(salesAcc, line.accountId, ACCOUNT_CODES.SALES)) {
+          taxableSales += line.credit - line.debit;
+        }
+        if (matchesAcc(purchaseAcc, line.accountId, ACCOUNT_CODES.COGS)) {
+          taxablePurchases += line.debit - line.credit;
+        }
       }
     }
 

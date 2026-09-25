@@ -1,5 +1,5 @@
 import { GatewayProvider, GatewayStatus } from '../types';
-import { supabase } from '../lib/supabase';
+import { auth } from '../lib/firebase';
 import {
   PAYMENT_API_DISABLED_MESSAGE, paymentApiConfigured, paymentApiUrl,
 } from '../lib/paymentApi';
@@ -11,9 +11,9 @@ import {
  * is ever present in this bundle — the browser only ever sees a pre-signed
  * form payload or a redirect URL.
  *
- * Every route on that API requires the signed-in session (Stage 14), so each
- * call carries the caller's Supabase access token. Identity is never sent as a
- * field: the server reads it from the token and nothing in a request body can
+ * Every route on that API requires the signed-in session, so each call carries
+ * the caller's Firebase ID token. Identity is never sent as a field: the server
+ * verifies the token against Firebase Admin and nothing in a request body can
  * override it.
  */
 
@@ -81,8 +81,7 @@ export class GatewayError extends Error {
  */
 async function authHeaders(): Promise<Record<string, string>> {
   try {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
+    const token = await auth.currentUser?.getIdToken();
     return token ? { Authorization: `Bearer ${token}` } : {};
   } catch {
     return {};

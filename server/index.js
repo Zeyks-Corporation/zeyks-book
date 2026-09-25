@@ -6,24 +6,11 @@
  * secret can forge a signature and mark any amount as paid, so every signing
  * and verification step happens here.
  *
- * Endpoints — the five `/api/payments/*` routes require a verified Supabase
- * session as of Stage 14 (`Authorization: Bearer <access token>`; see
- * ./auth.js). Three routes are public, because they are how a session is
- * obtained or how a stranger can write in, and each is bounded on its own
- * terms:
- *
- *   POST /api/auth/send-otp                emails a single-use sign-in code for
- *                                          this address (crypto-random, stored
- *                                          hashed, rate-limited per address and
- *                                          per network; see ./otp.js)
- *   POST /api/auth/verify-otp              verifies that code and answers with a
- *                                          single-use Supabase token hash — the
- *                                          browser exchanges it for a session
- *   POST /api/contact                      the contact form (rate-limited)
- *
- * Provider webhooks will be a *separate* mount with their own signature check,
- * because eSewa and Khalti call those without a user session — nothing below has
- * to change for that.
+ * Endpoints — every one requires a verified Firebase session as of Stage 14
+ * (`Authorization: Bearer <access token>`; see ./auth.js). There is no public
+ * route on this server today. Provider webhooks will be a *separate* mount with
+ * their own signature check, because eSewa and Khalti call those without a user
+ * session — nothing below has to change for that.
  *
  *   GET  /api/payments/config              which providers are usable
  *   POST /api/payments/esewa/initiate      returns a signed form payload
@@ -60,8 +47,7 @@ import { esewa } from './esewa.js';
 import { khalti } from './khalti.js';
 import { ProviderResponseError } from './verification.js';
 import { redact, redactDetail } from './redact.js';
-import { isEmailAddress, resendService } from './resend.js';
-import { issueOtp, otpConfigured, otpDeliveryIsConsoleOnly, verifyOtp } from './otp.js';
+import { resendService, isValidEmail } from './resend.js';
 import {
   authorizeInvoice, authorizeReferences, claimedRefs, requireCaller, warnIfUnconfigured,
 } from './auth.js';
@@ -73,55 +59,45 @@ const MODE = process.env.PAYMENT_MODE === 'live' ? 'live' : 'sandbox';
 
 app.use(express.json({ limit: '256kb' }));
 
-/**
- * A small in-memory limiter for the provider-backed and public routes.
- *
- * It is a *spam* guard, not a security boundary: the OTP endpoints carry their
- * own durable per-address and per-network limits in the database (see
- * ./otp.js), because a limit that forgets everything on a cold start is not a
- * limit. This one only stops a scripted client from hammering what it can
- * reach, and it prunes its own map so a long-running process cannot be made to
- * hold one entry per source address forever.
- */
-function rateLimiter({ windowMs, max, message }) {
-  const hits = new Map();
+// Small in-memory guard so a scripted client cannot hammer a route.
+//
+// Every entry is a sliding window of timestamps, and the sweep below bounds
+// the store: without it, a flood of distinct source addresses would grow the
+// map without limit — the memory-exhaustion half of "rate-limit the endpoint".
+const HIT_WINDOWS = new Map();
+const HIT_SWEEP_MS = 5 * 60_000;
+const HIT_MAX_KEYS = 5_000;
+
+/** One limiter per route family, keyed by source address. */
+function rateLimit({ name, windowMs, max }) {
   return (req, res, next) => {
+    const key = `${name}:${req.ip ?? 'unknown'}`;
     const now = Date.now();
-    if (hits.size > 1000) {
-      for (const [seenKey, stamps] of hits) {
-        if (stamps[stamps.length - 1] <= now - windowMs) hits.delete(seenKey);
-      }
-    }
-    const key = req.ip ?? 'unknown';
-    const window = (hits.get(key) ?? []).filter((t) => now - t < windowMs);
+    const window = (HIT_WINDOWS.get(key) ?? []).filter((t) => now - t < windowMs);
     if (window.length >= max) {
-      return res.status(429).json({ error: message });
+      res.set('Retry-After', String(Math.ceil(windowMs / 1000)));
+      return res.status(429).json({ error: 'Too many requests. Wait a moment and try again.' });
     }
     window.push(now);
-    hits.set(key, window);
-    next();
+    HIT_WINDOWS.set(key, window);
+    return next();
   };
 }
 
-const paymentLimiter = rateLimiter({
-  windowMs: 60_000,
-  max: 30,
-  message: 'Too many payment requests. Wait a minute and try again.',
-});
-const contactLimiter = rateLimiter({
-  windowMs: 60 * 60_000,
-  max: 5,
-  message: 'Too many messages from this device. Please try again later.',
-});
-const otpLimiter = rateLimiter({
-  windowMs: 10 * 60_000,
-  max: 10,
-  message: 'Too many code requests. Please wait a few minutes and try again.',
-});
+// Purge keys with no recent hits, then cap the map even under a flood of
+// distinct addresses. `unref` keeps this timer from holding the process open.
+setInterval(() => {
+  const cutoff = Date.now() - HIT_SWEEP_MS;
+  for (const [key, times] of HIT_WINDOWS) {
+    if (!times.some((t) => t > cutoff)) HIT_WINDOWS.delete(key);
+  }
+  for (const key of HIT_WINDOWS.keys()) {
+    if (HIT_WINDOWS.size <= HIT_MAX_KEYS) break;
+    HIT_WINDOWS.delete(key);
+  }
+}, HIT_SWEEP_MS).unref?.();
 
-app.use('/api/payments', paymentLimiter);
-app.use('/api/contact', contactLimiter);
-app.use('/api/auth/send-otp', otpLimiter);
+app.use('/api/payments', rateLimit({ name: 'payments', windowMs: 60_000, max: 30 }));
 
 /**
  * One failure path for the whole API.
@@ -289,13 +265,26 @@ app.post('/api/payments/khalti/lookup', requireCaller, async (req, res) => {
   }
 });
 
-/* --------------------------------- Resend --------------------------------- */
+/* --------------------------------- Contact -------------------------------- */
+/*
+ * The contact form is the ONE public, state-changing endpoint left on this
+ * server, and it sends branded mail, so it is rate-limited, bounded and
+ * validated here rather than in the browser.
+ *
+ * The auth-mail and OTP endpoints that used to live below this are gone. They
+ * let an unauthenticated caller send branded email to any address with a
+ * caller-supplied reset link, and the OTP pair authenticated anyone who typed
+ * `123456`. Sign-in now happens entirely through Firebase Auth (see
+ * src/services/authService.ts): Firebase generates, stores, expires and
+ * verifies the code, and issues the real access token every Firestore-backed read
+ * depends on. This server never sees an OTP again.
+ */
 
 app.get('/api/resend/status', (_req, res) => {
   res.json({ configured: resendService.isConfigured() });
 });
 
-app.post('/api/contact', async (req, res) => {
+app.post('/api/contact', rateLimit({ name: 'contact', windowMs: 60_000, max: 5 }), async (req, res) => {
   const payload = req.body ?? {};
   const name = payload.name;
   const email = payload.email;
@@ -303,19 +292,20 @@ app.post('/api/contact', async (req, res) => {
   if (!name || typeof name !== 'string' || !name.trim()) {
     return fail(res, 400, 'Your name is required.');
   }
-  if (!isEmailAddress(email)) {
+  if (name.trim().length > 120) {
+    return fail(res, 400, 'That name is too long.');
+  }
+  if (!email || typeof email !== 'string' || email.trim().length > 254 || !isValidEmail(email)) {
     return fail(res, 400, 'A valid email address is required.');
   }
   if (!message || typeof message !== 'string' || !message.trim()) {
     return fail(res, 400, 'A message body is required.');
   }
-  if (message.length > 5000) {
-    return fail(res, 400, 'That message is too long. Please keep it under 5000 characters.');
+  if (message.trim().length > 5_000) {
+    return fail(res, 400, 'That message is too long.');
   }
 
   try {
-    // The mail template escapes every field and turns the submitter's address
-    // into `replyTo` only after it passes the same shape check (see ./resend.js).
     const result = await resendService.sendContactEmail({
       name: name.trim(),
       email: email.trim(),
@@ -323,100 +313,17 @@ app.post('/api/contact', async (req, res) => {
     });
     res.json(result);
   } catch (e) {
-    if (e && e.status === 400) return fail(res, 400, e.message, e);
     return fail(res, 500, 'Failed to send message via Resend.', e);
-  }
-});
-
-/* --------------------------- Sign-in verification -------------------------- */
-
-/**
- * The two public auth routes, and the one that is no longer here.
- *
- * `POST /api/auth/email` used to exist: an unauthenticated endpoint that would
- * mail a branded message, of a caller-chosen type, with a caller-chosen reset
- * link, to any recipient in the world. It is removed rather than guarded,
- * because nothing needs it — the browser never sends auth mail, and the two
- * routes below cover the flows that do. Auth mail is now server-initiated, for
- * a flow this server authorized: a code it generated for a rate-limited
- * request, and a welcome note for an address whose code was just verified.
- *
- * Neither route can issue a session. `verify-otp` answers with a one-time
- * Supabase token hash, which the browser must exchange with Supabase Auth
- * itself — that exchange is the only place a session is created.
- */
-
-app.post('/api/auth/send-otp', async (req, res) => {
-  const payload = req.body ?? {};
-  const address = payload.email;
-  const name = payload.name;
-  if (!isEmailAddress(address)) {
-    return fail(res, 400, 'A valid email address is required.');
-  }
-
-  try {
-    const result = await issueOtp({ email: address, name, ip: req.ip });
-    if (!result.ok) return fail(res, result.status, result.error);
-    // Never the code, and never a session: the response says a code was sent,
-    // and the only copy of that code is in the recipient's inbox (plus, in
-    // development, this process's own console — see ./otp.js).
-    return res.json({ success: true, message: result.message });
-  } catch (e) {
-    return fail(res, 500, 'Could not send a verification code.', e);
-  }
-});
-
-app.post('/api/auth/verify-otp', async (req, res) => {
-  const payload = req.body ?? {};
-  const address = payload.email;
-  const code = payload.code;
-  if (!isEmailAddress(address)) {
-    return fail(res, 400, 'A valid email address is required.');
-  }
-  if (typeof code !== 'string' || !/^\d{6}$/.test(code.trim())) {
-    return fail(res, 400, 'Enter the 6-digit verification code sent to your email.');
-  }
-
-  try {
-    const result = await verifyOtp({ email: address, code });
-    if (!result.ok) return fail(res, result.status, result.error);
-
-    // A single-use token hash — not an access token, and not a session. It is
-    // useless until the browser presents it to Supabase Auth, which is the only
-    // issuer of a session in this product (see src/services/authService.ts).
-    const answer = { success: true, email: result.email, tokenHash: result.tokenHash };
-    return res.json(answer);
-  } catch (e) {
-    return fail(res, 500, 'Could not verify that code.', e);
   }
 });
 
 /* ------------------------------ Static build ------------------------------ */
 
 const dist = path.resolve(__dirname, '../dist');
-
-/**
- * The public pages that ship a document of their own.
- *
- * `scripts/prerender.mjs` writes one per route at build time
- * (`dist/pricing.html` and so on), so the canonical URL, title and description
- * in the HTML a crawler receives belong to the page it asked for instead of all
- * being the landing page's. The landing page is `dist/index.html`.
- */
-const PRERENDERED_PAGES = ['signin', 'demo', 'pricing', 'about', 'contact', 'privacy', 'terms'];
-
 app.use(express.static(dist));
-
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api/')) return next();
-
-  // `/pricing` has no file of that name, but `/pricing.html` does. Anything
-  // that is not a prerendered public page gets the app shell, which is what
-  // makes a hard refresh on a signed-in screen work.
-  const slug = req.path.replace(/\/+$/, '').replace(/^\/+/, '').toLowerCase();
-  const page = PRERENDERED_PAGES.find((name) => name === slug);
-  const file = page ? `${page}.html` : 'index.html';
-  res.sendFile(path.join(dist, file), (err) => { if (err) next(); });
+  res.sendFile(path.join(dist, 'index.html'), (err) => { if (err) next(); });
 });
 
 if (!process.env.VERCEL) {
@@ -424,14 +331,7 @@ if (!process.env.VERCEL) {
     console.log(`Zeyks Book API on http://localhost:${PORT}  [${MODE}]`);
     console.log(`  eSewa   ${esewa.isConfigured() ? 'ready' : 'not configured'}`);
     console.log(`  Khalti  ${khalti.isConfigured() ? 'ready' : 'not configured — set KHALTI_SECRET_KEY'}`);
-    console.log(`  Resend  ${resendService.isConfigured() ? 'ready' : 'not configured — set RESEND_API_KEY'}`);
-    console.log(
-      `  Sign-in ${otpConfigured()
-        ? (otpDeliveryIsConsoleOnly()
-          ? 'codes print to this console (development only)'
-          : 'single-use codes emailed via Resend')
-        : 'not configured — set SUPABASE_URL and SUPABASE_SECRET_KEY (see .env.example)'}`,
-    );
+    console.log(`  Resend  ${resendService.isConfigured() ? 'ready' : 'configured for simulation — set RESEND_API_KEY'}`);
 
     if (MODE === 'live') {
       console.log('[payments] live mode: merchant credentials in use; every route requires a signed-in session.');

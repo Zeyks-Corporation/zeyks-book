@@ -14,19 +14,19 @@ export const PricingPage: React.FC<{
     'Aged receivables & payables (30, 60, 90 days)',
     'A4 print-ready financial statements & tax reports',
     'Automatic ledger & document health checks',
-    'Self-hosted on your own private cloud database',
-    'Zero monthly subscription or user limits',
+    'Managed cloud database, isolated per business',
+    'One simple plan — no per-user fees',
     'Full control over your financial data',
   ];
 
   const FAQS = [
     {
-      q: 'Is Zeyks Book really free?',
-      a: 'Yes. Zeyks Book is an open accounting system designed to run on your own private database tier. You only pay for your own infrastructure if you exceed standard usage limits.',
+      q: 'How does pricing work?',
+      a: 'One simple plan at NPR 999 per month. No per-seat charges, no hidden tiers — every feature, including the full double-entry engine and A4 reports, is included.'
     },
     {
       q: 'Where are my financial records stored?',
-      a: 'Your records stay entirely within your own PostgreSQL database. Zeyks Book holds no central servers that read or store your financial ledger.',
+      a: 'In Zeyks Book\'s managed cloud database. Access to your records is restricted to your account by the database\'s own security rules, and you can export everything at any time.',
     },
     {
       q: 'Can I export statements for my bank or auditor?',
@@ -53,8 +53,8 @@ export const PricingPage: React.FC<{
         <div className="mt-12 max-w-lg mx-auto bg-[var(--bg)] border border-[var(--separator)] rounded-[14px] p-8 shadow-sm">
           <div className="flex items-baseline justify-between border-b border-[var(--separator)] pb-6">
             <div>
-              <h2 className="text-[22px] font-bold text-[var(--label)]">Community Edition</h2>
-              <p className="mt-1 text-[13px] text-[var(--label-secondary)]">Self-hosted & open</p>
+              <h2 className="text-[22px] font-bold text-[var(--label)]">Zeyks Book</h2>
+              <p className="mt-1 text-[13px] text-[var(--label-secondary)]">Every feature included</p>
             </div>
             <div className="text-right">
               <span className="text-[34px] font-bold text-[var(--label)]">NPR 999</span>

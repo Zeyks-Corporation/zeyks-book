@@ -1,7 +1,7 @@
 /**
  * Online collection: cloud request shaping and the pure state transitions.
  *
- * Kept free of React and of the Supabase client so three things can be tested
+ * Kept free of React and of the Firebase SDK so three things can be tested
  * directly, exactly like paymentState.ts and voidState.ts are:
  *
  *   1. the wire contract with `initiate_gateway_txn` (migration 011) and

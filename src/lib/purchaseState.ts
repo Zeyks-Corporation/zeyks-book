@@ -1,7 +1,7 @@
 /**
  * Purchases: cloud request shaping and pure state transitions.
  *
- * Kept free of React and of the Supabase client so both the wire contract with
+ * Kept free of React and of the Firebase SDK so both the wire contract with
  * post_purchase and the guarantee that a just-posted purchase's line items are
  * in state immediately can be tested directly.
  */

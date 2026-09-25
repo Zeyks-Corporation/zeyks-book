@@ -1,298 +1,255 @@
-/**
- * Authentication — every session in this app comes from Supabase Auth.
- *
- * There is no second way in. This module used to keep its own session object in
- * `localStorage` and hand it to the UI, which meant "signed in" was a claim made
- * by the client: the access token in it was a string this code had just built,
- * no RLS policy had ever seen it, and every RLS-backed read (the books, the
- * profiles row, the accounting RPCs) could not work with it. The UI said signed
- * in while the database said nobody.
- *
- * The rule now, in one line: a session exists only when Supabase Auth issued
- * one. Concretely —
- *
- *   - the emailed code is verified by the API server (which issued it), and the
- *     successful answer is a one-time Supabase token hash;
- *   - `verifyOtp` exchanges that hash with `supabase.auth.verifyOtp`, which is
- *     the only place a session is created;
- *   - `signOut` reports whether the *stored* session is really gone, by reading
- *     it back, rather than assuming the revoke worked;
- *   - a profile read that fails returns a failure, not a user assembled out of
- *     local guesses.
- */
-
-import { supabase } from '../lib/supabase';
-import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
+import {
+  auth, db, functions,
+} from '../lib/firebase';
+import {
+  signInWithCustomToken, signOut as fbSignOut, onAuthStateChanged, type User,
+  GoogleAuthProvider, signInWithPopup,
+} from 'firebase/auth';
+import {
+  doc, getDoc,
+} from 'firebase/firestore';
+import { httpsCallable, type Functions } from 'firebase/functions';
 import type { UserProfile } from '../types';
 import { resolveSignOutOutcome, signOutScope } from '../lib/session';
 import type { SignOutKind, SignOutOutcome } from '../lib/session';
-import { sendResendOtp, verifyResendOtp } from './resendService';
+
+/**
+ * Authentication, in one place, on top of Firebase Auth.
+ *
+ * This file has been on three backends. It minted a fake "Resend" session, then
+ * spoke email-OTP, and now speaks Firebase through two callables
+ * (`requestOtp` / `verifyOtp`) that email a six-digit code and mint a custom
+ * token the client exchanges for a real session. The flow a person sees is
+ * unchanged: enter email → receive code → enter code.
+ *
+ * The session's ID token is what every Firestore rule check resolves through,
+ * and `paymentGateway` forwards the same token as its Bearer header, so the
+ * payment API verifies one identity everywhere.
+ */
 
 export interface AuthResult {
   user: User | null;
-  session: Session | null;
+  session: { user: User } | null;
   error: string | null;
 }
 
+/** Map a backend error to a sentence. Firebase's terms are client-safe here. */
 function cleanAuthError(message: string | null | undefined): string | null {
   if (!message) return null;
-  return message.replace(/supabase/gi, 'auth system');
+  return message
+    .replace(/firebase/i, 'auth system')
+    .replace(/auth\/(.+)/, (_m, code: string) => {
+      const known: Record<string, string> = {
+        'too-many-requests': 'Too many attempts. Please wait a minute and try again.',
+        'network-request-failed': 'You appear to be offline. Check your connection and try again.',
+        'user-not-found': 'No account exists for that email.',
+        'invalid-credential': 'That code is invalid or has expired.',
+      };
+      return known[code] ?? 'Sign-in failed. Please try again.';
+    });
 }
 
-/** Where Supabase should send a password-recovery link back to. */
-function recoveryRedirectTo(): string | undefined {
-  if (typeof window === 'undefined' || !window.location?.origin) return undefined;
-  return `${window.location.origin}/signin`;
-}
+/** The one generic sentence the callable surfaces for any internal failure. */
+const GENERIC_SIGNIN = 'Sign-in is temporarily unavailable. Please try again later.';
+
+/** Callable names as deployed (functions/src/index.ts). */
+const OTP_REQUEST = 'requestOtp';
+const OTP_VERIFY = 'verifyOtp';
 
 /**
- * Send a sign-in / sign-up verification code.
- *
- * The server generates it, stores a hash with an expiry, and emails the plain
- * code; nothing on this side ever knows or keeps the code.
+ * Send an email sign-in code (OTP). Firebase (via Resend) owns the code, not
+ * this app.
  */
 export async function requestOtp(
   email: string,
   name?: string,
 ): Promise<{ success: boolean; message?: string; error?: string }> {
-  return await sendResendOtp(email, name);
+  const trimmed = email.trim().toLowerCase();
+  if (!trimmed) return { success: false, error: 'Please enter your email address.' };
+  try {
+    const call = httpsCallable<unknown, { success: boolean; message?: string }>(
+      functions as Functions, OTP_REQUEST,
+    );
+    // The name rides along for the account-creation path; the server may use
+    // it for the greeting but never trusts it for authorization.
+    const res = await call({ email: trimmed, name: name?.trim() || undefined });
+    return { success: true, message: res.data.message };
+  } catch (e) {
+    return { success: false, error: extractCallableMessage(e, 'Could not send the verification code.') };
+  }
 }
 
 /**
- * Verify a code and turn it into a real Supabase session.
+ * Verify the emailed code and adopt the Firebase session it returns.
  *
- * Two steps, both required:
- *   1. the API server verifies the code against the row it stored, and answers
- *      with a single-use Supabase token hash;
- *   2. that hash is exchanged with Supabase Auth, which issues the session the
- *      rest of the app (RLS, RPCs, storage) actually accepts.
- *
- * A missing session is a failure. There is no fallback branch.
+ * The session is real: its ID token is what the client already sends with every
+ * Firestore read. There is no fallback code and no locally invented session —
+ * a wrong or expired code simply fails.
  */
-export async function verifyOtp(
-  email: string,
-  code: string,
-  name?: string,
-): Promise<AuthResult> {
-  const verified = await verifyResendOtp(email, code);
-  if (!verified.success || !verified.tokenHash) {
+export async function verifyOtp(email: string, code: string, _name?: string): Promise<AuthResult> {
+  const trimmedEmail = email.trim().toLowerCase();
+  try {
+    const call = httpsCallable<unknown, { custom_token: string; user_id: string }>(
+      functions as Functions, OTP_VERIFY,
+    );
+    const res = await call({ email: trimmedEmail, code: code.trim() });
+    await signInWithCustomToken(auth, res.data.custom_token);
+    return { user: auth.currentUser, session: auth.currentUser ? { user: auth.currentUser } : null, error: null };
+  } catch (e) {
     return {
       user: null,
       session: null,
-      error: verified.error ?? 'Invalid or expired verification code.',
+      error: extractCallableMessage(e, 'Invalid or expired verification code.'),
     };
   }
+}
 
-  const { data, error } = await supabase.auth.verifyOtp({
-    token_hash: verified.tokenHash,
-    type: 'magiclink',
-  });
-
-  if (error || !data.session || !data.user) {
-    return {
-      user: null,
-      session: null,
-      error: cleanAuthError(error?.message)
-        ?? 'That verification code could not be exchanged for a session. Request a new code and try again.',
-    };
+/** Pull a client-safe sentence out of a callable failure. */
+function extractCallableMessage(e: unknown, fallback: string): string {
+  const code = (e as { code?: string }).code;
+  if (code === 'functions/failed-precondition' || code === 'functions/invalid-argument'
+    || code === 'functions/resource-exhausted') {
+    const text = (e as { message?: string }).message ?? '';
+    return text.replace(/^functions\w*\s*/i, '').replace(/\(.*\)\s*$/, '').trim() || fallback;
   }
-
-  // A first-time sign-in created the account from the code request; keep the
-  // name the person typed for the profile screen. Best effort, and only when
-  // there is nothing recorded yet.
-  const fullName = name?.trim();
-  if (fullName && !data.user.user_metadata?.full_name) {
-    const { data: updated } = await supabase.auth.updateUser({ data: { full_name: fullName } });
-    if (updated.user) {
-      return { user: updated.user, session: data.session, error: null };
-    }
-  }
-
-  return { user: data.user, session: data.session, error: null };
+  return GENERIC_SIGNIN;
 }
 
 /**
- * Register with email + password, through Supabase Auth.
+ * Sign in using Firebase Google Authentication.
+ */
+export async function signInWithGoogle(): Promise<AuthResult> {
+  try {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    const result = await signInWithPopup(auth, provider);
+    return {
+      user: result.user,
+      session: result.user ? { user: result.user } : null,
+      error: null,
+    };
+  } catch (e: unknown) {
+    const errorObj = e as { code?: string; message?: string };
+    if (errorObj?.code === 'auth/popup-closed-by-user' || errorObj?.code === 'auth/cancelled-popup-request') {
+      return { user: null, session: null, error: null };
+    }
+    const message = errorObj?.message || 'Google sign-in failed.';
+    return {
+      user: null,
+      session: null,
+      error: cleanAuthError(message),
+    };
+  }
+}
+
+/**
+ * Create an account with a password.
  *
- * The OTP screen does not use this path — it verifies an emailed code instead —
- * but password registration is a supported Supabase flow and must go through
- * Supabase rather than being assembled locally.
+ * The product signs people in with an emailed code (above); this exists for the
+ * password path the sign-in screen keeps for password managers. It is kept for
+ * interface compatibility: the email-code flow is the product's front door.
  */
 export async function signUp(
   email: string,
   password: string,
   fullName: string,
 ): Promise<AuthResult> {
-  const cleanEmail = email.trim().toLowerCase();
-  if (!password) {
-    return {
-      user: null,
-      session: null,
-      error: 'A password is required to register with a password.',
-    };
-  }
-
-  const { data, error } = await supabase.auth.signUp({
-    email: cleanEmail,
-    password,
-    options: { data: { full_name: fullName.trim() } },
-  });
-
-  if (error) {
-    return { user: null, session: null, error: cleanAuthError(error.message) };
-  }
-  // With email confirmation on, `session` is null until the address is
-  // confirmed — a real state, not an error to paper over.
-  return { user: data.user, session: data.session, error: null };
+  void email; void password; void fullName;
+  return { user: null, session: null, error: 'Please sign in with the email code we send you.' };
 }
 
-/**
- * Sign in with email + password, through Supabase Auth.
- *
- * Without a password this refuses rather than inventing a session: the OTP path
- * is `requestOtp` + `verifyOtp`.
- */
-export async function signIn(
-  email: string,
-  password?: string,
-): Promise<AuthResult> {
-  const cleanEmail = email.trim().toLowerCase();
-  if (!password) {
-    return {
-      user: null,
-      session: null,
-      error: 'Enter your password, or use the emailed verification code instead.',
-    };
-  }
-
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: cleanEmail,
-    password,
-  });
-
-  if (error) {
-    return { user: null, session: null, error: cleanAuthError(error.message) };
-  }
-  return { user: data.user, session: data.session, error: null };
+/** Sign in with email + password (kept for interface compatibility). */
+export async function signIn(email: string, password?: string): Promise<AuthResult> {
+  void email; void password;
+  return { user: null, session: null, error: 'Please sign in with the email code we send you.' };
 }
 
 /**
  * Sign the current user out cleanly.
  *
- * A failed server revoke is reported, never assumed away: the stored session is
- * read back after the attempt, and when it survives, a local-only sign-out is
- * retried so this device really is signed out. `resolveSignOutOutcome` decides
- * what the person is told.
+ * `kind` decides the scope: `'this-device'` ends only this device's session;
+ * `'everywhere'` is accepted for interface compatibility — Firebase sessions
+ * end on this device, and the ID token's hour-long lifetime is the bound on
+ * anything already issued elsewhere.
  */
 export async function signOut(kind: SignOutKind = 'this-device'): Promise<SignOutOutcome> {
-  let firstError: string | null = null;
-  let localRetryError: string | null = null;
-
-  const stillSignedIn = async (): Promise<boolean> => {
-    const { data, error } = await supabase.auth.getSession();
-    return Boolean(error) || Boolean(data.session);
-  };
-
+  void signOutScope(kind);
   try {
-    const { error } = await supabase.auth.signOut({ scope: signOutScope(kind) });
-    if (error) firstError = cleanAuthError(error.message);
+    await fbSignOut(auth);
   } catch (e) {
-    firstError = cleanAuthError(e instanceof Error ? e.message : 'Sign out error');
+    return { cleared: false, error: cleanAuthError(e instanceof Error ? e.message : 'Sign out error') };
   }
-
-  let sessionCleared = !(await stillSignedIn());
-
-  if (!sessionCleared) {
-    try {
-      const { error } = await supabase.auth.signOut({ scope: 'local' });
-      if (error) localRetryError = cleanAuthError(error.message);
-    } catch (e) {
-      localRetryError = cleanAuthError(e instanceof Error ? e.message : 'Sign out error');
-    }
-    sessionCleared = !(await stillSignedIn());
-  }
-
-  return resolveSignOutOutcome({ firstError, localRetryError, sessionCleared });
+  return resolveSignOutOutcome({ firstError: null, localRetryError: null, sessionCleared: !auth.currentUser });
 }
 
-/**
- * Send a password-recovery email.
- *
- * Supabase Auth owns this flow end to end: it mints the recovery token and
- * emails the link, and the app only handles the resulting `PASSWORD_RECOVERY`
- * session event.
- */
+/** Send a password-recovery email — not applicable in the email-code flow. */
 export async function requestPasswordReset(email: string): Promise<{ error: string | null }> {
-  const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-    redirectTo: recoveryRedirectTo(),
-  });
-  return { error: error ? cleanAuthError(error.message) : null };
+  void email;
+  return { error: 'Password sign-in is not used. Sign in with the email code instead.' };
 }
 
 /** Set a new password for the currently authenticated session. */
-export async function updatePassword(newPassword: string): Promise<{ error: string | null }> {
-  if (!newPassword) return { error: 'A new password is required.' };
-  const { error } = await supabase.auth.updateUser({ password: newPassword });
-  return { error: error ? cleanAuthError(error.message) : null };
+export async function updatePassword(_newPassword: string): Promise<{ error: string | null }> {
+  return { error: 'Password sign-in is not used. Sign in with the email code instead.' };
 }
 
-/** Re-send the sign-up confirmation email, through Supabase Auth. */
+/** Re-send the sign-up confirmation email — not applicable in the email-code flow. */
 export async function resendConfirmation(email: string): Promise<{ error: string | null }> {
-  const { error } = await supabase.auth.resend({
-    type: 'signup',
-    email: email.trim().toLowerCase(),
-  });
-  return { error: error ? cleanAuthError(error.message) : null };
+  void email;
+  return { error: 'Sign-in codes are sent automatically when you request one.' };
 }
 
-/** Retrieve the current session, if any. Supabase's, and only Supabase's. */
+/** Retrieve the current Firebase session, if any. */
 export async function getSession(): Promise<{
-  session: Session | null;
+  session: { user: User } | null;
   error: string | null;
 }> {
-  const { data, error } = await supabase.auth.getSession();
-  if (error) return { session: null, error: cleanAuthError(error.message) };
-  return { session: data.session, error: null };
+  try {
+    const user = auth.currentUser ?? (await new Promise<User | null>((resolve) => {
+      const unsub = onAuthStateChanged(auth, (u: User | null) => { unsub(); resolve(u); });
+    }));
+    return { session: user ? { user } : null, error: null };
+  } catch (e) {
+    return { session: null, error: cleanAuthError(e instanceof Error ? e.message : 'Session error') };
+  }
 }
 
-/** Subscribe to auth state changes. */
+/** Subscribe to Firebase auth state changes. */
 export function onAuthStateChange(
-  callback: (event: AuthChangeEvent, session: Session | null) => void,
+  callback: (event: string, session: { user: User } | null) => void,
 ): () => void {
-  const { data } = supabase.auth.onAuthStateChange(callback);
-  return () => {
-    data.subscription.unsubscribe();
-  };
+  return onAuthStateChanged(auth, (user: User | null) => {
+    callback(user ? 'SIGNED_IN' : 'SIGNED_OUT', user ? { user } : null);
+  });
 }
 
 /**
- * Fetch the user's profile row.
+ * Fetch the signed-in user's profile document.
  *
- * A failed read is a failed read. The caller renders what the session itself
- * carries (`profileFromAuthUser`) rather than this module inventing a profile
- * out of an email address.
+ * Returns the Firestore `users/{uid}` row the caller can see, or `null` when it
+ * cannot be read — never a profile invented from local state. App falls back to
+ * the session user's own metadata, which is still real data from Firebase Auth.
  */
 export async function getProfile(userId: string): Promise<{
   profile: UserProfile | null;
   error: string | null;
 }> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, email, full_name, created_at')
-    .eq('id', userId)
-    .single();
-
-  if (error) {
-    return { profile: null, error: cleanAuthError(error.message) };
+  try {
+    const snap = await getDoc(doc(db, 'users', userId));
+    if (!snap.exists()) return { profile: null, error: null };
+    const d = snap.data() as Record<string, unknown>;
+    return {
+      profile: {
+        id: userId,
+        email: (d.email as string) ?? '',
+        fullName: (d.full_name as string) || '',
+        createdAt: (d.created_at as { toDate?: () => Date })?.toDate?.().toISOString()
+          ?? (d.created_at as string) ?? '',
+      },
+      error: null,
+    };
+  } catch (e) {
+    return { profile: null, error: e instanceof Error ? e.message : 'Profile error' };
   }
-
-  return {
-    profile: {
-      id: data.id,
-      email: data.email,
-      fullName: data.full_name || '',
-      createdAt: data.created_at,
-    },
-    error: null,
-  };
 }
+

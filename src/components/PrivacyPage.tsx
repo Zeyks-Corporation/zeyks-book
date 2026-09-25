@@ -70,6 +70,16 @@ export const PrivacyPage: React.FC<{
                 You retain the right to export your complete books, general journal entries, tax registers, and audit logs at any time in standard CSV or JSON formats for Inland Revenue Department (IRD) audits or local backups.
               </p>
             </div>
+
+            <div className="border-t border-[var(--separator)] pt-6">
+              <h2 className="text-[20px] font-bold text-[var(--label)] flex items-center gap-2">
+                <Check size={18} className="text-[var(--success)]" />
+                5. Third-Party Requests: Google Fonts
+              </h2>
+              <p className="mt-2">
+                Zeyks Book makes exactly one third-party request: the two typefaces this site is set in are loaded from Google Fonts (fonts.googleapis.com / fonts.gstatic.com). This request carries your IP address and browser user agent to Google. No financial data, account details, or app usage information is included in it, and no other third-party service is contacted.
+              </p>
+            </div>
           </div>
 
           {/* CTA */}

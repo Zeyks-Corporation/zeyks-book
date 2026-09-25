@@ -16,30 +16,30 @@ for the full list if you still have it.
 
 ## Stack
 
-React 19 + TypeScript + Vite + Tailwind v4 on the frontend, Supabase for
+React 19 + TypeScript + Vite + Tailwind v4 on the frontend, Firebase for
 authentication and cloud storage, and a small Express server for payment
-gateway calls. The browser talks to Supabase with the publishable (anon) key
+gateway calls. The browser talks to Firebase with the publishable (anon) key
 only; RLS restricts every row to the signed-in user's businesses.
 
 ## Getting started
 
-You need Node 20+, the [Supabase CLI](https://supabase.com/docs/guides/cli) and
+You need Node 20+, the [Firebase CLI](https://firebase.com/docs/guides/cli) and
 a running Docker. **A new contributor never needs a production or staging
 credential**: the local stack is the target for every command below.
 
 ```bash
 npm install
-supabase start                     # the local stack — the only database local work uses
+firebase start                     # the local stack — the only database local work uses
 cp .env.example .env               # server secrets; the sandbox eSewa test values are already there
-# Now put the *browser* config in .env.local, with the values `supabase status` prints:
-#   VITE_SUPABASE_URL="http://127.0.0.1:54321"
-#   VITE_SUPABASE_PUBLISHABLE_KEY="<publishable (anon) key>"
-supabase db reset --local          # apply migrations 001-015 to the local database
+# Now put the *browser* config in .env.local, with the values `firebase status` prints:
+#   VITE_FIREBASE_URL="http://127.0.0.1:54321"
+#   VITE_FIREBASE_PUBLISHABLE_KEY="<publishable (anon) key>"
+firebase db reset --local          # apply migrations 001-015 to the local database
 npm run dev                        # Vite dev server (3000) and the API (4000) together
 ```
 
 The app tells you which database it is talking to as it starts:
-`[Zeyks Book] Supabase target: local (127.0.0.1:54321)`. If it does not say
+`[Zeyks Book] Firebase target: local (127.0.0.1:54321)`. If it does not say
 `local`, stop and read the next section — see *Environment safety*.
 
 Open `http://localhost:3000`. Sign in or create an account, then the first
@@ -58,38 +58,38 @@ npm run lint       # typecheck only
 Local database tests:
 
 ```bash
-supabase db reset --local   # apply the migrations to the local database
-supabase test db --local     # pgTAP suites, including the concurrency suite
+firebase db reset --local   # apply the migrations to the local database
+firebase test db --local     # pgTAP suites, including the concurrency suite
 ```
 
-`supabase/tests/database/010_void_concurrency.test.sql` races two **real**
+`firebase/tests/database/010_void_concurrency.test.sql` races two **real**
 sessions (a second psql is spawned from inside the runner container and holds
 its transaction open) and pins down that exactly one reversal is written and
 that the losing caller replays it. It commits its fixtures on purpose — a second
 session can only see committed rows — and financial rows are append-only, so
-`supabase db reset --local` is the cleanup (the suite is re-runnable either way).
+`firebase db reset --local` is the cleanup (the suite is re-runnable either way).
 
 ## Environment safety — read before pointing anything anywhere
 
 Three environments exist. Exactly one of them may be used for local work:
 
-| | Supabase project | Data |
+| | Firebase project | Data |
 |---|---|---|
-| **LOCAL** | `supabase start` — `127.0.0.1:54321` | local test data only. **All** development and **all** database testing happens here. |
+| **LOCAL** | `firebase start` — `127.0.0.1:54321` | local test data only. **All** development and **all** database testing happens here. |
 | **STAGING** | a separate cloud project | controlled test data. Never the same project as production. |
 | **PRODUCTION** | the live project | real customer books. A local development build must never point here. |
 
 The app enforces that table instead of trusting the reader. `src/lib/envGuard.ts`
-runs before the Supabase client is constructed (`src/lib/supabase.ts`) and:
+runs before the Firebase client is constructed (`src/lib/firebase.ts`) and:
 
 - **refuses to start** a development build pointed at a remote or unrecognised
   project — naming the host it refused and how to fix it;
 - allows a **declared** staging project, with a warning that staging is not a test
-  environment (`VITE_SUPABASE_ENV="staging"`);
+  environment (`VITE_FIREBASE_ENV="staging"`);
 - refuses a key that is a **secret**, whatever shape it takes (`sb_secret_…`,
   `sbp_…`, or any JWT whose payload `role` is `service_role`), because every
   `VITE_*` value ends up in the browser bundle;
-- refuses a `VITE_SUPABASE_ENV="local"` declaration that names a remote host —
+- refuses a `VITE_FIREBASE_ENV="local"` declaration that names a remote host —
   a declaration may not relabel the truth;
 - states the target once on startup, so the console answers "which database is
   this?" immediately.
@@ -107,7 +107,7 @@ that is what a production build is for.
   test suite traces every non-`VITE_` value in `.env`/`.env.local` into the built
   bundle and fails if one is found there.
 - **`.env`** — server secrets: `PAYMENT_MODE`, the eSewa/Khalti merchant keys,
-  plus `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`. Those last two are *not*
+  plus `FIREBASE_URL` and `FIREBASE_PUBLISHABLE_KEY`. Those last two are *not*
   secrets (they are the same public values the browser uses), but the payment API
   needs them to verify each caller's session — without them it refuses every
   `/api/payments/*` request with `503` rather than serving a request it cannot
@@ -120,15 +120,15 @@ a staging or production file cannot be committed by accident.
 
 `node_modules/`, `dist/` and the environment files are not tracked, and no JWT or
 secret-shaped string is tracked anywhere. There is one piece of debt left from
-before the ignore rule existed: **ten files under `supabase/.temp/`** are still
+before the ignore rule existed: **ten files under `firebase/.temp/`** are still
 tracked, including the linked project ref and the per-machine runtime keys that
-`supabase start` generates. Those are local values, not production ones, but they
+`firebase start` generates. Those are local values, not production ones, but they
 do not belong in the repository. `.gitignore` cannot untrack what is already
 tracked, so the remediation is one command (it changes the index only — the files
 stay on disk and are regenerated on demand):
 
 ```bash
-git rm -r --cached supabase/.temp
+git rm -r --cached firebase/.temp
 ```
 
 The project ref is in this repository's history regardless, so treat it as known
@@ -181,7 +181,7 @@ public surface: no `/dashboard`, `/reports` or `/settings` is ever indexed.
 The application refuses to open a book whose schema is behind it. If a
 document's `due_date` column is absent — the deployed project ran a migration
 behind the app at one point — the load fails with a message naming the column and
-`supabase/migrations/015_credit_terms.sql`, rather than rendering a report
+`firebase/migrations/015_credit_terms.sql`, rather than rendering a report
 derived from a half-read row. The same applies to the integrity diagnostic: if
 `public.control_account_integrity()` is not deployed (migration 014), Data health
 says the check **could not run** and names the migration — it never reports an
@@ -192,13 +192,13 @@ app depends on**, not a client behaviour: `post_payment`, `void_payment`,
 `post_sale`, `post_purchase`, `void_document` and `settle_gateway_txn` all write
 settlement rows, and a project without migration 016 is a project where a
 mis-linked settlement can be stored again. Check the real state read-only before
-deploying — `supabase migration list --linked` prints one column per side, and a
+deploying — `firebase migration list --linked` prints one column per side, and a
 blank remote cell is a migration the deployment does not have:
 
 ```bash
-supabase link --project-ref <ref>   # once per machine
-supabase migration list --linked     # what the project has vs. what the repo has
-supabase db push                     # apply the repository's migrations
+firebase link --project-ref <ref>   # once per machine
+firebase migration list --linked     # what the project has vs. what the repo has
+firebase db push                     # apply the repository's migrations
 ```
 
 `016` is forward-only and validation-safe on existing data: every settlement and
@@ -242,10 +242,10 @@ range in `tests/run.mjs`. The fiscal year defaults to opening on Shrawan 1
 
 ## Authentication and data storage
 
-**Authentication is Supabase Auth, and your books live in Supabase** — the
+**Authentication is Firebase Auth, and your books live in Firebase** — the
 same account signs you in on any device and resolves to the same business.
 Browser `localStorage` is never the source of truth for accounting data; the
-only browser-side session that persists is Supabase's own auth session.
+only browser-side session that persists is Firebase's own auth session.
 
 - **Settings → Backup → Export backup** downloads a JSON snapshot of your
   cloud books. Keep it somewhere safe.
@@ -324,7 +324,7 @@ never reads the column, and the column cannot drift into disagreeing either:
 every role, `service_role` included, so only `status` POSTED → VOIDED can ever
 change. Migration 013 writes that rule down where an engineer would look — on
 the two columns and on `payments` itself — and
-`supabase/tests/database/020_upfront_single_source.test.sql` proves it from
+`firebase/tests/database/020_upfront_single_source.test.sql` proves it from
 three privilege levels. The column stays because a printed document should show
 what the customer settled on the day, and because it is part of the frozen
 `post_sale`/`post_purchase` contract; it is simply never consulted for money.
@@ -381,7 +381,7 @@ document's own balance (`linkedSettlementTotal` / `outstandingOn`) for the
 screens that show one document — that is a per-document read, not a second
 version of this invariant.
 
-`supabase/tests/database/024_control_account_integrity.test.sql` pins it: both
+`firebase/tests/database/024_control_account_integrity.test.sql` pins it: both
 sides checked against independently written SQL, the whole workflow walked
 (credit, partial, full, refused over-settlement, voided settlement,
 re-settlement, refused document void, document void, and the purchase-side
@@ -424,7 +424,7 @@ several bills would need a new allocation table plus a rule for partial
 allocation and its reversal; that is a real feature, not a refactor, and it is
 deferred rather than half-built (see *Known limitations*).
 
-`supabase/tests/database/023_settlement_workflow.test.sql` walks the whole story
+`firebase/tests/database/023_settlement_workflow.test.sql` walks the whole story
 through the real RPCs in both directions — a credit invoice, three instalments, a
 refused over-settlement, a voided receipt and its reversal, the money received
 again, a refused document void while a receipt stands, reversing everything,
@@ -616,7 +616,7 @@ The database is the boundary. The UI only reflects it.
 granted to `authenticated` alone; the internal helpers (`post_settlement_core`,
   `gateway_settlement_state`) are not callable by a client at all. The one
   client-writable surface is the chart of accounts, which is column-scoped.
-- **Browser.** `src/lib/supabase.ts` uses the publishable key only; the
+- **Browser.** `src/lib/firebase.ts` uses the publishable key only; the
   service-role key never appears in `src/`, and the client cannot be built without
   passing the environment guard.
 - **Credentials in errors.** `server/redact.js` masks credential-shaped text
@@ -632,7 +632,7 @@ granted to `authenticated` alone; the internal helpers (`post_settlement_core`,
   table: the ledger is the record.
 
 The database side is pinned by
-`supabase/tests/database/001_rls_tenancy.test.sql` and
+`firebase/tests/database/001_rls_tenancy.test.sql` and
 `022_security_boundaries.test.sql` (48 assertions: the grants on every financial
 table for every role, `search_path` on each definer, the helpers that must not be
 callable, VIEWER refusals, cross-tenant refusals, and the audit trail). The client
@@ -656,7 +656,7 @@ authorize the business the request names.
 | `POST /api/payments/khalti/lookup` | signed-in **OWNER/ACCOUNTANT** of the business owning that collection |
 
 **How a request is authenticated.** The browser sends
-`Authorization: Bearer <Supabase access token>`; the server asks Supabase Auth to
+`Authorization: Bearer <Firebase access token>`; the server asks Firebase Auth to
 validate it (`auth.getUser`), so no JWT is parsed or verified by hand. Identity —
 user, business, role — comes from that token and from the database, never from
 the request body: there is no `userId`, `businessId` or `role` field anywhere in
@@ -761,7 +761,7 @@ from CSS, so the sheet's footer carries the real generation date and the
 stylesheet declares `@page` margin boxes that a paged-media engine (Prince,
 WeasyPrint) renders as "Page X of Y".
 
-`supabase/tests/database/021_report_read_path.test.sql` pins the data side of all
+`firebase/tests/database/021_report_read_path.test.sql` pins the data side of all
 this: the read path is tenant-scoped (a report cannot be built from another
 business's rows, and anon holds no read privilege at all), the register's balance
 is the row sum with voided settlements excluded, every posted entry balances, and
@@ -919,7 +919,7 @@ Known limitations, stated plainly:
 - A non-`VITE_` secret in `.env.local` (for example a deployment token) is not
   bundled, but nothing stops it being added there; the test suite only proves it is
   not in the bundle.
-- The ten tracked `supabase/.temp/` files described under *Git safety* are still
+- The ten tracked `firebase/.temp/` files described under *Git safety* are still
   tracked.
 
 Deferred — not started and not half-built: multi-invoice supplier allocation,
