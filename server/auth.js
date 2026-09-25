@@ -11,13 +11,19 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { redact, redactDetail } from './redact.js';
 
-if (getApps().length === 0) {
-  const projectId = process.env.VITE_FIREBASE_PROJECT_ID || 'zeyksbook-fa70a';
-  initializeApp({ projectId });
+let adminAuth;
+let adminDb;
+try {
+  if (getApps().length === 0) {
+    const projectId = process.env.VITE_FIREBASE_PROJECT_ID || 'zeyksbook-fa70a';
+    initializeApp({ projectId });
+  }
+  adminAuth = getAuth();
+  adminDb = getFirestore();
+} catch {
+  adminAuth = { verifyIdToken: async () => { throw new Error('Auth not configured'); } };
+  adminDb = { collection: () => { throw new Error('Firestore not configured'); } };
 }
-
-const adminAuth = getAuth();
-const adminDb = getFirestore();
 
 /**
  * Can this process authenticate a caller at all?
