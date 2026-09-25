@@ -55,14 +55,6 @@ export const LandingPage: React.FC<{
         <div className="mx-auto max-w-5xl px-4 sm:px-6">
           {/* Hero Headline & Subtitle */}
           <div className="text-center">
-            <img
-              src="/zeyks-mark.png"
-              alt="Zeyks Book logo"
-              className="mx-auto mb-5 h-24 w-20 object-contain sm:h-28 sm:w-24"
-              width="345"
-              height="430"
-              fetchPriority="high"
-            />
             <h1 className="mx-auto max-w-4xl text-[36px] font-extrabold leading-[44px] tracking-[-0.03em] sm:text-[58px] sm:leading-[66px] text-[var(--label)] font-lovelace">
               Accounting software for Nepal, built around the Bikram Sambat calendar.
             </h1>
