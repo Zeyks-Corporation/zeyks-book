@@ -89,8 +89,8 @@ async function authHeaders(): Promise<Record<string, string>> {
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {
-  // No API, no request. A deployment that has not declared one has nothing at
-  // this path, and calling it anyway is what produced a 404 on every page load.
+  // No declared API origin, no request. A Vercel function may exist at this
+  // path, but this deployment must explicitly enable online collection.
   if (!paymentApiConfigured()) throw new GatewayError(PAYMENT_API_DISABLED_MESSAGE);
 
   let res: Response;
@@ -130,7 +130,8 @@ export const gateway = {
   /**
    * The invoice is named by id; the amount is the only number the browser
    * chooses. The server reads the invoice (and the customer name, and the
-   * reference that gets signed) from the database through our own session.
+   * reference that gets signed) from the database after verifying our identity
+   * and membership on the server.
    */
   initiateEsewa(input: { saleId: string; amount: number; taxAmount: number }) {
     return post<EsewaFormPayload>('/api/payments/esewa/initiate', input);

@@ -5,12 +5,11 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { assertSafeDevelopmentTarget, isLocalUrl, requiredClientEnv } from './envGuard';
 
-const SUPABASE_URL = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL)
-  || 'https://rlymuofhrreqwqhmmhqw.supabase.co';
-
-const SUPABASE_ANON_KEY = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_ANON_KEY)
-  || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJseW11b2ZocnJlcXdxaG1taHF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3ODYzNTIsImV4cCI6MjEwNTM2MjM1Mn0.PNyXm5YW3U-RSxFDYG-CU7e40r3hoNqv3BcEalfdXw8';
+const SUPABASE_URL = requiredClientEnv(import.meta.env.VITE_SUPABASE_URL, 'VITE_SUPABASE_URL');
+const SUPABASE_ANON_KEY = requiredClientEnv(import.meta.env.VITE_SUPABASE_ANON_KEY, 'VITE_SUPABASE_ANON_KEY');
+assertSafeDevelopmentTarget('Supabase', isLocalUrl(SUPABASE_URL));
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {

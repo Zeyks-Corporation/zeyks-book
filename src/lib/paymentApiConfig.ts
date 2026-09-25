@@ -29,7 +29,7 @@ export function paymentApiDecision({ isDev, declaredUrl }: PaymentApiInput): Pay
   const base = String(declaredUrl ?? '').trim().replace(/\/+$/, '');
   // Development always has somewhere to send `/api/...`: `npm run dev` starts
   // the API server and the Vite dev server proxies that prefix to it. A built
-  // deployment has nowhere unless it says where.
+  // deployment offers online collection only when an API origin is declared.
   return { configured: isDev || base.length > 0, base };
 }
 

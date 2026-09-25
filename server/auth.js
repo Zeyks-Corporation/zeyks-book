@@ -6,18 +6,28 @@
  * attaches `req.caller`; nothing downstream may invent one.
  */
 
-import { initializeApp, getApps } from 'firebase-admin/app';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
+import { createHash } from 'node:crypto';
 import { redact, redactDetail } from './redact.js';
+import { getSupabaseAdmin } from './supabase.js';
 
 let adminAuth;
 let adminDb;
 let isAdminConfigured = false;
 try {
   if (getApps().length === 0) {
-    const projectId = process.env.VITE_FIREBASE_PROJECT_ID || 'zeyksbook-fa70a';
-    initializeApp({ projectId });
+    const projectId = process.env.FIREBASE_PROJECT_ID
+      || process.env.VITE_FIREBASE_PROJECT_ID;
+    if (!projectId) throw new Error('FIREBASE_PROJECT_ID is required for the API.');
+    const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+    const serviceAccount = serviceAccountJson ? JSON.parse(serviceAccountJson) : null;
+    if (serviceAccount && serviceAccount.project_id !== projectId) {
+      throw new Error('Firebase service account project does not match FIREBASE_PROJECT_ID.');
+    }
+    const credential = serviceAccount ? cert(serviceAccount) : undefined;
+    initializeApp({ projectId, ...(credential ? { credential } : {}) });
   }
   adminAuth = getAuth();
   adminDb = getFirestore();
@@ -32,6 +42,28 @@ try {
  */
 export function authConfigured() {
   return isAdminConfigured;
+}
+
+/** A shared fixed-window limiter; unlike a process-local map this is consistent
+ * across Vercel function instances. The stored key is a digest, not an IP or UID.
+ */
+export async function consumeRateLimit(name, identity, windowMs, max) {
+  const id = createHash('sha256').update(`${name}:${identity}`).digest('hex');
+  const ref = adminDb.collection('_apiRateLimits').doc(id);
+  const now = Date.now();
+  const start = Math.floor(now / windowMs) * windowMs;
+  return adminDb.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const previous = snap.data();
+    const count = previous?.windowStart === start ? Number(previous.count) || 0 : 0;
+    if (count >= max) return false;
+    tx.set(ref, {
+      windowStart: start,
+      count: count + 1,
+      expiresAt: new Date(now + 2 * windowMs),
+    });
+    return true;
+  });
 }
 
 /**
@@ -145,10 +177,13 @@ export async function requireCaller(req, res, next) {
 
   try {
     const decodedToken = await adminAuth.verifyIdToken(parsed.token);
+    if (decodedToken.email_verified !== true || !decodedToken.email) {
+      return res.status(403).json({ error: 'Verify your email before opening your books.' });
+    }
     req.caller = {
       id: decodedToken.uid,
-      email: decodedToken.email ?? null,
-      emailVerified: decodedToken.email_verified === true,
+      email: decodedToken.email,
+      emailVerified: true,
       token: parsed.token,
     };
     return next();
@@ -159,23 +194,24 @@ export async function requireCaller(req, res, next) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Reads that the database filters for us                                     */
+/* Server-side reads with an explicit membership check                        */
 /* -------------------------------------------------------------------------- */
+
+function supabaseAdminOrThrow() {
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error('Supabase payment authorization is not configured.');
+  return client;
+}
 
 export async function findInvoice(caller, saleId) {
   try {
-    const snap = await adminDb.collectionGroup('sales').get();
-    const doc = snap.docs.find((d) => d.id === saleId || d.data().id === saleId);
-    if (!doc) return null;
-    const data = doc.data();
-    return {
-      id: data.id ?? doc.id,
-      business_id: data.business_id ?? doc.ref.parent.parent?.id ?? '',
-      status: data.status,
-      total_amount: Number(data.total_amount ?? data.totalAmount ?? 0),
-      invoice_number: String(data.invoice_number ?? data.invoiceNumber ?? ''),
-      customer_name: String(data.customer_name ?? data.customerName ?? ''),
-    };
+    const { data, error } = await supabaseAdminOrThrow()
+      .from('sales')
+      .select('id,business_id,status,total_amount,invoice_number,customer_name')
+      .eq('id', saleId)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? { ...data, total_amount: Number(data.total_amount) } : null;
   } catch (e) {
     throw new Error(`Invoice lookup failed: ${e instanceof Error ? e.message : String(e)}`);
   }
@@ -183,33 +219,50 @@ export async function findInvoice(caller, saleId) {
 
 export async function findCollection(caller, provider, gatewayRef) {
   try {
-    const snap = await adminDb.collectionGroup('gateway_transactions').get();
-    const doc = snap.docs.find((d) => {
-      const data = d.data();
-      return data.provider === provider && (data.gateway_ref === gatewayRef || data.reference === gatewayRef);
-    });
-    if (!doc) return null;
-    const data = doc.data();
-    return {
-      id: data.id ?? doc.id,
-      business_id: data.business_id ?? doc.ref.parent.parent?.id ?? '',
-      provider: data.provider,
-      gateway_ref: data.gateway_ref ?? data.reference,
-      amount: Number(data.amount ?? 0),
-      status: data.status,
-    };
+    const { data, error } = await supabaseAdminOrThrow()
+      .from('gateway_transactions')
+      .select('id,business_id,provider,gateway_ref,amount,status')
+      .eq('provider', provider)
+      .eq('gateway_ref', gatewayRef)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? { ...data, amount: Number(data.amount) } : null;
   } catch (e) {
     throw new Error(`Collection lookup failed: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 
+async function businessAccess(caller, businessId) {
+  if (!caller.emailVerified || !caller.email) return 'none';
+  const admin = supabaseAdminOrThrow();
+  const email = caller.email.trim().toLowerCase();
+  const { data: profile, error: profileError } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('email', email)
+    .maybeSingle();
+  if (profileError) throw profileError;
+  if (!profile) return 'none';
+
+  // A profile's editable email alone must never link a Firebase identity to a
+  // different Supabase Auth user. Confirm the Auth record owns the same email.
+  const { data: authData, error: authError } = await admin.auth.admin.getUserById(profile.id);
+  if (authError) throw authError;
+  if (authData.user?.email?.trim().toLowerCase() !== email) return 'none';
+
+  const { data: membership, error: membershipError } = await admin
+    .from('business_memberships')
+    .select('role')
+    .eq('business_id', businessId)
+    .eq('user_id', profile.id)
+    .maybeSingle();
+  if (membershipError) throw membershipError;
+  if (!membership) return 'none';
+  return membership.role === 'OWNER' || membership.role === 'ACCOUNTANT' ? 'write' : 'view';
+}
+
 export async function canWriteBusiness(caller, businessId) {
-  try {
-    const snap = await adminDb.collection('businessMemberships').doc(`${caller.id}_${businessId}`).get();
-    return snap.exists;
-  } catch {
-    return false;
-  }
+  return (await businessAccess(caller, businessId)) === 'write';
 }
 
 export async function authorizeInvoice(caller, { saleId, signedTotal }) {
@@ -217,10 +270,12 @@ export async function authorizeInvoice(caller, { saleId, signedTotal }) {
   if (!isMoney(signedTotal)) return denied(400, 'Amount must be greater than zero.');
 
   const invoice = await findInvoice(caller, saleId);
+  const access = invoice ? await businessAccess(caller, invoice.business_id) : 'none';
+  if (access === 'none') return denied(404, 'That invoice could not be found.');
   const decision = decideInvoiceAccess({
     found: Boolean(invoice),
     status: invoice?.status,
-    canWrite: invoice ? await canWriteBusiness(caller, invoice.business_id) : false,
+    canWrite: access === 'write',
     signedTotal,
     invoiceTotal: Number(invoice?.total_amount ?? 0),
   });
@@ -230,9 +285,11 @@ export async function authorizeInvoice(caller, { saleId, signedTotal }) {
 
 export async function authorizeReference(caller, provider, gatewayRef) {
   const collection = await findCollection(caller, provider, gatewayRef);
+  const access = collection ? await businessAccess(caller, collection.business_id) : 'none';
+  if (access === 'none') return denied(404, 'That payment reference could not be found.');
   const decision = decideCollectionAccess({
     found: Boolean(collection),
-    canWrite: collection ? await canWriteBusiness(caller, collection.business_id) : false,
+    canWrite: access === 'write',
   });
   if (!decision.ok) return decision;
   return { ok: true, collection };

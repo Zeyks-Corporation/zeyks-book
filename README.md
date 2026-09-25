@@ -55,106 +55,104 @@ npm test            # offline test suite — calendar, ledger, posting rules
 npm run lint       # typecheck only
 ```
 
-Local database tests:
-
-```bash
-firebase db reset --local   # apply the migrations to the local database
-firebase test db --local     # pgTAP suites, including the concurrency suite
-```
-
-`firebase/tests/database/010_void_concurrency.test.sql` races two **real**
-sessions (a second psql is spawned from inside the runner container and holds
-its transaction open) and pins down that exactly one reversal is written and
-that the losing caller replays it. It commits its fixtures on purpose — a second
-session can only see committed rows — and financial rows are append-only, so
-`firebase db reset --local` is the cleanup (the suite is re-runnable either way).
-
 ## Environment safety — read before pointing anything anywhere
 
-Three environments exist. Exactly one of them may be used for local work:
+The browser clients require explicit `VITE_FIREBASE_*` and `VITE_SUPABASE_*`
+values; there is no hard-coded production fallback. Start Firebase Auth,
+Firestore and Functions emulators for local development and set
+`VITE_USE_FIREBASE_EMULATORS="true"`. The Supabase URL must also be local
+(`localhost` or `127.0.0.1`). This checkout does not contain a Supabase schema
+or migration setup, so a local Supabase database requires separate provisioning.
 
-| | Firebase project | Data |
-|---|---|---|
-| **LOCAL** | `firebase start` — `127.0.0.1:54321` | local test data only. **All** development and **all** database testing happens here. |
-| **STAGING** | a separate cloud project | controlled test data. Never the same project as production. |
-| **PRODUCTION** | the live project | real customer books. A local development build must never point here. |
-
-The app enforces that table instead of trusting the reader. `src/lib/envGuard.ts`
-runs before the Firebase client is constructed (`src/lib/firebase.ts`) and:
-
-- **refuses to start** a development build pointed at a remote or unrecognised
-  project — naming the host it refused and how to fix it;
-- allows a **declared** staging project, with a warning that staging is not a test
-  environment (`VITE_FIREBASE_ENV="staging"`);
-- refuses a key that is a **secret**, whatever shape it takes (`sb_secret_…`,
-  `sbp_…`, or any JWT whose payload `role` is `service_role`), because every
-  `VITE_*` value ends up in the browser bundle;
-- refuses a `VITE_FIREBASE_ENV="local"` declaration that names a remote host —
-  a declaration may not relabel the truth;
-- states the target once on startup, so the console answers "which database is
-  this?" immediately.
-
-`VITE_ALLOW_REMOTE_IN_DEV="yes"` — that exact word, not `true` or `1` — is the
-only escape hatch, and a production build is allowed to reach production, because
-that is what a production build is for.
+`src/lib/envGuard.ts` refuses a remote Firebase or Supabase target in a
+development build unless `VITE_ALLOW_REMOTE_IN_DEV="yes"` is explicitly set.
+Only use that override with a reviewed staging project. The Vite config rejects
+service-role-shaped keys in any `VITE_*` variable before a build is published.
 
 `.env.local` versus `.env`:
 
 - **`.env.local`** — browser config. Only `VITE_*` names. Vite substitutes them
-  into the bundle, so everything there is *public by design*; the publishable
-  (anon) key belongs there, a merchant secret does not. A non-`VITE_` secret
-  sitting in this file is one rename away from being published, which is why the
-  test suite traces every non-`VITE_` value in `.env`/`.env.local` into the built
-  bundle and fails if one is found there.
-- **`.env`** — server secrets: `PAYMENT_MODE`, the eSewa/Khalti merchant keys,
-  plus `FIREBASE_URL` and `FIREBASE_PUBLISHABLE_KEY`. Those last two are *not*
-  secrets (they are the same public values the browser uses), but the payment API
-  needs them to verify each caller's session — without them it refuses every
-  `/api/payments/*` request with `503` rather than serving a request it cannot
-  attribute to a person. Read only by `server/index.js`; never renamed to `VITE_*`.
+  into the bundle, so everything there is public by design; the publishable
+  (anon) key belongs there, a merchant secret does not. Production builds need
+  these public variables configured on the deployment host as well.
+- **`.env` / deployment environment** — server values: `PAYMENT_MODE`, the
+  eSewa/Khalti merchant keys, `FIREBASE_PROJECT_ID`, and Firebase Admin
+  credentials (`FIREBASE_SERVICE_ACCOUNT_JSON` on Vercel or Application Default
+  Credentials locally). The shared API limiter and document lookups use
+  Firestore through those credentials. Payment authorization needs
+  `SUPABASE_URL` and a rotated `SUPABASE_SERVICE_ROLE_KEY`. The Supabase session
+  bridge additionally needs `SUPABASE_ANON_KEY`; if it is absent, that route
+  returns `503`.
+  Never prefix server secrets with `VITE_`.
 
 `.gitignore` ignores `.env` and every `.env.*` file **except** `.env.example`, so
 a staging or production file cannot be committed by accident.
 
 ### Git safety
 
-`node_modules/`, `dist/` and the environment files are not tracked, and no JWT or
-secret-shaped string is tracked anywhere. There is one piece of debt left from
-before the ignore rule existed: **ten files under `firebase/.temp/`** are still
-tracked, including the linked project ref and the per-machine runtime keys that
-`firebase start` generates. Those are local values, not production ones, but they
-do not belong in the repository. `.gitignore` cannot untrack what is already
-tracked, so the remediation is one command (it changes the index only — the files
-stay on disk and are regenerated on demand):
+`node_modules/`, `dist/` and the environment files are not tracked. The current
+source no longer contains the Supabase service-role credential, but historical
+commits do contain it and the former deterministic password bridge. Treat that
+credential as compromised: revoke/replace it in Supabase, update the API
+environment, review access logs and active sessions, and coordinate a Git
+history rewrite before sharing or publishing the repository. Source cleanup
+cannot revoke a credential or remove copies already fetched. The current checkout
+does not track `firebase/.temp` files. Keep environment files and generated
+machine state out of Git; `.gitignore` covers the environment files and Vercel
+local config.
 
-```bash
-git rm -r --cached firebase/.temp
-```
+### Live security rollout
 
-The project ref is in this repository's history regardless, so treat it as known
-and rotate anything else that was ever committed. `tests/run.mjs` fails if *new*
-machine state is tracked, and if an environment file other than `.env.example` is.
+The old Supabase service-role credential remains in historical commits. The
+source changes below are not live until the provider configuration and deployments
+are updated:
+
+1. Coordinate revocation or rotation of the exposed credential in Supabase with
+   the new `SUPABASE_SERVICE_ROLE_KEY` in the API deployment. Confirm the old
+   credential no longer works. If the rotation also changes the public anon
+   key, update `SUPABASE_ANON_KEY` and `VITE_SUPABASE_ANON_KEY` together.
+2. Configure the API host with `FIREBASE_PROJECT_ID`, Firebase Admin
+   credentials, `SUPABASE_URL`, the rotated service-role key, and `APP_URL` for
+   payment return links. Configure the public build values
+   `VITE_FIREBASE_*`, `VITE_SUPABASE_URL`, and `VITE_SUPABASE_ANON_KEY` explicitly;
+   the browser no longer has built-in production fallbacks. Set
+   `VITE_PAYMENT_API_URL` to the API origin only after that API and gateway keys
+   are ready. Deploy this source, then check sign-in, business loading, payment
+   configuration and contact in the deployed environment.
+3. Deploy the Firebase callable changes and `firestore.indexes.json` so OTP
+   attempt limits and limiter document TTL are live. The callable deploy needs
+   the existing Resend secrets. Check a failed OTP reaches the five-attempt
+   limit and a new request follows the send cooldown.
+4. With the rotated service-role key, run
+   `node scripts/rotate-legacy-supabase-passwords.mjs` for a count-only preview.
+   `--apply` assigns random passwords to **every** Supabase Auth user in the
+   project; use it only after confirming that scope. Review and revoke existing
+   Supabase sessions separately.
+5. Inspect live Supabase RLS policies and access logs, including owner, viewer
+   and cross-business reads. This checkout has no SQL migration files or live
+   database access from which to establish the deployed policy state.
 
 ## Deploying — routing, and the two runtimes
 
-The app deploys to Vercel as a static build of `dist/`. Two things about that
-are worth knowing before you touch it.
+Vercel serves the static build from `dist/` and routes `/api/*` to the
+serverless function in `api/index.js`, which imports `server/index.js`.
+The function needs its server environment and Firebase Admin credentials in
+the Vercel project. Missing Supabase admin settings disable the payment and
+session routes; missing Firebase Admin access makes rate-limited API routes
+return `503` until configured.
 
-**One deployment, one API origin (or none).** The payment endpoints live in
-`server/index.js`, which is a long-running Node process, not a static asset —
-Vercel does not run it. So a deployment either names where that API lives or it
-does not have one:
+**Declare the payment API origin.** The built browser app offers online
+collection only when `VITE_PAYMENT_API_URL` is set. It may be this Vercel
+site's origin or a separately deployed API origin:
 
 ```bash
 # In the deployment's environment (a public URL, not a secret):
-VITE_PAYMENT_API_URL="https://pay.example.com"
+VITE_PAYMENT_API_URL="https://your-site.example"
 ```
 
-Unset (the current state of the Vercel project) means online collection is simply
-not offered: the browser makes **no request** to `/api/payments/*`, the gateway
-capability reports itself unavailable, and the UI says to record the receipt or
-the payment instead. Nothing 404s and nothing is hidden — a deployment without a
-payment server does not have online payments, and the app says so.
+When this value is unset, the browser makes no payment API request and the UI
+offers the manual receipt and payment flow. The serverless API route may still
+exist; the browser capability flag does not prove the function is configured.
 
 **The address bar is the route.** Screens are real paths, so a refresh, a pasted
 link and the back button all work:
@@ -166,8 +164,8 @@ link and the back button all work:
 | `/dashboard` `/sales` `/purchases` `/expenses` `/payments` `/reports` `/health` `/settings` | the signed-in app |
 | anything else | the 404 page |
 
-`vercel.json` routes static files first, 404s `/api/*` (so an undeployed API path
-cannot answer 200 with HTML), and sends everything else to `index.html`. Signed
+`vercel.json` routes static files first, sends `/api/*` to the API function,
+and sends other unmatched paths to `index.html`. Signed
 out, a book path shows the sign-in screen *at that path*, so signing in continues
 to the screen that was asked for. Signed in, `/` and `/signin` redirect to
 the dashboard. Unknown paths are a 404 for everyone — never a random screen.
@@ -642,32 +640,32 @@ an allowlist of the nine accounting RPCs, and the bundle scan above.
 
 ### Payment API security model
 
-The small Express server (`server/index.js`) is the only place eSewa's HMAC
-secret and Khalti's key exist. **Every route on it authenticates the caller**
-(`server/auth.js`), and the routes that spend a merchant credential also
-authorize the business the request names.
+The small Express server (`server/index.js`) holds eSewa's HMAC secret and
+Khalti's key. Payment and session routes authenticate the caller
+(`server/auth.js`); contact and service-status routes are public and rate
+limited. Routes that spend a merchant credential authorize the business the
+request names.
 
 | Route | Who may call it |
 |---|---|
-| `GET /api/payments/config` | any signed-in member — provider availability, no secret |
+| `GET /api/payments/config` | any signed-in user with a verified email — provider availability, no secret |
 | `POST /api/payments/esewa/initiate` | signed-in **OWNER/ACCOUNTANT** of the invoice's business |
 | `POST /api/payments/esewa/verify` | signed-in **OWNER/ACCOUNTANT** of the business owning that collection |
 | `POST /api/payments/khalti/initiate` | signed-in **OWNER/ACCOUNTANT** of the invoice's business |
 | `POST /api/payments/khalti/lookup` | signed-in **OWNER/ACCOUNTANT** of the business owning that collection |
 
 **How a request is authenticated.** The browser sends
-`Authorization: Bearer <Firebase access token>`; the server asks Firebase Auth to
-validate it (`auth.getUser`), so no JWT is parsed or verified by hand. Identity —
-user, business, role — comes from that token and from the database, never from
-the request body: there is no `userId`, `businessId` or `role` field anywhere in
-the API's input, and a test fails if one appears.
+`Authorization: Bearer <Firebase ID token>`; Firebase Admin verifies it with
+`verifyIdToken` and requires a verified email. The email identifies the
+Supabase Auth user, while business and role come from the database. No identity
+or role supplied in the request body is trusted.
 
-**How it is authorized.** The server calls `public.can_write(business_id)` *with
-the caller's token*, so the answer comes from `business_memberships` and
-`auth.uid()` — there is no second role model on the server. The invoice or
-collection itself is read through the caller's token as well, which means RLS
-decides what exists: another tenant's document is indistinguishable from a
-missing one (404), while a member without write permission gets 403.
+**How it is authorized.** The server uses its Supabase admin client to read the
+invoice or collection, maps the verified Firebase email to a Supabase profile,
+confirms that profile's ID and email against Supabase Auth, then checks the
+`business_memberships` role. Another tenant's record returns 404; a VIEWER
+member receives 403. The admin client bypasses RLS, so this explicit check is
+required for every payment route before contacting a provider.
 
 **Failure semantics.** 401 unauthenticated (no detail, and never the token),
 403 authenticated but not permitted, 400 malformed request, 404 not found or not
@@ -675,11 +673,10 @@ disclosed, 409 a void document, 422 an amount above the invoice, 5xx ours or the
 provider's. Provider errors pass through `server/redact.js` before they are
 logged or returned.
 
-**Availability is declared.** A deployment only calls these routes when
-`VITE_PAYMENT_API_URL` names the API's origin (development always may: the Vite
-dev server proxies `/api` to `npm run dev`'s API process). This is what stops a
-static deployment from requesting an endpoint it does not serve, and it is why
-the collection flow is offered only where it can actually complete.
+**Availability is declared.** A built browser app only calls these routes when
+`VITE_PAYMENT_API_URL` names the API's origin (development uses the Vite proxy
+to the local API process). Configure the function credentials and gateway keys
+at that origin before enabling online collection.
 
 **What this boundary is not.** It is not the financial write path. It gates who
 may *ask*; `public.initiate_gateway_txn` and `public.settle_gateway_txn` still
@@ -907,20 +904,19 @@ Known limitations, stated plainly:
 - The guard makes a dangerous target loud rather than impossible: a developer who
   sets `VITE_ALLOW_REMOTE_IN_DEV="yes"` can still run a development build against
   a remote project on purpose.
-- **Provider webhooks are not implemented.** The payment API authenticates every
-  caller (Stage 14 closed the gap Stage 13 reported), and initiation authorizes the
-  invoice through the caller's own session. But a provider callback arrives with no
+- **Provider webhooks are not implemented.** Payment routes authenticate every
+  caller and initiation checks the invoice against the caller's verified email
+  and business membership. A provider callback arrives with no
   user session at all, so it needs a different mechanism: a separate mount, a
   signature verified over the raw request body, and no bearer token. Until that
   exists there is no public route on this server.
-- **Rate limiting is the existing per-IP in-memory cap** on `/api/payments`
-  (30 requests a minute). It is a scripted-client guard, not a distributed
-  limiter; per-caller limits and anything shared across instances are deferred.
+- **Rate limiting uses shared Firestore counters** for the API and OTP callables,
+  so Vercel instances use the same limits. Deploy `firestore.indexes.json` with
+  `firebase deploy --only firestore:indexes` to enable TTL cleanup for the
+  short-lived limiter documents.
 - A non-`VITE_` secret in `.env.local` (for example a deployment token) is not
   bundled, but nothing stops it being added there; the test suite only proves it is
   not in the bundle.
-- The ten tracked `firebase/.temp/` files described under *Git safety* are still
-  tracked.
 
 Deferred — not started and not half-built: multi-invoice supplier allocation,
 gateway collection against purchases, refunds, chargebacks, payouts, bank API

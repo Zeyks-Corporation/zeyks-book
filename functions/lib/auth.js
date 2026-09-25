@@ -12,12 +12,12 @@
  *                                a real session with signInWithCustomToken.
  *
  * Security properties carried over from the audit:
- *   * the code is 6 random digits from crypto.randomBytes — never a constant,
+ *   * the code is 6 random digits from crypto.randomInt — never a constant,
  *     never logged, never returned to the client;
  *   * only the SHA-256 hash is stored, salted with the challenge id;
  *   * 10-minute expiry, 5 attempts, 60 s between sends, 5 sends/hour/email;
- *   * every failure surfaces to the user as one generic sentence; the real
- *     reason goes to the function log only.
+ *   * invalid or expired codes use one response; rate limits explain when to
+ *     retry without revealing whether an account exists.
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -75,6 +75,22 @@ const fail = (logMessage) => {
     return new https_1.HttpsError('internal', GENERIC);
 };
 const hash = (challengeId, code) => (0, node_crypto_1.createHash)('sha256').update(`${challengeId}:${code}`).digest('hex');
+/** Cross-instance IP throttling for callable requests. IPs are stored as
+ * digests and the TTL policy removes the short-lived buckets.
+ */
+async function allowIpRequest(ip, operation, windowMs, max) {
+    const ipHash = (0, node_crypto_1.createHash)('sha256').update(ip).digest('hex');
+    const slot = Math.floor(Date.now() / windowMs);
+    const ref = db.collection('_otpRateLimits').doc(`${operation}_${ipHash}_${slot}`);
+    return db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        const count = Number(snap.data()?.count) || 0;
+        if (count >= max)
+            return false;
+        tx.set(ref, { count: count + 1, expiresAt: new Date((slot + 2) * windowMs) });
+        return true;
+    });
+}
 const clean = (email) => {
     const value = typeof email === 'string' ? email.trim().toLowerCase() : '';
     if (!value || !EMAIL_RE.test(value) || value.length > 254) {
@@ -85,29 +101,50 @@ const clean = (email) => {
 exports.requestOtp = (0, https_1.onCall)({ secrets: [RESEND_API_KEY, MAIL_FROM] }, async (request) => {
     try {
         const email = clean(request.data?.email);
-        // Throttles, both keyed off the challenge document.
+        const ip = request.rawRequest.ip || 'unknown';
+        if (!await allowIpRequest(ip, 'send', 10 * 60000, 30)) {
+            throw new https_1.HttpsError('resource-exhausted', 'Too many requests. Please try again later.');
+        }
+        // Throttles are serialized with the challenge write. The email counter
+        // lives apart from the challenge so a successful verification cannot
+        // reset the hourly send limit by deleting the challenge.
         const challengeRef = db.collection('otpChallenges').doc(email.replace(/\./g, ','));
-        const existing = await challengeRef.get();
-        const prev = existing.data();
         const now = Date.now();
-        if (prev?.last_sent_at && now - prev.last_sent_at.toMillis() < RESEND_COOLDOWN_MS) {
-            throw new https_1.HttpsError('resource-exhausted', 'Please wait a minute before requesting another code.');
-        }
-        const hourKey = new Date().toISOString().slice(0, 13);
-        const sentCount = prev?.sent_hour === hourKey ? (prev.sent_count ?? 0) : 0;
-        if (sentCount >= HOURLY_SEND_LIMIT) {
-            throw new https_1.HttpsError('resource-exhausted', 'Too many codes requested. Try again later.');
-        }
         const code = String((0, node_crypto_1.randomInt)(0, 1000000)).padStart(6, '0');
         const expiresAt = new Date(now + CODE_TTL_MS);
-        await challengeRef.set({
-            code_hash: hash(challengeRef.id, code),
-            expires_at: firestore_1.FieldValue.serverTimestamp() && expiresAt,
-            attempts: 0,
-            last_sent_at: new Date(now),
-            sent_hour: hourKey,
-            sent_count: sentCount + 1,
+        const hourSlot = Math.floor(now / 3600000);
+        const emailHash = (0, node_crypto_1.createHash)('sha256').update(email).digest('hex');
+        const emailLimitRef = db.collection('_otpRateLimits').doc(`send_email_${emailHash}_${hourSlot}`);
+        const sendResult = await db.runTransaction(async (tx) => {
+            const [challenge, emailLimit] = await Promise.all([
+                tx.get(challengeRef),
+                tx.get(emailLimitRef),
+            ]);
+            const prev = challenge.data();
+            if (prev?.last_sent_at && now - prev.last_sent_at.toMillis() < RESEND_COOLDOWN_MS) {
+                return 'cooldown';
+            }
+            const sentCount = Number(emailLimit.data()?.count) || 0;
+            if (sentCount >= HOURLY_SEND_LIMIT)
+                return 'hourly-limit';
+            tx.set(challengeRef, {
+                code_hash: hash(challengeRef.id, code),
+                expires_at: expiresAt,
+                attempts: 0,
+                last_sent_at: new Date(now),
+            });
+            tx.set(emailLimitRef, {
+                count: sentCount + 1,
+                expiresAt: new Date((hourSlot + 2) * 3600000),
+            });
+            return 'sent';
         });
+        if (sendResult === 'cooldown') {
+            throw new https_1.HttpsError('resource-exhausted', 'Please wait a minute before requesting another code.');
+        }
+        if (sendResult === 'hourly-limit') {
+            throw new https_1.HttpsError('resource-exhausted', 'Too many codes requested. Try again later.');
+        }
         const from = MAIL_FROM.value() || 'Zeyks Book <onboarding@resend.dev>';
         const res = await fetch('https://api.resend.com/emails', {
             method: 'POST',
@@ -135,32 +172,37 @@ exports.verifyOtp = (0, https_1.onCall)(async (request) => {
         const code = typeof request.data?.code === 'string' ? request.data.code.trim() : '';
         if (!/^\d{6}$/.test(code))
             throw new https_1.HttpsError('invalid-argument', 'Enter the 6-digit code from your email.');
+        const ip = request.rawRequest.ip || 'unknown';
+        if (!await allowIpRequest(ip, 'verify', 60000, 30)) {
+            throw new https_1.HttpsError('resource-exhausted', 'Too many attempts. Please wait and try again.');
+        }
         const challengeRef = db.collection('otpChallenges').doc(email.replace(/\./g, ','));
         const result = await db.runTransaction(async (tx) => {
             const snap = await tx.get(challengeRef);
             const data = snap.data();
             if (!snap.exists || !data?.code_hash)
-                throw fail(`no challenge for ${email}`);
+                return 'missing';
             if (Date.now() > (data.expires_at?.toMillis() ?? 0)) {
                 tx.delete(challengeRef);
-                throw fail(`expired code for ${email}`);
+                return 'expired';
             }
             if ((data.attempts ?? 0) >= MAX_ATTEMPTS) {
                 tx.delete(challengeRef);
-                throw fail(`attempt limit exhausted for ${email}`);
+                return 'locked';
             }
             const expected = Buffer.from(data.code_hash, 'hex');
             const provided = Buffer.from(hash(snap.id, code), 'hex');
             const matches = expected.length === provided.length && (0, node_crypto_1.timingSafeEqual)(expected, provided);
             if (!matches) {
                 tx.update(challengeRef, { attempts: (data.attempts ?? 0) + 1 });
-                throw fail(`wrong code for ${email}`);
+                return 'invalid';
             }
             tx.delete(challengeRef);
-            return true;
+            return 'verified';
         });
-        if (!result)
-            throw fail('verify did not conclude');
+        if (result !== 'verified') {
+            throw new https_1.HttpsError('unauthenticated', 'That code is invalid or expired. Request a new one.');
+        }
         // The email is the identity: find or create the Auth user, then mint a
         // custom token the client exchanges for a real Firebase session.
         const auth = (0, auth_1.getAuth)();

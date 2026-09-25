@@ -1,20 +1,17 @@
 /**
  * Payment API availability — the environment half.
  *
- * The payment endpoints are a *separate runtime* from this application: a server
- * that holds the merchant signing secrets, deploys independently, and
- * authenticates every caller (Stage 14). The Vercel deployment serves the static
- * app only, so unless a deployment declares where that API lives there is
- * nothing at `/api/payments/*` to answer — and asking anyway is what made the
- * browser hammer a 404 on every page load.
+ * The payment endpoints run on a server that holds the merchant signing
+ * secrets and authenticates every caller. Vercel routes `/api/*` to its
+ * serverless function, and a separate API origin is also supported.
  *
  * So availability is declared, not guessed:
  *
  *   development   the Vite dev server proxies `/api` to the local API server
  *                 (`npm run dev` starts both), so the relative path is correct.
- *   deployment    only when `VITE_PAYMENT_API_URL` names the API's origin. An
- *                 empty value means payments are not enabled in this
- *                 deployment, and the UI says so instead of calling.
+ *   deployment    only when `VITE_PAYMENT_API_URL` names an API origin,
+ *                 including this site's origin when the Vercel function is
+ *                 configured. An empty value disables online collection.
  *
  * This is a capability flag, not a secret: it is a public URL. Nothing here
  * grants access to anything — every route on that API still authenticates the

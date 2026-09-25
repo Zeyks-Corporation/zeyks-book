@@ -20,8 +20,8 @@
  *
  * The initiations and the lookups are the routes that spend a merchant secret,
  * so they also authorize: the invoice (or the collection behind the reference)
- * is read through the caller's own token, and the permission check is the
- * database's `can_write` rule. A caller cannot name another tenant's invoice,
+ * is read from Supabase and checked against the verified caller's membership
+ * and role. A caller cannot name another tenant's invoice,
  * another tenant's collection, an amount above the invoice, or the reference
  * that gets signed.
  *
@@ -50,15 +50,29 @@ import { ProviderResponseError } from './verification.js';
 import { redact, redactDetail } from './redact.js';
 import { resendService, isValidEmail } from './resend.js';
 import {
-  authorizeInvoice, authorizeReferences, claimedRefs, requireCaller, warnIfUnconfigured,
+  authorizeInvoice, authorizeReferences, claimedRefs, consumeRateLimit, requireCaller, warnIfUnconfigured,
 } from './auth.js';
-import { supabaseAdmin, createAnonClient } from './supabase.js';
+import { getSupabaseAdmin, createAnonClient } from './supabase.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-app.set('trust proxy', 1);
+// Trust Vercel's one proxy hop. A directly exposed local API must not accept a
+// caller-supplied X-Forwarded-For address for its IP rate limit.
+app.set('trust proxy', process.env.VERCEL ? 1 : false);
 const PORT = Number(process.env.PORT ?? 4000);
 const MODE = process.env.PAYMENT_MODE === 'live' ? 'live' : 'sandbox';
+const APP_URL = (() => {
+  const raw = process.env.APP_URL || (process.env.VERCEL ? '' : 'http://localhost:3000');
+  try {
+    const url = new URL(raw);
+    if (url.username || url.password) return null;
+    if ((process.env.VERCEL || MODE === 'live') && url.protocol !== 'https:') return null;
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return null;
+  }
+})();
 
 app.use(express.json({ limit: '256kb' }));
 
@@ -78,45 +92,38 @@ app.use((req, _res, next) => {
   next();
 });
 
-// Small in-memory guard so a scripted client cannot hammer a route.
-//
-// Every entry is a sliding window of timestamps, and the sweep below bounds
-// the store: without it, a flood of distinct source addresses would grow the
-// map without limit — the memory-exhaustion half of "rate-limit the endpoint".
-const HIT_WINDOWS = new Map();
-const HIT_SWEEP_MS = 5 * 60_000;
-const HIT_MAX_KEYS = 5_000;
-
-/** One limiter per route family, keyed by source address. */
+/** Shared limiter per route family; Firestore keeps limits consistent across
+ * serverless instances. Fail closed if the limiter store is unavailable.
+ */
 function rateLimit({ name, windowMs, max }) {
-  return (req, res, next) => {
-    const key = `${name}:${req.caller?.id ?? req.ip ?? 'unknown'}`;
-    const now = Date.now();
-    const window = (HIT_WINDOWS.get(key) ?? []).filter((t) => now - t < windowMs);
-    if (window.length >= max) {
-      res.set('Retry-After', String(Math.ceil(windowMs / 1000)));
-      return res.status(429).json({ error: 'Too many requests. Wait a moment and try again.' });
+  return async (req, res, next) => {
+    try {
+      const identity = req.caller?.id ?? req.ip ?? 'unknown';
+      const allowed = await consumeRateLimit(name, identity, windowMs, max);
+      if (!allowed) {
+        res.set('Retry-After', String(Math.ceil(windowMs / 1000)));
+        return res.status(429).json({ error: 'Too many requests. Wait a moment and try again.' });
+      }
+      return next();
+    } catch (error) {
+      console.error(`[rate-limit] ${name} limiter unavailable:`, redactDetail(error));
+      return res.status(503).json({ error: 'This service is temporarily unavailable. Please retry shortly.' });
     }
-    window.push(now);
-    HIT_WINDOWS.set(key, window);
-    return next();
   };
 }
 
-// Purge keys with no recent hits, then cap the map even under a flood of
-// distinct addresses. `unref` keeps this timer from holding the process open.
-setInterval(() => {
-  const cutoff = Date.now() - HIT_SWEEP_MS;
-  for (const [key, times] of HIT_WINDOWS) {
-    if (!times.some((t) => t > cutoff)) HIT_WINDOWS.delete(key);
-  }
-  for (const key of HIT_WINDOWS.keys()) {
-    if (HIT_WINDOWS.size <= HIT_MAX_KEYS) break;
-    HIT_WINDOWS.delete(key);
-  }
-}, HIT_SWEEP_MS).unref?.();
-
 app.use('/api/payments', rateLimit({ name: 'payments', windowMs: 60_000, max: 30 }));
+app.use('/api/payments', requireCaller);
+app.use('/api/payments', rateLimit({ name: 'payments-user', windowMs: 60_000, max: 20 }));
+app.use('/api/payments', (_req, res, next) => {
+  try {
+    if (!getSupabaseAdmin()) return res.status(503).json({ error: 'The payment database is not configured.' });
+    return next();
+  } catch (error) {
+    console.error('[payments] Supabase configuration failed:', redactDetail(error));
+    return res.status(503).json({ error: 'The payment database is temporarily unavailable.' });
+  }
+});
 
 /**
  * One failure path for the whole API.
@@ -152,8 +159,8 @@ const guard = async (res, message, work) => {
  * The shared authorization for the two initiation routes.
  *
  * Returns the invoice on success, or `null` after answering the request. The
- * invoice comes from the caller's own RLS-filtered read, so its `business_id`,
- * amount and customer name are the database's, not the browser's.
+ * invoice comes from the database after a verified identity and membership
+ * check; its amount and customer name do not come from the browser.
  */
 const authorizeInvoiceOrReply = async (req, res, { saleId, signedTotal }) => {
   const result = await guard(res, 'The invoice could not be authorized.',
@@ -166,18 +173,19 @@ const authorizeInvoiceOrReply = async (req, res, { saleId, signedTotal }) => {
   return result.value.invoice;
 };
 
-app.get('/api/payments/config', requireCaller, (_req, res) => {
+app.get('/api/payments/config', (_req, res) => {
   res.json({
     mode: MODE,
-    esewa: { enabled: esewa.isConfigured(), productCode: esewa.productCode() },
-    khalti: { enabled: khalti.isConfigured() },
+    esewa: { enabled: Boolean(APP_URL) && esewa.isConfigured(), productCode: esewa.productCode() },
+    khalti: { enabled: Boolean(APP_URL) && khalti.isConfigured() },
   });
 });
 
 /* --------------------------------- eSewa ---------------------------------- */
 
-app.post('/api/payments/esewa/initiate', requireCaller, async (req, res) => {
+app.post('/api/payments/esewa/initiate', async (req, res) => {
   if (!esewa.isConfigured()) return fail(res, 503, 'eSewa is not configured on the server.');
+  if (!APP_URL) return fail(res, 503, 'The payment return URL is not configured on the server.');
   const { saleId, amount, taxAmount = 0 } = req.body ?? {};
   const value = Number(amount);
   const tax = Number(taxAmount) || 0;
@@ -197,14 +205,14 @@ app.post('/api/payments/esewa/initiate', requireCaller, async (req, res) => {
       // payload cannot name something other than the invoice it is bound to.
       reference: invoice.invoice_number,
       customerName: invoice.customer_name,
-      appUrl: process.env.APP_URL ?? `http://localhost:3000`,
+      appUrl: APP_URL,
     }));
   } catch (e) {
     return fail(res, 500, 'Could not prepare the eSewa payment.', e);
   }
 });
 
-app.post('/api/payments/esewa/verify', requireCaller, async (req, res) => {
+app.post('/api/payments/esewa/verify', async (req, res) => {
   if (!esewa.isConfigured()) return fail(res, 503, 'eSewa is not configured on the server.');
   const { data, transactionUuid, totalAmount } = req.body ?? {};
 
@@ -234,10 +242,11 @@ app.post('/api/payments/esewa/verify', requireCaller, async (req, res) => {
 
 /* --------------------------------- Khalti --------------------------------- */
 
-app.post('/api/payments/khalti/initiate', requireCaller, async (req, res) => {
+app.post('/api/payments/khalti/initiate', async (req, res) => {
   if (!khalti.isConfigured()) {
     return fail(res, 503, 'Khalti is not configured. Add KHALTI_SECRET_KEY to your .env file.');
   }
+  if (!APP_URL) return fail(res, 503, 'The payment return URL is not configured on the server.');
   const { saleId, amount, customerEmail, customerPhone } = req.body ?? {};
   const value = Number(amount);
   if (!Number.isFinite(value) || value < 10) {
@@ -255,7 +264,7 @@ app.post('/api/payments/khalti/initiate', requireCaller, async (req, res) => {
       customerName: invoice.customer_name,
       customerEmail: String(customerEmail ?? ''),
       customerPhone: String(customerPhone ?? ''),
-      appUrl: process.env.APP_URL ?? 'http://localhost:3000',
+      appUrl: APP_URL,
     });
     res.json(result);
   } catch (e) {
@@ -263,7 +272,7 @@ app.post('/api/payments/khalti/initiate', requireCaller, async (req, res) => {
   }
 });
 
-app.post('/api/payments/khalti/lookup', requireCaller, async (req, res) => {
+app.post('/api/payments/khalti/lookup', async (req, res) => {
   if (!khalti.isConfigured()) return fail(res, 503, 'Khalti is not configured on the server.');
   const { pidx } = req.body ?? {};
   if (!pidx) return fail(res, 400, 'A pidx is required.');
@@ -294,14 +303,14 @@ app.post('/api/payments/khalti/lookup', requireCaller, async (req, res) => {
  * let an unauthenticated caller send branded email to any address with a
  * caller-supplied reset link, and the OTP pair authenticated anyone who typed
  * `123456`. Sign-in now happens entirely through Firebase Auth (see
- * src/services/authService.ts): Firebase generates, stores, expires and
- * verifies the code, and issues the real access token every Firestore-backed read
- * depends on. This server never sees an OTP again.
+ * src/services/authService.ts and functions/src/auth.ts): the Firebase callable
+ * generates, stores, expires and verifies the code, then Firebase Auth issues
+ * the access token. This server never sees an OTP again.
  */
 
 /* ------------------------- Supabase Session Bridge ------------------------ */
 
-app.post('/api/auth/supabase-session', requireCaller, rateLimit({ name: 'supabase-session', windowMs: 60_000, max: 12 }), async (req, res) => {
+app.post('/api/auth/supabase-session', rateLimit({ name: 'supabase-session-ip', windowMs: 60_000, max: 30 }), requireCaller, rateLimit({ name: 'supabase-session', windowMs: 60_000, max: 12 }), async (req, res) => {
   const email = req.caller.email?.trim().toLowerCase();
   if (!req.caller.emailVerified || !email) {
     return fail(res, 403, 'Verify your email before opening your books.');
@@ -310,6 +319,8 @@ app.post('/api/auth/supabase-session', requireCaller, rateLimit({ name: 'supabas
   const name = typeof requestedName === 'string' ? requestedName.trim().slice(0, 120) : '';
 
   try {
+    const supabaseAdmin = getSupabaseAdmin();
+    if (!supabaseAdmin) return fail(res, 503, 'The account sync service is not configured.');
     // The Firebase ID token is the authority for identity. Never accept an
     // email or user ID supplied only in the request body.
     const { data: profile, error: profileError } = await supabaseAdmin
@@ -321,6 +332,13 @@ app.post('/api/auth/supabase-session', requireCaller, rateLimit({ name: 'supabas
 
     let userId = profile?.id;
     let fullName = profile?.full_name || '';
+    if (userId) {
+      const { data: authUser, error: authUserError } = await supabaseAdmin.auth.admin.getUserById(userId);
+      if (authUserError) throw authUserError;
+      if (authUser.user?.email?.trim().toLowerCase() !== email) {
+        throw new Error('The profile email does not match the Supabase Auth user.');
+      }
+    }
     if (!userId) {
       const { data, error } = await supabaseAdmin.auth.admin.createUser({
         email,
@@ -368,7 +386,7 @@ app.post('/api/auth/supabase-session', requireCaller, rateLimit({ name: 'supabas
   }
 });
 
-app.get('/api/resend/status', (_req, res) => {
+app.get('/api/resend/status', rateLimit({ name: 'resend-status', windowMs: 60_000, max: 30 }), (_req, res) => {
   res.json({ configured: resendService.isConfigured() });
 });
 
