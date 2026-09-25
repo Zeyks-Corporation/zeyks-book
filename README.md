@@ -1,4 +1,4 @@
-  # Zeyks Book  
+  # Zeyks Book   
        
 Double-entry accounting for Nepali small businesses — sales, purchases,
 expenses, VAT, and online collection through eSewa and Khalti. Dates work in
