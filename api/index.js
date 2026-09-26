@@ -18,36 +18,79 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
   || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJseW11b2ZocnJlcXdxaG1taHF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3ODYzNTIsImV4cCI6MjEwNTM2MjM1Mn0.PNyXm5YW3U-RSxFDYG-CU7e40r3hoNqv3BcEalfdXw8';
 
 async function parseBody(req) {
-  if (req.body && typeof req.body === 'object') return req.body;
-  if (typeof req.body === 'string') {
-    try { return JSON.parse(req.body); } catch { return {}; }
+  if (req.body !== undefined && req.body !== null) {
+    if (typeof req.body === 'object') return req.body;
+    if (typeof req.body === 'string') {
+      try { return JSON.parse(req.body); } catch { return {}; }
+    }
   }
   return new Promise((resolve) => {
+    let done = false;
+    const timer = setTimeout(() => {
+      if (!done) {
+        done = true;
+        resolve({});
+      }
+    }, 500);
+
     let data = '';
     req.on('data', (chunk) => { data += chunk; });
     req.on('end', () => {
-      try { resolve(JSON.parse(data || '{}')); } catch { resolve({}); }
+      if (!done) {
+        done = true;
+        clearTimeout(timer);
+        try { resolve(JSON.parse(data || '{}')); } catch { resolve({}); }
+      }
     });
-    req.on('error', () => resolve({}));
+    req.on('error', () => {
+      if (!done) {
+        done = true;
+        clearTimeout(timer);
+        resolve({});
+      }
+    });
   });
 }
 
 function sendJson(res, status, data) {
+  if (typeof res.status === 'function' && typeof res.json === 'function') {
+    return res.status(status).json(data);
+  }
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json');
-  res.end(JSON.stringify(data));
+  return res.end(JSON.stringify(data));
 }
 
 export default async function handler(req, res) {
   try {
-    let url = req.url || '/';
+    let rawUrl = req.url || '/';
+    let url = rawUrl;
     if (!url.startsWith('/api')) {
       url = '/api' + (url.startsWith('/') ? url : '/' + url);
     }
     const cleanPath = url.split('?')[0];
 
+    const candidatePaths = [
+      cleanPath,
+      rawUrl.split('?')[0],
+      req.headers?.['x-matched-path'] || '',
+      req.headers?.['x-forwarded-uri'] ? req.headers['x-forwarded-uri'].split('?')[0] : '',
+    ].filter(Boolean);
+
+    const matchesPath = (route) =>
+      candidatePaths.some((p) => p === route || p.endsWith(route) || p.endsWith('/api' + route));
+
+    // 0. CORS preflight
+    if (req.method === 'OPTIONS') {
+      res.statusCode = 204;
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      return res.end();
+    }
+
     // 1. Supabase Session Bridge
-    if (req.method === 'POST' && cleanPath === '/api/auth/supabase-session') {
+    if (req.method === 'POST' && (matchesPath('/api/auth/supabase-session') || matchesPath('/auth/supabase-session'))) {
       const payload = await parseBody(req);
       let email = payload.email;
       let name = payload.name;
@@ -167,7 +210,7 @@ export default async function handler(req, res) {
     }
 
     // 2. Business Memberships Fallback
-    if (req.method === 'POST' && cleanPath === '/api/business/my-memberships') {
+    if (req.method === 'POST' && (matchesPath('/api/business/my-memberships') || matchesPath('/business/my-memberships'))) {
       const payload = await parseBody(req);
       let email = payload.email;
       if (!email && req.headers?.authorization) {
@@ -224,7 +267,7 @@ export default async function handler(req, res) {
     }
 
     // 3. Business Get Fallback
-    if (req.method === 'POST' && cleanPath === '/api/business/get') {
+    if (req.method === 'POST' && (matchesPath('/api/business/get') || matchesPath('/business/get'))) {
       const payload = await parseBody(req);
       const targetId = payload.businessId;
       if (!targetId || typeof targetId !== 'string') {
@@ -250,21 +293,25 @@ export default async function handler(req, res) {
     }
 
     // 4. Resend status
-    if (req.method === 'GET' && cleanPath === '/api/resend/status') {
+    if (req.method === 'GET' && (matchesPath('/api/resend/status') || matchesPath('/resend/status'))) {
       return sendJson(res, 200, { configured: Boolean(process.env.RESEND_API_KEY) });
     }
 
-    // 5. Delegate remaining routes to Express server
-    req.url = url;
-    try {
-      const serverPath = '../server/index.js';
-      const mod = await import(/* @vite-ignore */ serverPath);
-      const app = mod.default;
-      return app(req, res);
-    } catch (importErr) {
-      console.error('[Server Import Error]:', importErr);
-      return sendJson(res, 503, { error: 'Payment services are temporarily unavailable.' });
+    // 5. Delegate payment routes to Express server
+    if (matchesPath('/api/payments') || matchesPath('/payments') || matchesPath('/api/contact') || matchesPath('/contact')) {
+      req.url = url;
+      try {
+        const serverPath = '../server/index.js';
+        const mod = await import(/* @vite-ignore */ serverPath);
+        const app = mod.default;
+        return app(req, res);
+      } catch (importErr) {
+        console.error('[Server Import Error]:', importErr);
+        return sendJson(res, 503, { error: 'Payment services are temporarily unavailable.' });
+      }
     }
+
+    return sendJson(res, 404, { error: 'API route not found.' });
   } catch (err) {
     console.error('[API Handler Error]:', err);
     return sendJson(res, 500, { error: err?.message || 'Internal server error' });
