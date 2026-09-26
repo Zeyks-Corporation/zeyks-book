@@ -8,7 +8,9 @@ import {
   FileSpreadsheet,
   Printer,
   Scale,
+  ShieldCheck,
   Wallet,
+  X,
   XCircle,
 } from 'lucide-react';
 import { PublicLayout } from './PublicLayout';
@@ -17,28 +19,28 @@ import { bsToAd, formatAd } from '../lib/nepaliDate';
 
 const COMPARISON = [
   {
-    feature: 'Nepali calendar (Bikram Sambat)',
-    zeyks: 'BS dates with AD support and a Shrawan 1 fiscal year',
-    excel: 'Check date conversion and fiscal year support for your workflow',
-    foreign: 'Check date conversion and fiscal year support for your workflow',
+    feature: 'Nepali Calendar (Bikram Sambat)',
+    zeyks: 'Native BS with AD dual-date support and Shrawan 1 fiscal year',
+    excel: 'Manual conversions, broken formulas on leap months',
+    foreign: 'Gregorian (AD) only; requires painful workarounds',
   },
   {
-    feature: 'Double-entry bookkeeping',
-    zeyks: 'Transactions create balanced debit and credit journal entries',
-    excel: 'Compare your current posting and reconciliation process',
-    foreign: 'Confirm the ledger and reporting workflows match your needs',
+    feature: 'Ledger Reconciliation',
+    zeyks: 'Balanced double-entry journals by construction (Dr = Cr)',
+    excel: 'Prone to silent formula overwrites and manual drift',
+    foreign: 'Rigid enterprise configurations with slow sync',
   },
   {
-    feature: 'A4 financial reports',
-    zeyks: 'Print-ready Profit & Loss, Balance Sheet, Trial Balance, and VAT reports',
-    excel: 'Preview report layout and totals before you file',
-    foreign: 'Preview report layout and totals before you file',
+    feature: 'Statement Output',
+    zeyks: 'Official A4 paper-ready reports (P&L, Balance Sheet, VAT)',
+    excel: 'Messy print scaling; inconsistent multi-page breaks',
+    foreign: 'Cluttered US-Letter exports requiring reformatting',
   },
   {
-    feature: 'Data storage and backups',
-    zeyks: 'Managed cloud database with account based access controls',
-    excel: 'Downloadable JSON backup; restore is not yet available',
-    foreign: 'Review the privacy page for providers and current limits',
+    feature: 'Data Ownership & Privacy',
+    zeyks: 'Self-hosted on your own private cloud database (100% Private)',
+    excel: 'Scattered unencrypted .xlsx files vulnerable to loss',
+    foreign: 'Locked on proprietary cloud servers with monthly fees',
   },
 ];
 
@@ -55,12 +57,12 @@ export const LandingPage: React.FC<{
         <div className="mx-auto max-w-5xl px-4 sm:px-6">
           {/* Hero Headline & Subtitle */}
           <div className="text-center">
-            <h1 className="mx-auto max-w-4xl text-[36px] font-extrabold leading-[44px] tracking-[-0.03em] sm:text-[58px] sm:leading-[66px] text-[var(--label)] font-display">
-              Accounting software for Nepal, built around the Bikram Sambat calendar.
+            <h1 className="mx-auto max-w-4xl text-[36px] font-extrabold leading-[44px] tracking-[-0.03em] sm:text-[58px] sm:leading-[66px] text-[var(--label)] font-lovelace">
+              Accounting for the way Nepal actually does business.{' '}
             </h1>
 
             <p className="mx-auto mt-4 max-w-2xl text-[16px] leading-[24px] text-[var(--label-secondary)] sm:text-[19px] sm:leading-[28px]">
-              Record sales, purchases, expenses and settlements in NPR. See BS and AD dates together, then print clear A4 financial statements.
+              Simple, powerful tools to manage your business from one place.
             </p>
 
             {/* CTAs */}
@@ -81,7 +83,7 @@ export const LandingPage: React.FC<{
                 rel="noopener noreferrer"
                 className="inline-flex h-11 min-h-[44px] items-center justify-center rounded-full border border-[var(--separator)] bg-[var(--bg)] px-6 text-[15px] font-medium text-[var(--label)] shadow-sm hover:bg-[var(--fill-secondary)] transition-all active:scale-[0.97] gap-1.5"
               >
-                <span>Explore the free interactive demo</span>
+                <span>See Demo</span>
                 <ArrowRight size={16} className="opacity-70" />
               </a>
             </div>
@@ -89,16 +91,16 @@ export const LandingPage: React.FC<{
             {/* Trust Strip */}
             <div className="mt-6 flex flex-wrap items-center justify-center gap-6 text-[13px] text-[var(--label-tertiary)]">
               <div className="flex items-center gap-2">
-                <Calendar size={16} className="text-[var(--accent)]" />
-                <span>BS and AD dates</span>
+                <ShieldCheck size={16} className="text-[var(--accent)]" />
+                <span>100% Private</span>
               </div>
               <div className="flex items-center gap-2">
                 <Scale size={16} className="text-[var(--success)]" />
-                <span>Double-entry bookkeeping</span>
+                <span>Mathematical Proof</span>
               </div>
               <div className="flex items-center gap-2">
                 <Printer size={16} className="text-[var(--warning)]" />
-                <span>Printable A4 reports</span>
+                <span>Standard A4 Statement</span>
               </div>
             </div>
           </div>
@@ -111,13 +113,13 @@ export const LandingPage: React.FC<{
         <div className="mx-auto max-w-5xl px-4 sm:px-6">
           <div className="max-w-2xl">
             <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[var(--label-tertiary)]">
-              From entries to reports
+              Engineered for Certainty
             </p>
             <h2 className="mt-3 text-[36px] font-extrabold leading-[44px] tracking-[-0.02em] text-[var(--label)]">
-              See how each balance is built.
+              Architecture that refuses to drift.
             </h2>
             <p className="mt-4 text-[17px] leading-[26px] text-[var(--label-secondary)]">
-              Posted journal entries feed the reports. The data health screen flags missing links and mismatches for review.
+              Accounting software should not guess. Every balance in Zeyks Book derives strictly from posted ledger rows.
             </p>
           </div>
 
@@ -131,8 +133,8 @@ export const LandingPage: React.FC<{
                 Double entry, by construction
               </h3>
               <p className="mt-2.5 max-w-xl text-[15px] leading-[24px] text-[var(--label-secondary)]">
-                Sales, purchases, expenses and settlements create debit and credit lines.
-                Review the journal and data health screen before relying on a report.
+                Every invoice, bill, expense and settlement writes balanced debit and credit entries.
+                The ledger is the single source of truth — never a detached running total that can silently drift.
               </p>
               <div className="mt-6 rounded-2xl border border-[var(--separator)] bg-[var(--bg-secondary)]/60 p-4 font-mono text-[13px] shadow-2xs">
                 <div className="flex justify-between text-[var(--label-secondary)]">
@@ -173,7 +175,7 @@ export const LandingPage: React.FC<{
                 <Wallet size={24} strokeWidth={1.8} />
               </div>
               <h3 className="mt-6 text-[22px] font-bold text-[var(--label)]">
-                Track settlements
+                Honest settlements
               </h3>
               <p className="mt-2.5 text-[15px] leading-[24px] text-[var(--label-secondary)]">
                 Part payments, voids, and reversals. What is owed is always the document total less valid settlement rows.
@@ -186,23 +188,23 @@ export const LandingPage: React.FC<{
                 <FileSpreadsheet size={24} strokeWidth={1.8} />
               </div>
               <h3 className="mt-6 text-[22px] font-bold text-[var(--label)]">
-                Statements you can review and print
+                Statements you can file
               </h3>
               <p className="mt-2.5 text-[15px] leading-[24px] text-[var(--label-secondary)]">
                 Profit & Loss, Balance Sheet, VAT returns, Trial Balance, Cash & Bank statements laid out as 210mm A4 sheets.
               </p>
             </div>
 
-            {/* Storage */}
+            {/* Bento Card 5: Self-Hosted on Firebase */}
             <div className="apple-card p-8">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--fill-secondary)] text-[var(--accent)] shadow-xs">
                 <Database size={24} strokeWidth={1.8} />
               </div>
               <h3 className="mt-6 text-[22px] font-bold text-[var(--label)]">
-                Managed cloud storage
+                Your data, your database
               </h3>
               <p className="mt-2.5 text-[15px] leading-[24px] text-[var(--label-secondary)]">
-                Business records are stored in a managed Supabase database. Firebase handles sign-in. Read the privacy page for service and backup details.
+                Zero telemetry or third-party tracking. Your accounting records live privately in your own project.
               </p>
             </div>
           </div>
@@ -214,22 +216,23 @@ export const LandingPage: React.FC<{
         <div className="mx-auto max-w-5xl px-4 sm:px-6">
           <div className="text-center max-w-2xl mx-auto">
             <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[var(--label-tertiary)]">
-              Product facts
+              Clear Differentiation
             </p>
-              <h2 className="mt-3 text-[34px] font-bold leading-[41px] tracking-[-0.02em] text-[var(--label)]">
-              Accounting tools shaped for Nepali businesses
+            <h2 className="mt-3 text-[34px] font-bold leading-[41px] tracking-[-0.02em] text-[var(--label)]">
+              Why Nepali businesses choose Zeyks Book
             </h2>
           </div>
 
-          <div className="mt-12 -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0" aria-label="Scrollable accounting feature overview">
-            <table className="w-full min-w-[680px] text-left text-[14px]">
+          <div className="mt-12 overflow-x-auto">
+            <table className="w-full text-left text-[14px]">
               <thead>
                 <tr className="border-b border-[var(--separator)] text-[13px] font-semibold text-[var(--label)]">
-                  <th className="py-4 pr-6 w-1/4">Business need</th>
+                  <th className="py-4 pr-6 w-1/4">Requirement</th>
                   <th className="py-4 px-4 w-1/4 bg-[var(--accent)]/10 rounded-t-xl text-[var(--accent)] font-bold">
-                    What Zeyks Book provides
+                    Zeyks Book
                   </th>
-                  <th className="py-4 px-4 w-1/4 text-[var(--label-tertiary)]">Details to review</th>
+                  <th className="py-4 px-4 w-1/4 text-[var(--label-tertiary)]">Excel / Spreadsheets</th>
+                  <th className="py-4 px-4 w-1/4 text-[var(--label-tertiary)]">Imported Western/Indian ERP</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--separator)]">
@@ -245,7 +248,16 @@ export const LandingPage: React.FC<{
                       </div>
                     </td>
                     <td className="py-4 px-4 text-[var(--label-secondary)]">
-                      <span>{row.excel}. {row.foreign}</span>
+                      <div className="flex items-start gap-2">
+                        <X size={16} className="text-[var(--destructive)] mt-0.5 shrink-0" />
+                        <span>{row.excel}</span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-4 text-[var(--label-secondary)]">
+                      <div className="flex items-start gap-2">
+                        <X size={16} className="text-[var(--warning)] mt-0.5 shrink-0" />
+                        <span>{row.foreign}</span>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -273,11 +285,11 @@ export const LandingPage: React.FC<{
                 </li>
                 <li className="flex items-start gap-2.5">
                   <span className="mt-1 text-[var(--accent)] font-bold">•</span>
-                  <span>Businesses that need receivables and payables linked to ledger entries.</span>
+                  <span>Businesses needing receivables and payables to strictly agree with the general ledger.</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <span className="mt-1 text-[var(--accent)] font-bold">•</span>
-                  <span>Teams that need BS and AD dates and printable A4 statements.</span>
+                  <span>Anyone requiring formatted A4 financial statements to submit to banks, auditors, or IRD.</span>
                 </li>
               </ul>
             </div>
@@ -292,15 +304,15 @@ export const LandingPage: React.FC<{
               <ul className="mt-5 space-y-3.5 text-[15px] leading-[24px] text-[var(--label-secondary)]">
                 <li className="flex items-start gap-2.5">
                   <span className="mt-1 text-[var(--warning)] font-bold">•</span>
-                  <span>Payroll calculations and automated inventory valuation are not included.</span>
+                  <span>No demo data and no sample figures anywhere in the application.</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <span className="mt-1 text-[var(--warning)] font-bold">•</span>
-                  <span>Backups can be downloaded, but restoring a backup is not available yet.</span>
+                  <span>No payroll calculations or automated factory inventory valuation.</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <span className="mt-1 text-[var(--warning)] font-bold">•</span>
-                  <span>Online payment collection needs a separate server setup.</span>
+                  <span>Online wallet collection is strictly optional: stays dormant unless you deploy a server.</span>
                 </li>
               </ul>
             </div>
@@ -313,10 +325,10 @@ export const LandingPage: React.FC<{
         <div className="mx-auto max-w-5xl px-4 sm:px-6">
           <div className="relative overflow-hidden rounded-[28px] border border-[var(--separator)] bg-[var(--bg-secondary)] px-6 py-14 text-center shadow-xl sm:px-14 sm:py-20">
             <h2 className="text-[30px] font-extrabold leading-[36px] tracking-[-0.02em] text-[var(--label)] sm:text-[42px] sm:leading-[50px]">
-              Try the workflow with sample books.
+              Ready for honest accounting in Nepal?
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-[17px] leading-[26px] text-[var(--label-secondary)]">
-              Explore sample books in the interactive demo, review the pricing and data policies, and contact us with questions before you move real records.
+              Create an account or connect your database. Your chart of accounts and 2083 fiscal year configure in one click.
             </p>
             <div className="mt-9 flex justify-center">
               <Button

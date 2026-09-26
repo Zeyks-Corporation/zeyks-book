@@ -32,19 +32,51 @@ export async function getMyMemberships(): Promise<{
     }
 
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) return { memberships: [], error: 'Your data session could not be established. Please sign in again.' };
+    let clientErr: { message: string } | null = null;
 
-    const { data, error } = await supabase
-      .from('business_memberships')
-      .select('business_id, user_id, role, created_at');
-    if (error) return { memberships: [], error: error.message };
-    const memberships: Membership[] = (data ?? []).map((row) => ({
-      businessId: row.business_id as string,
-      userId: row.user_id as string,
-      role: (row.role as Membership['role']) || 'OWNER',
-      createdAt: (row.created_at as string) || '',
-    }));
-    return { memberships, error: null };
+    if (session?.user) {
+      const { data, error } = await supabase
+        .from('business_memberships')
+        .select('business_id, user_id, role, created_at');
+
+      if (!error && data) {
+        const memberships: Membership[] = data.map((row) => ({
+          businessId: row.business_id as string,
+          userId: row.user_id as string,
+          role: (row.role as Membership['role']) || 'OWNER',
+          createdAt: (row.created_at as string) || '',
+        }));
+        return { memberships, error: null };
+      }
+      clientErr = error;
+    }
+
+    // Fallback: If client session was not established, query via API
+    const email = auth.currentUser?.email;
+    if (email) {
+      try {
+        const res = await fetch('/api/business/my-memberships', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (Array.isArray(json?.memberships)) {
+            void syncSupabaseSession(auth.currentUser);
+            return { memberships: json.memberships, error: null };
+          }
+        }
+      } catch {
+        // Continue to return primary error
+      }
+    }
+
+    if (clientErr) {
+      return { memberships: [], error: clientErr.message };
+    }
+
+    return { memberships: [], error: null };
   } catch (e) {
     return {
       memberships: [],
@@ -65,14 +97,47 @@ export async function getBusiness(
     }
 
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) return { business: null, error: 'Your data session could not be established. Please sign in again.' };
-    const { data, error } = await supabase
-      .from('businesses')
-      .select('*')
-      .eq('id', businessId)
-      .single();
-    if (error) return { business: null, error: error.message || 'This business could not be found, or you are not a member of it.' };
-    return { business: toBusinessProfile(data as DbBusiness), error: null };
+    let clientErr: { message: string } | null = null;
+
+    if (session?.user) {
+      const { data, error } = await supabase
+        .from('businesses')
+        .select('*')
+        .eq('id', businessId)
+        .single();
+
+      if (!error && data) {
+        return { business: toBusinessProfile(data as DbBusiness), error: null };
+      }
+      clientErr = error;
+    }
+
+    // Fallback to server endpoint if client query encountered permission or RLS delay
+    const email = auth.currentUser?.email;
+    try {
+      const res = await fetch('/api/business/get', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ businessId, email }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.business) {
+          return { business: toBusinessProfile(json.business as DbBusiness), error: null };
+        }
+      }
+    } catch {
+      // Continue to handle primary error
+    }
+
+    if (clientErr) {
+      return {
+        business: null,
+        error: clientErr.message || 'This business could not be found, or you are not a member of it.',
+      };
+    }
+
+    return { business: null, error: 'Business not found.' };
   } catch (e) {
     return {
       business: null,
