@@ -1,13 +1,11 @@
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, Home, Plus, XCircle } from 'lucide-react';
-import type { User } from 'firebase/auth';
 import { UserProfile, ViewTab } from './types';
 import { useBooks } from './state/useBooks';
 import { Sidebar, Header } from './components/Shell';
 import { TransactionModal, TxnKind } from './components/TransactionModal';
 import { CollectOnlineModal, resolvePending } from './components/CollectOnlineModal';
 import { AuthModal } from './components/AuthModal';
-import { UpdatePasswordModal } from './components/UpdatePasswordModal';
 import { Button, Callout, Field, inputClass } from './components/ui';
 import { LandingPage } from './components/LandingPage';
 import { PricingPage } from './components/PricingPage';
@@ -16,6 +14,9 @@ import { ContactPage } from './components/ContactPage';
 import { PrivacyPage } from './components/PrivacyPage';
 import { TermsPage } from './components/TermsPage';
 import { NotFoundView } from './components/NotFoundView';
+import { SubscribeView } from './components/SubscribeView';
+import { KingPanel } from './components/KingPanel';
+import { isPayingTier, isAppAdmin, roleHasFeature, type AppRole } from './lib/roles';
 import { gateway, GatewayConfig, takePending } from './services/paymentGateway';
 import { useRoute } from './lib/useRoute';
 import { parseRoute, pathForTab, redirectFor } from './lib/routes';
@@ -47,6 +48,7 @@ const ReportsView = lazy(() => import('./components/ReportsView').then((m) => ({
 const HealthView = lazy(() => import('./components/HealthView').then((m) => ({ default: m.HealthView })));
 const SettingsView = lazy(() => import('./components/SettingsView').then((m) => ({ default: m.SettingsView })));
 const DemoPage = lazy(() => import('./components/DemoPage').then((m) => ({ default: m.DemoPage })));
+const InventoryView = lazy(() => import('./components/InventoryView').then((m) => ({ default: m.InventoryView })));
 
 /** Which capability each transaction kind needs before it can be recorded. */
 const CAPABILITY_FOR_TXN: Record<TxnKind, Capability> = {
@@ -58,12 +60,17 @@ const TXN_LABELS: Record<TxnKind, string> = {
   expense: 'Recording an expense', payment: 'Recording a settlement',
 };
 
-function profileFromAuthUser(authUser: User): UserProfile {
+function profileFromAuthUser(authUser: { id: string; email?: string | null; name?: string | null; createdAt?: string }): UserProfile {
+  const email = authUser.email ?? '';
   return {
-    id: authUser.uid,
-    email: authUser.email ?? '',
-    fullName: (authUser.displayName as string | null) || authUser.email?.split('@')[0] || '',
-    createdAt: authUser.metadata?.creationTime ?? new Date().toISOString(),
+    id: authUser.id,
+    email,
+    fullName: authUser.name || email.split('@')[0] || '',
+    // No profiles row was readable, so default to the locked role. The very
+    // next profile refresh (e.g. from the admin panel or after sign-in) will
+    // overwrite this with the real role.
+    appRole: 'user',
+    createdAt: authUser.createdAt ?? new Date().toISOString(),
   };
 }
 
@@ -191,8 +198,7 @@ export default function App() {
   const [sessionPhase, setSessionPhase] = useState<SessionPhase>('checking-session');
   const [membership, setMembership] = useState<MembershipState>({ kind: 'pending' });
   const [dataState, setDataState] = useState<DataState>({ kind: 'idle' });
-  const [recovery, setRecovery] = useState(false);
-  const [authEvent, setAuthEvent] = useState<{ action: AuthAction; session: { user: User } | null; key: number } | null>(null);
+  const [authEvent, setAuthEvent] = useState<{ action: AuthAction; session: { user: { id: string; email: string } } | null; key: number } | null>(null);
   const [resolving, setResolving] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   /**
@@ -322,7 +328,6 @@ export default function App() {
     setMembership({ kind: 'pending' });
     setDataState({ kind: 'idle' });
     setUser(null);
-    setRecovery(false);
     setResolving(false);
     // No open modal, draft or toast survives into the next session.
     setTxnModal(null);
@@ -371,16 +376,11 @@ export default function App() {
     void (async () => {
       const { action, session } = authEvent;
 
-      // The event is the safety net: if Firebase ends the session by itself
+      // The event is the safety net: if Neon ends the session by itself
       // (expiry, revocation elsewhere), the state is cleared the same way as it
       // is for a sign-out the person asked for.
       if (action === 'sign-out') {
         clearLocalSession();
-        return;
-      }
-
-      if (action === 'recovery') {
-        setRecovery(true);
         return;
       }
 
@@ -398,7 +398,7 @@ export default function App() {
       setSessionNotice(null);
       try {
         const authUser = session.user;
-        const { profile } = await authService.getProfile(authUser.uid);
+        const { profile } = await authService.getProfile(authUser.id);
         if (cancelled) return;
         setUser(profile ?? profileFromAuthUser(authUser));
         setSessionPhase('authenticated');
@@ -448,13 +448,6 @@ export default function App() {
       setSigningOut(false);
     }
   }, [clearLocalSession, notify, signingOut]);
-
-  // Sign-out from the recovery screen: leave this device either way, so a
-  // failed revoke cannot trap the person in the password modal.
-  const finishRecovery = useCallback(() => {
-    setRecovery(false);
-    void exitSession('this-device');
-  }, [exitSession]);
 
   // Payment gateway availability, read from the API server that holds the
   // secrets (never from this bundle). The server has no credentials for a
@@ -619,27 +612,133 @@ export default function App() {
    * sent to their books (`replace`, so Back does not bounce). A signed-out
    * person asking for a book screen is NOT redirected: they keep the path and
    * see the sign-in screen, so signing in lands them where they were going.
+   *
+   * A signed-in person whose role does not unlock the dashboard is sent to
+   * `/subscribe` instead — the only screen they can reach until they pick a
+   * plan. An admin's `/king` is not affected; the role-aware gating happens
+   * when the route is matched below.
    */
   const authenticated = Boolean(user) && sessionPhase === 'authenticated';
   const isExplicitLanding = typeof window !== 'undefined' && window.location.search.includes('landing=1');
-  const redirect = isExplicitLanding ? null : redirectFor(route, authenticated);
+  const userRole: AppRole | undefined = user?.appRole;
+  const dashboardAccess = isPayingTier(userRole) || isAppAdmin(userRole);
+
+  let redirect: string | null = null;
+  if (!isExplicitLanding && authenticated) {
+    redirect = redirectFor(route, authenticated);
+    if (redirect && !dashboardAccess) {
+      // Marketing → /dashboard would just bounce straight to /subscribe; send
+      // them there directly to skip the flash of the dashboard skeleton.
+      redirect = '/subscribe';
+    }
+    // If they typed /king without admin role, route it away to 404 below —
+    // do not redirect silently so the URL stays honest in the address bar.
+  }
   useEffect(() => {
     if (redirect) navigate(redirect, { replace: true });
   }, [redirect, navigate]);
 
-  if (recovery) {
-    return <UpdatePasswordModal onFinish={finishRecovery} />;
-  }
+  /**
+   * Which sidebar tabs this role may reach. Plus role hides Expenses,
+   * Payments, Reports, Health, Settings (settings is reachable via the
+   * avatar menu in the header — see below). Admin sees everything.
+   */
+  const hiddenTabs: ViewTab[] = (() => {
+    if (isAppAdmin(userRole) || userRole === 'premium') return [];
+    if (userRole === 'plus') return ['expenses', 'payments', 'reports', 'health'];
+    return [];
+  })();
 
   if (authenticated && user && isExplicitLanding && route.kind === 'landing') {
     return <LandingPage onSignIn={() => navigate('/dashboard')} currentPath="/" navigate={navigate} />;
   }
+
+  /**
+   * When a signed-in user lands on /pricing they can pick a plan. Until the
+   * eSewa / Khalti wiring is live, the pick is a no-op (the only path to a
+   * real tier change is the admin's /king panel); we still acknowledge the
+   * click so the UI feels responsive.
+   */
+  const handlePickPlan = useCallback((plan: 'user' | 'plus' | 'premium' | 'admin') => {
+    if (plan === 'plus' || plan === 'premium') {
+      notify(
+        `Online checkout for ${plan === 'plus' ? 'Starter' : 'Premium'} is not wired yet — please contact us to upgrade.`,
+        true,
+      );
+    }
+  }, [notify]);
 
   if (phase === 'checking-session' || redirect) {
     // `redirect` is set only for a session we already know about, so waiting
     // here is what stops the marketing page flashing up in front of someone's
     // books on every refresh of the root URL.
     return <LoadingScreen message="Loading Zeyks Book…" />;
+  }
+
+  /**
+   * The hidden admin panel at `/king`. Anyone not in role='admin' gets a real
+   * 404 — never a silent redirect — so the URL itself never admits the panel
+   * exists.
+   */
+  if (route.kind === 'king') {
+    if (!isAppAdmin(userRole)) {
+      return (
+        <NotFoundView
+          path="/king" authenticated={authenticated}
+          onHome={() => navigate('/')} onSignIn={() => navigate('/signin')}
+        />
+      );
+    }
+    return (
+      <KingPanel
+        currentPath={path}
+        navigate={navigate}
+        onSignOut={() => exitSession('this-device')}
+      />
+    );
+  }
+
+  /**
+   * A signed-in user with role='user' (no subscription) cannot reach the
+   * dashboard. /subscribe explains the situation and offers plans; /pricing,
+   * /about and the other public pages are still reachable as marketing.
+   */
+  if (authenticated && !dashboardAccess && route.kind === 'app') {
+    return (
+      <SubscribeView
+        role={userRole}
+        email={user?.email ?? null}
+        onPricing={() => navigate('/pricing')}
+        onSignOut={() => exitSession('this-device')}
+      />
+    );
+  }
+
+  /**
+   * Inventory is a Premium-only feature. A plus-tier user typing /inventory
+   * (or following a stale bookmark) gets a real 404 — never a silent redirect
+   * — for the same reason /king does: the URL is honest about what the role
+   * can see.
+   */
+  if (route.kind === 'app' && route.tab === 'inventory' && !roleHasFeature(userRole, 'inventory')) {
+    return (
+      <NotFoundView
+        path={pathForTab('inventory')} authenticated
+        onHome={() => navigate(pathForTab('dashboard'))}
+        onSignIn={() => navigate('/signin')}
+      />
+    );
+  }
+
+  if (route.kind === 'subscribe') {
+    return (
+      <SubscribeView
+        role={userRole}
+        email={user?.email ?? null}
+        onPricing={() => navigate('/pricing')}
+        onSignOut={() => exitSession('this-device')}
+      />
+    );
   }
 
   if (phase === 'unauthenticated' || !user) {
@@ -663,9 +762,11 @@ export default function App() {
     }
     if (route.kind === 'pricing') {
       return (
-        <>
-          <PricingPage currentPath="/pricing" navigate={navigate} onSignIn={() => navigate('/signin')} />
-        </>
+        <PricingPage
+          currentPath="/pricing" navigate={navigate} onSignIn={() => navigate('/signin')}
+          signedIn={authenticated}
+          onPickPlan={handlePickPlan}
+        />
       );
     }
     if (route.kind === 'about') {
@@ -753,6 +854,7 @@ export default function App() {
         businessName={business.businessName}
         isOpenMobile={mobileSidebarOpen} onCloseMobile={() => setMobileSidebarOpen(false)}
         issueCount={integrityIssues.filter((i) => i.severity === 'ERROR').length}
+        hideTabs={hiddenTabs}
       />
 
       <div className="lg:pl-60">
@@ -785,6 +887,7 @@ export default function App() {
                     books={books} range={range} onRangeChange={updateRange} calendar={calendar}
                     onQuickAction={openQuickAction}
                     onGoToHealth={() => navigate(pathForTab('health'))}
+                    onGoToInventory={() => navigate(pathForTab('inventory'))}
                   />
                 )}
                 {currentDocKind && (
@@ -806,6 +909,15 @@ export default function App() {
                     books={books} onDone={notify}
                     calendar={calendar} onCalendarChange={changeCalendar}
                     onSignOut={exitSession} signingOut={signingOut}
+                  />
+                )}
+                {activeTab === 'inventory' && (
+                  <InventoryView
+                    businessId={business.id}
+                    trackInventory={business.trackInventory}
+                    onTrackChanged={(next) => { setBusiness({ ...business, trackInventory: next }); }}
+                    calendar={calendar}
+                    notify={notify}
                   />
                 )}
               </>

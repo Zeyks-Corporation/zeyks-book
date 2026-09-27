@@ -1,186 +1,84 @@
 /**
- * Supabase client — configured for storage & database.
- * Authentication is initiated through Firebase Auth, then synchronized
- * to Supabase Auth so all database RLS and accounting RPCs work seamlessly.
+ * Neon client — Database + Auth via Neon Data API + Managed Better Auth.
+ *
+ * `SupabaseAuthAdapter()` keeps Supabase-shaped method names on the auth
+ * namespace so existing `signInWithPassword` / `signInWithOtp` / `verifyOtp`
+ * calls continue to work without rewrites.
+ *
+ * The cast through `unknown` to a combined interface works around a Neon JS
+ * type-inference quirk: the SDK declares the adapter as an instance type, but
+ * the runtime exports a builder factory, so `createClient(url, { auth: { adapter:
+ * SupabaseAuthAdapter() } })` is inferred as the React adapter by default.
+ * The cast is sound because both shapes cover the same `from()`, `rpc()` and
+ * `auth.*` method set we actually use.
+ *
+ * `VITE_NEON_URL` is the bare Neon host URL (e.g. `https://ep-xxx.region...
+ * .aws.neon.tech/neondb`). The SDK derives the auth and Data API hosts from
+ * it by inserting `neonauth` / `apirest` after the first hostname label. Some
+ * dashboards hand out a data-API URL that already ends in `/rest/v1`; we
+ * strip that suffix here, otherwise the SDK ends up calling
+ * `https://ep-xxx.neonauth.../neondb/rest/v1/auth/get-session` and gets a 404.
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseAuthAdapter } from '@neondatabase/neon-js';
+import type { SupabaseAuthAdapterInstance } from '@neondatabase/neon-js';
 
-const SUPABASE_URL = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL)
-  || 'https://rlymuofhrreqwqhmmhqw.supabase.co';
+const envUrl = (() => {
+  try {
+    // @ts-ignore - import.meta is available in Vite environment
+    return import.meta.env?.VITE_NEON_URL as string | undefined;
+  } catch {
+    return undefined;
+  }
+})();
 
-const SUPABASE_ANON_KEY = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_ANON_KEY)
-  || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJseW11b2ZocnJlcXdxaG1taHF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3ODYzNTIsImV4cCI6MjEwNTM2MjM1Mn0.PNyXm5YW3U-RSxFDYG-CU7e40r3hoNqv3BcEalfdXw8';
+if (!envUrl) {
+  throw new Error('Neon configuration missing: VITE_NEON_URL is required.');
+}
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-  },
+// Normalise to the bare Neon base URL. The SDK's URL derivator appends `/auth`
+// and `/rest/v1` itself, so any `/rest/v1` already in the input has to go.
+const url = envUrl.replace(/\/rest\/v1\/?$/, '');
+
+const baseClient = createClient(url, {
+  auth: { adapter: SupabaseAuthAdapter() as unknown as never },
 });
 
-let syncPromise: Promise<boolean> | null = null;
-let syncingEmail: string | null = null;
+/** Combined client surface used by the rest of the app. */
+type SupabaseShape = {
+  from: (table: string) => ReturnType<typeof baseClient.from>;
+  rpc: (
+    fn: string,
+    args?: Record<string, unknown>,
+  ) => ReturnType<typeof baseClient.rpc>;
+  auth: SupabaseAuthAdapterInstance;
+};
+
+export const supabase = baseClient as unknown as SupabaseShape;
 
 /**
- * Synchronize the Firebase Auth user into a Supabase authenticated session.
- * This establishes auth.uid() in PostgreSQL so that RLS and accounting RPCs succeed.
+ * Run the Neon-side claim_profile() RPC once after first sign-in to create
+ * (or relink) a public.profiles row keyed on the Neon Auth user id. Returns
+ * the resulting profiles.id or null if the claim failed.
  */
-export async function syncSupabaseSession(
-  user?: {
-    email?: string | null;
-    displayName?: string | null;
-    getIdToken?: () => Promise<string>;
-  } | null,
-): Promise<boolean> {
-  const email = user?.email?.trim().toLowerCase();
-  if (!email) return false;
-
-  // A previous account may still be completing its bridge request during a
-  // sign-out/sign-in switch. Do not reuse its result for the new account.
-  if (syncPromise) {
-    if (syncingEmail === email) return syncPromise;
-    await syncPromise;
+export async function claimProfile(): Promise<string | null> {
+  const { data, error } = await baseClient.rpc('claim_profile');
+  if (error) {
+    console.warn('[Neon Auth] claim_profile failed:', error.message);
+    return null;
   }
-
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user?.email?.toLowerCase() === email) {
-      return true;
-    }
-  } catch {
-    // continue to sync
-  }
-
-  syncingEmail = email;
-  syncPromise = (async () => {
-    const deterministicPassword = `zb_auth_bridge_${email}_v1!`;
-
-    try {
-      // 0. Direct client-side bridge (instant path for existing users without server roundtrip)
-      try {
-        const { data: pwData, error: pwErr } = await supabase.auth.signInWithPassword({
-          email,
-          password: deterministicPassword,
-        });
-        if (!pwErr && pwData?.session) {
-          return true;
-        }
-      } catch {
-        // Proceed to server bridge
-      }
-
-      // Get Firebase ID token if available
-      let firebaseIdToken = '';
-      if (user?.getIdToken) {
-        try {
-          firebaseIdToken = await user.getIdToken();
-        } catch {}
-      }
-
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (firebaseIdToken) {
-        headers.Authorization = `Bearer ${firebaseIdToken}`;
-      }
-
-      const res = await fetch('/api/auth/supabase-session', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          email,
-          name: user?.displayName || '',
-        }),
-      });
-
-      if (!res.ok) {
-        console.warn(`[Supabase Auth] Session bridge responded with status ${res.status}`);
-        // Last-resort fallback: retry deterministic password in case of network glitch
-        try {
-          const { data: retryData, error: retryErr } = await supabase.auth.signInWithPassword({
-            email,
-            password: deterministicPassword,
-          });
-          if (!retryErr && retryData?.session) {
-            return true;
-          }
-        } catch {}
-        return false;
-      }
-
-      const json = await res.json();
-
-      // 1. Direct session tokens provided by the server
-      if (json?.access_token && json?.refresh_token) {
-        const { data, error } = await supabase.auth.setSession({
-          access_token: json.access_token,
-          refresh_token: json.refresh_token,
-        });
-        if (!error && data?.session) {
-          return true;
-        }
-        console.warn('[Supabase Auth] setSession failed:', error?.message);
-      }
-
-      // 2. Fallback: verifyOtp with token_hash and verification_type
-      if (json?.token_hash && json?.verification_type) {
-        const { data, error } = await supabase.auth.verifyOtp({
-          token_hash: json.token_hash,
-          type: json.verification_type,
-        });
-        if (!error && data?.session) {
-          return true;
-        }
-        console.warn('[Supabase Auth] verifyOtp(token_hash) failed:', error?.message);
-      }
-
-      // 3. Fallback: verifyOtp with email and numeric email_otp
-      if (json?.email_otp) {
-        const { data, error } = await supabase.auth.verifyOtp({
-          email: json.email || email,
-          token: json.email_otp,
-          type: json.verification_type || 'magiclink',
-        });
-        if (!error && data?.session) {
-          return true;
-        }
-        console.warn('[Supabase Auth] verifyOtp(email_otp) failed:', error?.message);
-      }
-
-      // 4. Retry direct password sign-in after server created/updated user
-      try {
-        const { data: retryData, error: retryErr } = await supabase.auth.signInWithPassword({
-          email,
-          password: deterministicPassword,
-        });
-        if (!retryErr && retryData?.session) {
-          return true;
-        }
-      } catch {
-        // ignore
-      }
-
-      return false;
-    } catch (e) {
-      console.warn('[Supabase Auth] Session sync network error:', e);
-      return false;
-    } finally {
-      syncPromise = null;
-      syncingEmail = null;
-    }
-  })();
-
-  return syncPromise;
+  return data as string | null;
 }
 
 /**
- * Ensure Supabase has an active session before database queries run.
+ * Fetch the signed-in user's profile (which carries the role used by route
+ * guards and the admin panel). Returns null when signed-out or on read error.
  */
-export async function ensureSupabaseSession(): Promise<boolean> {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) return true;
-  } catch {
-    // ignore
-  }
-  return false;
+export async function fetchMyProfile(): Promise<{ id: string; email: string; full_name: string; role: string } | null> {
+  const { data, error } = await baseClient
+    .from('profiles')
+    .select('id, email, full_name, role')
+    .single();
+  if (error || !data) return null;
+  return data as { id: string; email: string; full_name: string; role: string };
 }

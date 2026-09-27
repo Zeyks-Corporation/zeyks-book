@@ -85,10 +85,9 @@ export type AuthAction =
   | 'reload-books'
   | 'refresh-profile'
   | 'token-only'
-  | 'recovery'
   | 'ignore';
 
-/** Map a Firebase auth event to a deferred action (never run inside the callback). */
+/** Map a Neon auth event to a deferred action (never run inside the callback). */
 export function resolveAuthEvent(event: string): AuthAction {
   switch (event) {
     case 'INITIAL_SESSION': return 'bootstrap';
@@ -96,7 +95,6 @@ export function resolveAuthEvent(event: string): AuthAction {
     case 'SIGNED_OUT': return 'sign-out';
     case 'TOKEN_REFRESHED': return 'token-only';
     case 'USER_UPDATED': return 'refresh-profile';
-    case 'PASSWORD_RECOVERY': return 'recovery';
     default: return 'ignore';
   }
 }
