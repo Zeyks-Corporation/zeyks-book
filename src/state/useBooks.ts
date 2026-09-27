@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Account, BooksSnapshot, BusinessProfile, ControlIntegrityReport, Customer, DateRange, Expense,
   GatewayProvider, GatewayTransaction, JournalEntry, Payment, Purchase, PurchaseDraft,
@@ -20,6 +20,7 @@ import {
   postExpense, postPayment, postPurchase, postSale, settleGatewayTxn as settleGatewayTxnRpc,
   voidDocument as voidDocumentRpc, voidPayment as voidPaymentRpc,
 } from '../services/bookService';
+import { cacheOfflineBooks, readOfflineBooks } from '../lib/offlineStore';
 import { updateBusiness } from '../services/businessService';
 import { isSupported, isVoidable, unsupported } from '../lib/capabilities';
 import { applyPostedExpense } from '../lib/expenseState';
@@ -52,6 +53,9 @@ export type GatewayStartResult =
 // assignable on its own.
 const ok = (message: string): { ok: true; message: string } => ({ ok: true, message });
 const err = (message: string): { ok: false; message: string } => ({ ok: false, message });
+
+/** Every write path says the same thing while the offline view is up. */
+const OFFLINE_MSG = 'You are offline. This is a read-only copy of your books from the last sync — reconnect to make changes.';
 
 export function useBooks() {
   const [storageError] = useState<string | null>(null);
@@ -89,6 +93,22 @@ export function useBooks() {
   const [loadedBusinessId, setLoadedBusinessId] = useState<string | null>(null);
 
   /**
+   * Whether the rows on screen came from the offline cache rather than the
+   * database. While true, every write path below refuses with a clear message:
+   * the offline copy is a last-synced view, not a parallel ledger — the server
+   * stays the single authority the moment a connection exists again.
+   */
+  const [offline, setOffline] = useState(false);
+  const [offlineSavedAt, setOfflineSavedAt] = useState<string | null>(null);
+  /** Mirror for the action callbacks, so no memo list needs `offline` as a dep. */
+  const offlineRef = useRef(false);
+  const setOfflineMode = useCallback((value: boolean, savedAt: string | null = null) => {
+    offlineRef.current = value;
+    setOffline(value);
+    setOfflineSavedAt(savedAt);
+  }, []);
+
+  /**
    * Load every book row for a business.
    *
    * `stillCurrent` is the caller's session guard. A fetch that was already in
@@ -117,6 +137,10 @@ export function useBooks() {
       setGatewayTxns(data.gatewayTransactions);
       setJournalEntries(data.journalEntries);
       setLoadedBusinessId(businessId);
+      setOfflineMode(false);
+      // Keep a read-only copy for the next time the network is gone. Best-effort:
+      // a failed cache write never breaks the live load that already succeeded.
+      void cacheOfflineBooks(businessId, data);
       return true;
     } catch (e) {
       // A failure of a load that no longer belongs to the current session is
@@ -128,7 +152,32 @@ export function useBooks() {
     } finally {
       setIsLoadingCloud(false);
     }
-  }, []);
+  }, [setOfflineMode]);
+
+  /**
+   * Open the books from the offline cache, exactly as they were at last sync.
+   *
+   * Returns false when nothing usable is cached, which leaves the caller to the
+   * ordinary error path. On success the store is flagged `offline`: reads work,
+   * every write refuses until a real cloud load clears the flag.
+   */
+  const loadFromOffline = useCallback(async (businessId: string): Promise<boolean> => {
+    const record = await readOfflineBooks(businessId);
+    if (!record) return false;
+    const data = record.data;
+    setAccounts(data.accounts);
+    setCustomers(data.customers);
+    setSuppliers(data.suppliers);
+    setSales(data.sales);
+    setPurchases(data.purchases);
+    setExpenses(data.expenses);
+    setPayments(data.payments);
+    setGatewayTxns(data.gatewayTransactions);
+    setJournalEntries(data.journalEntries);
+    setLoadedBusinessId(businessId);
+    setOfflineMode(true, record.savedAt);
+    return true;
+  }, [setOfflineMode]);
 
 
   /* ---------------------------------------------------------------------- */
@@ -237,6 +286,7 @@ export function useBooks() {
   /* ---------------------------------------------------------------------- */
 
   const addSale = useCallback(async (draft: SaleDraft): Promise<ActionResult> => {
+    if (offlineRef.current) return err(OFFLINE_MSG);
     if (!business.id) {
       return err('No active business selected.');
     }
@@ -294,6 +344,7 @@ export function useBooks() {
   }, [business.id, customers, journalEntries, payments, rawSales, refFor]);
 
   const addPurchase = useCallback(async (draft: PurchaseDraft): Promise<ActionResult> => {
+    if (offlineRef.current) return err(OFFLINE_MSG);
     if (!business.id) {
       return err('No active business selected.');
     }
@@ -373,6 +424,7 @@ export function useBooks() {
       idempotencyKey?: string | null;
     },
   ): Promise<ActionResult> => {
+    if (offlineRef.current) return err(OFFLINE_MSG);
     if (!business.id) {
       return err('No active business selected.');
     }
@@ -436,6 +488,7 @@ export function useBooks() {
       idempotencyKey?: string | null;
     },
   ): Promise<ActionResult> => {
+    if (offlineRef.current) return err(OFFLINE_MSG);
     if (!business.id) {
       return err('No active business selected.');
     }
@@ -494,6 +547,7 @@ export function useBooks() {
     kind: VoidableDocumentKind,
     id: string,
   ): Promise<ActionResult> => {
+    if (offlineRef.current) return err(OFFLINE_MSG);
     if (!business.id) {
       return err('No active business selected.');
     }
@@ -543,6 +597,7 @@ export function useBooks() {
    * another tenant's row) changes nothing and reports why.
    */
   const voidPayment = useCallback(async (id: string): Promise<ActionResult> => {
+    if (offlineRef.current) return err(OFFLINE_MSG);
     if (!business.id) {
       return err('No active business selected.');
     }
@@ -584,6 +639,7 @@ export function useBooks() {
     linkedSaleId: string;
     customerName?: string;
   }): Promise<GatewayStartResult> => {
+    if (offlineRef.current) return err(OFFLINE_MSG);
     if (!isSupported('gateway')) return unsupported('gateway', 'Collecting online');
     if (!business.id || business.id === emptyBusiness.id) {
       return err('No active business selected.');
@@ -622,6 +678,7 @@ export function useBooks() {
     txnId: string,
     verification: ProviderVerification,
   ): Promise<ActionResult> => {
+    if (offlineRef.current) return err(OFFLINE_MSG);
     if (!isSupported('gateway')) return unsupported('gateway', 'Collecting online');
     if (!business.id || business.id === emptyBusiness.id) {
       return err('No active business selected.');
@@ -652,6 +709,7 @@ export function useBooks() {
   /* ---------------------------------------------------------------------- */
 
   const addAccount = useCallback(async (draft: Omit<Account, 'id' | 'businessId' | 'isActive'>): Promise<ActionResult> => {
+    if (offlineRef.current) return err(OFFLINE_MSG);
     if (!isSupported('accounts')) return unsupported('accounts', 'Adding an account');
     if (accounts.some((a) => a.code === draft.code)) return err(`Account code ${draft.code} is already in use.`);
     if (!/^\d{4}$/.test(draft.code)) return err('Account codes are four digits.');
@@ -666,6 +724,7 @@ export function useBooks() {
   }, [accounts, business.id]);
 
   const archiveAccount = useCallback(async (id: string): Promise<ActionResult> => {
+    if (offlineRef.current) return err(OFFLINE_MSG);
     if (!isSupported('accounts')) return unsupported('accounts', 'Archiving an account');
     const account = accounts.find((a) => a.id === id);
     if (!account) return err('That account no longer exists.');
@@ -684,6 +743,7 @@ export function useBooks() {
     id: string,
     changes: Pick<Account, 'name' | 'description'>,
   ): Promise<ActionResult> => {
+    if (offlineRef.current) return err(OFFLINE_MSG);
     if (!isSupported('accounts')) return unsupported('accounts', 'Editing an account');
     const account = accounts.find((a) => a.id === id);
     if (!account) return err('That account no longer exists.');
@@ -745,7 +805,8 @@ export function useBooks() {
     setAccounts([]);
     setLoadedBusinessId(null);
     setBusiness(emptyBusiness);
-  }, []);
+    setOfflineMode(false);
+  }, [setOfflineMode]);
 
   /**
    * Persist business settings through Postgres (RLS enforces OWNER).
@@ -757,6 +818,7 @@ export function useBooks() {
   const saveBusinessSettings = useCallback(async (
     patch: BusinessSettingsPatch,
   ): Promise<ActionResult> => {
+    if (offlineRef.current) return err(OFFLINE_MSG);
     if (!business.id || business.id === emptyBusiness.id) {
       return err('No active business selected.');
     }
@@ -771,6 +833,8 @@ export function useBooks() {
     user, setUser, business, setBusiness, accounts, setAccounts, customers, suppliers,
     sales, purchases, expenses, payments, gatewayTxns, journalEntries,
     isLoadingCloud, cloudError,
+    // offline (Phase 1: read-only last-synced copy)
+    offline, offlineSavedAt, loadFromOffline,
     // derived
     balances, integrityIssues, controlIntegrity, receivableByCustomer, payableBySupplier,
     openInvoices, openBills, currentFy, defaultRange, storageError, lookup,

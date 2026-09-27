@@ -40,6 +40,10 @@ import { CAPABILITIES, isSupported, unsupportedMessage } from './lib/capabilitie
 import type { Capability } from './lib/capabilities';
 import { isCurrentEpoch, nextEpoch } from './lib/session';
 import type { SignOutKind } from './lib/session';
+import { isBrowserOnline, useOnlineStatus } from './lib/connectivity';
+import {
+  cacheOfflineSession, clearOfflineStore, readOfflineSession,
+} from './lib/offlineStore';
 
 // Keep charting and demo-only code out of the first page download. These
 // screens are fetched only when a user opens that part of the app.
@@ -192,6 +196,7 @@ export default function App() {
   const {
     user, setUser, business, setBusiness, defaultRange, integrityIssues, storageError,
     loadFromCloud, resetAll,
+    offline, offlineSavedAt, loadFromOffline,
   } = books;
 
   /* ------------------------------ auth state ------------------------------ */
@@ -218,6 +223,15 @@ export default function App() {
    * who just left.
    */
   const sessionEpoch = useRef(0);
+
+  /**
+   * Refs for the values the cloud-load callback needs but must not depend on:
+   * the load is triggered by auth events and retries, and re-creating it when
+   * the profile or business changes would re-trigger effects that hold it.
+   */
+  const userRef = useRef<UserProfile | null>(user);
+  useEffect(() => { userRef.current = user; }, [user]);
+  const lastBusinessIdRef = useRef<string | null>(null);
 
   const [onboardingBusy, setOnboardingBusy] = useState(false);
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
@@ -285,6 +299,7 @@ export default function App() {
 
     setMembership({ kind: 'pending' });
     setDataState({ kind: 'idle' });
+    const signedInUser = userRef.current;
     try {
       const { memberships, error: memErr } = await businessService.getMyMemberships();
       if (!stillCurrent()) return;
@@ -313,11 +328,49 @@ export default function App() {
       await loadFromCloud(active.businessId, stillCurrent);
       if (!stillCurrent()) return;
       setDataState({ kind: 'ready' });
-    } catch (err) {
+      // Everything the offline view needs is now in sync with the server —
+      // keep one copy in IndexedDB until the next successful load overwrites it.
+      lastBusinessIdRef.current = active.businessId;
+      if (signedInUser) void cacheOfflineSession(signedInUser, biz, memberships);
+    } catch (e) {
       if (!stillCurrent()) return;
-      setDataState({ kind: 'error', message: err instanceof Error ? err.message : 'Error loading business data.' });
+      const message = e instanceof Error ? e.message : 'Error loading business data.';
+      // The network may simply be gone. Open the last synced copy instead of
+      // an error screen; only a business that was never cached keeps the error.
+      const bizId = lastBusinessIdRef.current;
+      if (bizId && !isBrowserOnline()) {
+        const restored = await loadFromOffline(bizId);
+        if (!stillCurrent()) return;
+        if (restored) {
+          setDataState({ kind: 'ready' });
+          return;
+        }
+      }
+      setDataState({ kind: 'error', message });
     }
-  }, [loadFromCloud, setBusiness]);
+  }, [loadFromCloud, loadFromOffline, setBusiness]);
+
+  /**
+   * Open the app from the offline copy alone (Phase 1 of offline support).
+   *
+   * Only ever called while the browser reports no network, when the session
+   * check could not reach the auth server. The restored view is read-only:
+   * `loadFromOffline` flags the store `offline`, every write path refuses, and
+   * the next real cloud load clears the flag. Returns whether books were shown.
+   */
+  const restoreOfflineSession = useCallback(async (): Promise<boolean> => {
+    const record = await readOfflineSession();
+    if (!record) return false;
+    const restored = await loadFromOffline(record.business.id);
+    if (!restored) return false;
+    setUser(record.user);
+    setBusiness(record.business);
+    setMembership({ kind: 'ready', memberships: record.memberships });
+    setDataState({ kind: 'ready' });
+    setSessionPhase('authenticated');
+    lastBusinessIdRef.current = record.business.id;
+    return true;
+  }, [loadFromOffline, setBusiness, setUser]);
 
   /**
    * Clear everything that belongs to the signed-out session.
@@ -340,17 +393,30 @@ export default function App() {
     setCollectFor(undefined);
     setToast(null);
     resetAll();
+    lastBusinessIdRef.current = null;
+    // The offline copy belongs to this session only. A signed-out person must
+    // never be able to reopen someone else's books from the browser cache.
+    void clearOfflineStore();
   }, [resetAll, setUser]);
 
   // 1. Initial session check + subscribe. The auth callback is synchronous:
   //    it only records the event so network work never runs inside the lock.
   useEffect(() => {
     let mounted = true;
+    // Boot snapshot of the URL: the app restoration below must not re-run the
+    // session check on in-app navigation, so only the primitive is captured.
+    const bootOnAppRoute = route.kind === 'app';
 
     void (async () => {
       const { session } = await authService.getSession();
       if (!mounted) return;
       if (!session?.user) {
+        // The session check cannot outlive a missing network: the auth server
+        // is unreachable too. Before showing the sign-in screen, reopen the
+        // last synced books read-only if this device has them cached.
+        if (bootOnAppRoute && !isBrowserOnline()) {
+          if (await restoreOfflineSession()) return;
+        }
         setSessionPhase('unauthenticated');
         setUser(null);
         return;
@@ -370,7 +436,7 @@ export default function App() {
       mounted = false;
       unsubscribe();
     };
-  }, [setUser]);
+  }, [restoreOfflineSession, route.kind, setUser]);
 
   // 2. Deferred auth work — all network calls happen here, never in the callback.
   useEffect(() => {
@@ -420,6 +486,18 @@ export default function App() {
   // "current fiscal year to date" every time the fiscal year setting loads.
   useEffect(() => { if (!rangeTouched) setRange(defaultRange); }, [defaultRange, rangeTouched]);
   const updateRange = useCallback((r: typeof range) => { setRange(r); setRangeTouched(true); }, []);
+
+  /**
+   * The network is back while the read-only offline copy is on screen.
+   *
+   * A full reload runs the normal boot chain, which re-hits the server and
+   * clears the offline flag with live data. Anything the person tried to do
+   * offline was refused, so there is nothing to reconcile and nothing lost.
+   */
+  const onlineNow = useOnlineStatus();
+  useEffect(() => {
+    if (offline && onlineNow) window.location.reload();
+  }, [offline, onlineNow]);
 
   const notify = useCallback((message: string, ok: boolean) => {
     setToast({ message, ok, key: Date.now() });
@@ -861,6 +939,13 @@ export default function App() {
           mobileSidebarOpen={mobileSidebarOpen}
           actions={headerActions}
         />
+
+        {offline && (
+          <div role="status" aria-live="polite" className="bg-[var(--bg-tertiary)] border-b border-[var(--separator)] text-[var(--label-secondary)] text-[13px] leading-[18px] px-4 py-2">
+            You are offline — showing the books as of {offlineSavedAt ? new Date(offlineSavedAt).toLocaleString() : 'your last sync'}.
+            This copy is read-only; changes are disabled until you reconnect.
+          </div>
+        )}
 
         {storageError && (
           <div role="alert" className="bg-[var(--destructive-bg)] border-b border-[var(--destructive)]/30 text-[var(--destructive)] text-[13px] leading-[18px] px-4 py-2">

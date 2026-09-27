@@ -791,6 +791,9 @@ export function useDemoBooks() {
     user, setUser, business, setBusiness, accounts, setAccounts, customers, suppliers,
     sales, purchases, expenses, payments, gatewayTxns, journalEntries,
     isLoadingCloud: false, cloudError: null, storageError: null,
+    // The demo books live in memory — there is nothing to fall back to offline.
+    offline: false, offlineSavedAt: null,
+    loadFromOffline: async () => false,
     balances, integrityIssues, controlIntegrity, receivableByCustomer, payableBySupplier,
     openInvoices, openBills, currentFy, defaultRange, lookup,
     codes: ACCOUNT_CODES,
