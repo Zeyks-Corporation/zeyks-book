@@ -6,7 +6,7 @@ both Bikram Sambat and the Gregorian calendar, and the fiscal year follows
 Nepal's Shrawan–Ashadh year by default.    
 
 ## What changed from v1   
- 
+   
 This is a rewrite, not a patch. The previous build had no way to filter a
 report to a period (every statement silently covered *all* transactions),
 no way to edit or void a mistake, a "balanced" indicator that could never
