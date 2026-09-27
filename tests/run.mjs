@@ -163,6 +163,10 @@ const {
 } = paymentApiConfigMod;
 // The credential masker is a plain server module, so it imports as-is.
 const redactMod = await import(pathToFileURL(path.join(root, 'server', 'redact.js')).href);
+// So does the contact-form boundary. Importing it sends nothing: without an API
+// key the Resend client is never constructed, and these tests only build a
+// payload in memory.
+const resendMod = await import(pathToFileURL(path.join(root, 'server', 'resend.js')).href);
 // The payment API's authentication boundary (Stage 14). Importing it makes no
 // network call: the Firebase client is only constructed inside the middleware.
 const serverAuth = await import(pathToFileURL(path.join(root, 'server', 'auth.js')).href);
@@ -4267,6 +4271,109 @@ test('merchant credentials stay on the server side of the boundary', () => {
     'provider errors must stay redacted');
   assert(!/res\.status\([^)]*\)\.json\([^)]*token/i.test(server), 'and no response may carry the token');
   assert(!/console\.\w+\([^)]*parsed\.token/.test(server), 'nor may a log line');
+});
+
+/* ---------------------------------------------------------------------- */
+/* The public contact boundary                                             */
+/*                                                                          */
+/* The contact form is the one endpoint an anonymous visitor can make send   */
+/* something, and it is served by two runtimes: the Express server in        */
+/* development and the Vercel function in production. Both must apply the    */
+/* same bounds, or the weaker one is the way in.                             */
+/* ---------------------------------------------------------------------- */
+
+const { validateContactSubmission, buildContactPayload } = resendMod;
+
+test('a contact submission is bounded before anything is sent', () => {
+  assertEqual(validateContactSubmission({ name: ' Aka ', email: ' Aka@Example.com ', message: ' hi ' }).ok, true);
+  assertEqual(
+    validateContactSubmission({ name: 'Aka', email: 'aka@example.com', message: 'hi' }).values.email,
+    'aka@example.com', 'the address is trimmed before it becomes a header');
+  assertEqual(validateContactSubmission({}).error, 'Your name is required.');
+  assertEqual(validateContactSubmission({ name: 42, email: 'a@b.co', message: 'x' }).error,
+    'Your name is required.', 'a non-string name is not coerced');
+  assertEqual(validateContactSubmission({ name: 'n'.repeat(121), email: 'a@b.co', message: 'x' }).error,
+    'That name is too long.');
+  assertEqual(validateContactSubmission({ name: 'n', email: 'not an address', message: 'x' }).error,
+    'A valid email address is required.');
+  assertEqual(validateContactSubmission({ name: 'n', email: 'a@b.co', message: '   ' }).error,
+    'A message body is required.');
+  assertEqual(validateContactSubmission({ name: 'n', email: 'a@b.co', message: 'm'.repeat(5001) }).error,
+    'That message is too long.');
+});
+
+test('contact input cannot smuggle markup into the email or a header into the request', () => {
+  const hostile = {
+    name: 'Akr\nCc: victim@example.com',
+    email: 'aka@example.com',
+    message: '<script>steal()</script> & "quotes" \'apostrophes\'',
+  };
+  const payload = buildContactPayload(hostile);
+
+  assert(!/[\r\n]/.test(payload.subject), 'a header value cannot carry a line break');
+  assert(!/[\r\n]/.test(payload.replyTo), 'and neither can reply-to');
+  assertEqual(payload.subject, '[Zeyks Book Contact] New Inquiry from Akr Cc: victim@example.com',
+    'the break is flattened into the name, so it cannot become a second header');
+  assertEqual(payload.replyTo, 'aka@example.com');
+  assert(Array.isArray(payload.to), 'the recipient list is a list');
+
+  assert(!payload.html.includes('<script>'), 'the message body is never live markup');
+  assert(payload.html.includes('&lt;script&gt;'), 'it arrives escaped');
+  assert(payload.html.includes('&#39;apostrophes&#39;'), 'including quotes in attribute position');
+  assert(payload.html.includes('&amp;'), 'and the ampersand itself');
+
+  let threw = null;
+  try { buildContactPayload({ name: 'n', email: 'a b@c', message: 'x' }); } catch (e) { threw = e.message; }
+  assert(threw, 'the builder refuses an invalid address even if a caller skipped validation');
+});
+
+test('the serverless function serves contact itself, from the shared rules', () => {
+  const fn = readProjectFile('api/index.js');
+  const code = withoutComments(fn);
+  assert(/matchesPath\('\/api\/contact'\)/.test(code),
+    'contact is matched here rather than handed to the Express app, whose files are not traced into the function');
+  assert(/await import\('\.\.\/server\/resend\.js'\)/.test(fn),
+    'a literal dynamic import, so the bundler traces the module and both runtimes share one set of rules');
+  assert(/validateContactSubmission\(payload\)/.test(code), 'the shared bounds are the ones applied');
+  assert(/buildContactPayload\(checked\.values\)/.test(code), 'and the shared template builds the email');
+  assertEqual((fn.match(/\.\.\/server\/index\.js/g) || []).length, 1,
+    'only the payment branch may reach for the Express app, and it must say so when it cannot');
+  assert(/p\.startsWith\(route \+ '\/'\)/.test(code),
+    'path matching covers sub-paths, so /api/payments/config is no longer a 404');
+  assert(!/SUPABASE|supabase\.co/.test(fn), 'no Supabase client remains in the entry point');
+});
+
+test('no credential is committed as a server-side fallback', () => {
+  // A JWT-shaped string in source is a real secret, not a placeholder: the old
+  // Supabase service-role key sat in two files as an `||` fallback, and that
+  // role bypasses row-level security entirely.
+  const JWT = /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/;
+  const offenders = [];
+  for (const rel of ['api/index.js', 'server/index.js', 'server/auth.js', 'server/resend.js',
+    'server/esewa.js', 'server/khalti.js', 'server/verification.js', 'src/lib/neon.ts']) {
+    const text = readProjectFile(rel);
+    if (JWT.test(text)) offenders.push(`${rel}: a JWT literal`);
+    if (/https:\/\/[a-z0-9]+\.supabase\.co/.test(text)) offenders.push(`${rel}: a Supabase host`);
+  }
+  assertEqual(offenders.join(' | '), '', 'a committed credential must not come back as a default');
+
+  for (const rel of ['api/index.js', 'server/index.js']) {
+    const text = readProjectFile(rel);
+    for (const m of text.matchAll(/process\.env\.([A-Z0-9_]+)\s*(?:\|\||\?\?)[\s\S]{0,80}?['"`]([^'"`]{12,})['"`]/g)) {
+      assert(!/^[A-Za-z0-9+/_.-]{32,}$/.test(m[2]), `${rel} falls back to a literal for ${m[1]}`);
+    }
+  }
+});
+
+test('the retired session bridge is gone from both runtimes', () => {
+  for (const rel of ['api/index.js', 'server/index.js']) {
+    const text = readProjectFile(rel);
+    assert(!/supabase-session/.test(text), `${rel} still exposes the session bridge`);
+    assert(!/zb_auth_bridge/.test(text), `${rel} still derives a password from an email address`);
+    assert(!/my-memberships|business\/get/.test(text), `${rel} still answers membership lookups`);
+  }
+  assert(!existsSync(path.join(root, 'server', 'supabase.js')),
+    'server/supabase.js should be deleted, not left importable');
 });
 
 /* ---------------------------------------------------------------------- */

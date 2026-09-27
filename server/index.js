@@ -47,11 +47,10 @@ import { esewa } from './esewa.js';
 import { khalti } from './khalti.js';
 import { ProviderResponseError } from './verification.js';
 import { redact, redactDetail } from './redact.js';
-import { resendService, isValidEmail } from './resend.js';
+import { resendService, validateContactSubmission } from './resend.js';
 import {
   authorizeInvoice, authorizeReferences, claimedRefs, requireCaller, warnIfUnconfigured,
 } from './auth.js';
-import { supabaseAdmin, createAnonClient } from './supabase.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -297,183 +296,16 @@ app.post('/api/payments/khalti/lookup', requireCaller, async (req, res) => {
  * depends on. This server never sees an OTP again.
  */
 
-/* ------------------------- Supabase Session Bridge ------------------------ */
-
-app.post('/api/auth/supabase-session', async (req, res) => {
-  const payload = req.body ?? {};
-  const email = payload.email;
-  const name = payload.name;
-  if (!email || typeof email !== 'string') {
-    return fail(res, 400, 'Valid email is required.');
-  }
-  const cleanEmail = email.trim().toLowerCase();
-  try {
-    const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
-    let user = listData?.users?.find((u) => u.email?.toLowerCase() === cleanEmail);
-    if (!user) {
-      const { data: createData, error: createErr } = await supabaseAdmin.auth.admin.createUser({
-        email: cleanEmail,
-        email_confirm: true,
-        user_metadata: { full_name: name || '' },
-      });
-      if (createErr) throw createErr;
-      user = createData.user;
-    }
-
-    await supabaseAdmin.from('profiles').upsert({
-      id: user.id,
-      email: user.email,
-      full_name: name || user.user_metadata?.full_name || cleanEmail.split('@')[0],
-    }, { onConflict: 'id' });
-
-    const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
-      type: 'magiclink',
-      email: user.email,
-    });
-    if (linkErr) throw linkErr;
-
-    // Use ephemeral anon client on server side to exchange token_hash into real session access_token and refresh_token
-    let session = null;
-    try {
-      const verifyClient = createAnonClient();
-      const { data: verifyData } = await verifyClient.auth.verifyOtp({
-        token_hash: linkData.properties.hashed_token,
-        type: linkData.properties.verification_type,
-      });
-      session = verifyData?.session || null;
-    } catch {
-      // ignore, fall back to returning token info
-    }
-
-    res.json({
-      access_token: session?.access_token || null,
-      refresh_token: session?.refresh_token || null,
-      email: user.email,
-      email_otp: linkData.properties.email_otp,
-      token_hash: linkData.properties.hashed_token,
-      verification_type: linkData.properties.verification_type,
-      user_id: user.id,
-    });
-  } catch (e) {
-    return fail(res, 500, e?.message || 'Could not synchronize session.', e);
-  }
-});
-
-/* ------------------------ Business Memberships Fallback ------------------- */
-
-app.post('/api/business/my-memberships', async (req, res) => {
-  const payload = req.body ?? {};
-  const mail = payload.email;
-  if (!mail || typeof mail !== 'string') {
-    return fail(res, 400, 'Email is required.');
-  }
-  try {
-    const cleanEmail = mail.trim().toLowerCase();
-    const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('id')
-      .eq('email', cleanEmail)
-      .maybeSingle();
-
-    if (!profile?.id) {
-      return res.json({ memberships: [] });
-    }
-
-    const { data: memberships, error } = await supabaseAdmin
-      .from('business_memberships')
-      .select('business_id, user_id, role, created_at')
-      .eq('user_id', profile.id);
-
-    if (error) throw error;
-    res.json({
-      memberships: (memberships || []).map((m) => ({
-        businessId: m.business_id,
-        userId: m.user_id,
-        role: m.role || 'OWNER',
-        createdAt: m.created_at || '',
-      })),
-    });
-  } catch (e) {
-    return fail(res, 500, e?.message || 'Could not fetch memberships', e);
-  }
-});
-
-app.post('/api/business/get', async (req, res) => {
-  const payload = req.body ?? {};
-  const targetId = payload.businessId;
-  const mail = payload.email;
-  if (!targetId || typeof targetId !== 'string') {
-    return fail(res, 400, 'Business ID is required.');
-  }
-  try {
-    if (mail) {
-      const cleanEmail = mail.trim().toLowerCase();
-      const { data: profile } = await supabaseAdmin
-        .from('profiles')
-        .select('id')
-        .eq('email', cleanEmail)
-        .maybeSingle();
-
-      if (profile?.id) {
-        const { data: member } = await supabaseAdmin
-          .from('business_memberships')
-          .select('role')
-          .eq('business_id', targetId)
-          .eq('user_id', profile.id)
-          .maybeSingle();
-
-        if (!member) {
-          return fail(res, 403, 'You are not a member of this business.');
-        }
-      }
-    }
-
-    const { data: business, error } = await supabaseAdmin
-      .from('businesses')
-      .select('*')
-      .eq('id', targetId)
-      .maybeSingle();
-
-    if (error) throw error;
-    if (!business) return fail(res, 404, 'Business not found.');
-    res.json({ business });
-  } catch (e) {
-    return fail(res, 500, e?.message || 'Could not load business', e);
-  }
-});
-
 app.get('/api/resend/status', (_req, res) => {
   res.json({ configured: resendService.isConfigured() });
 });
 
 app.post('/api/contact', rateLimit({ name: 'contact', windowMs: 60_000, max: 5 }), async (req, res) => {
-  const payload = req.body ?? {};
-  const name = payload.name;
-  const email = payload.email;
-  const message = payload.message;
-  if (!name || typeof name !== 'string' || !name.trim()) {
-    return fail(res, 400, 'Your name is required.');
-  }
-  if (name.trim().length > 120) {
-    return fail(res, 400, 'That name is too long.');
-  }
-  if (!email || typeof email !== 'string' || email.trim().length > 254 || !isValidEmail(email)) {
-    return fail(res, 400, 'A valid email address is required.');
-  }
-  if (!message || typeof message !== 'string' || !message.trim()) {
-    return fail(res, 400, 'A message body is required.');
-  }
-  if (message.trim().length > 5_000) {
-    return fail(res, 400, 'That message is too long.');
-  }
+  const checked = validateContactSubmission(req.body ?? {});
+  if (!checked.ok) return fail(res, 400, checked.error);
 
   try {
-    const result = await resendService.sendContactEmail({
-      name: name.trim(),
-      email: email.trim(),
-      message: message.trim(),
-    });
-    res.json(result);
+    res.json(await resendService.sendContactEmail(checked.values));
   } catch (e) {
     return fail(res, 500, 'Failed to send message via Resend.', e);
   }
