@@ -138,6 +138,92 @@ create policy profiles_update_admin on public.profiles
 grant update (role) on public.profiles to authenticated;
 
 -- ============================================================================
+-- 6. Backfill profiles for Better Auth users that signed in before their
+--    claim succeeded (recreated accounts, or the pre-VOLATILE claim_profile).
+-- ============================================================================
+insert into public.profiles (id, email, full_name, role)
+select u.id, u.email, coalesce(u.name, ''),
+  case when lower(u.email) in ('littlefault1@gmail.com', 'zeyksbook@gmail.com') then 'admin' else 'user' end
+from neon_auth."user" u
+where u.email is not null and btrim(u.email) <> ''
+  and not exists (select 1 from public.profiles p where p.id = u.id)
+on conflict (id) do nothing;
+
+-- ============================================================================
+-- 7. create_business self-heal — replaces 003's version so pressing Start can
+--    never dead-end on a missing profiles row: it claims the profile inline.
+-- ============================================================================
+create or replace function public.create_business(
+  p_business_name           text,
+  p_owner_name              text     default '',
+  p_email                   text     default '',
+  p_phone                   text     default '',
+  p_pan_number              text     default '',
+  p_address                 text     default '',
+  p_city                    text     default '',
+  p_currency_symbol         text     default 'NPR',
+  p_fiscal_year_start_month smallint default 4,
+  p_vat_registered          boolean  default false,
+  p_vat_rate                numeric  default 13,
+  p_track_inventory         boolean  default false
+)
+returns public.businesses
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  v_uid      uuid := auth.uid();
+  v_name     text := btrim(coalesce(p_business_name, ''));
+  v_business public.businesses;
+begin
+  if v_uid is null then
+    raise exception 'Authentication required' using errcode = '28000';
+  end if;
+
+  if not exists (select 1 from public.profiles p where p.id = v_uid) then
+    begin
+      perform public.claim_profile();
+    exception when others then
+      null;
+    end;
+    if not exists (select 1 from public.profiles p where p.id = v_uid) then
+      raise exception 'No profile exists for the current user' using errcode = '23503';
+    end if;
+  end if;
+
+  if v_name = '' then
+    raise exception 'Business name is required' using errcode = '22023';
+  end if;
+
+  -- Column CHECK constraints on public.businesses validate the remaining
+  -- inputs (PAN format, currency symbol, fiscal month, VAT rate).
+  insert into public.businesses (
+    created_by, business_name, owner_name, email, phone, pan_number, address, city,
+    currency_symbol, fiscal_year_start_month, vat_registered, vat_rate, track_inventory
+  ) values (
+    v_uid, v_name,
+    btrim(coalesce(p_owner_name, '')),
+    btrim(coalesce(p_email, '')),
+    btrim(coalesce(p_phone, '')),
+    btrim(coalesce(p_pan_number, '')),
+    btrim(coalesce(p_address, '')),
+    btrim(coalesce(p_city, '')),
+    coalesce(p_currency_symbol, 'NPR'),
+    coalesce(p_fiscal_year_start_month, 4),
+    coalesce(p_vat_registered, false),
+    coalesce(p_vat_rate, 13),
+    coalesce(p_track_inventory, false)
+  )
+  returning * into v_business;
+
+  insert into public.business_memberships (business_id, user_id, role)
+  values (v_business.id, v_uid, 'OWNER');
+
+  perform public.seed_default_chart_of_accounts(v_business.id);
+
+  return v_business;
+end $$;
+
+-- ============================================================================
 -- Grants
 -- ============================================================================
 revoke all on function public.claim_profile() from public, anon, authenticated;
