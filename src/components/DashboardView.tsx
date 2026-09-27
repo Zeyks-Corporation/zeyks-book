@@ -11,6 +11,8 @@ import { addDays } from '../lib/nepaliDate';
 import { outstandingParties, PartyBalanceList } from '../services/reportData';
 import { listStockRows, summariseStock } from '../services/inventoryService';
 import type { InventoryStockRow } from '../types';
+import { planOfRole, ROLE_LABEL, type AppRole } from '../lib/roles';
+import { UpgradePlansSection } from './UpgradeViews';
 
 /**
  * One side of the party rollup: the biggest balances, the true total, and how
@@ -49,7 +51,10 @@ export const DashboardView: React.FC<{
   onGoToHealth: () => void;
   onGoToInventory?: () => void;
   hideHealthBanner?: boolean;
-}> = ({ books, range, onRangeChange, calendar, onQuickAction, onGoToHealth, onGoToInventory, hideHealthBanner = false }) => {
+  /** Signed-in role — drives the "your plan / upgrade" card. */
+  role?: AppRole;
+  onPickPlan?: (plan: 'plus' | 'premium') => void;
+}> = ({ books, range, onRangeChange, calendar, onQuickAction, onGoToHealth, onGoToInventory, hideHealthBanner = false, role, onPickPlan }) => {
   const {
     accounts, journalEntries, sales, purchases, expenses, payments, business, integrityIssues,
     customers, suppliers, receivableByCustomer, payableBySupplier,
@@ -254,6 +259,15 @@ export const DashboardView: React.FC<{
           <EmptyState title="No activity in this period." />
         )}
       </section>
+
+      {planOfRole(role) && (
+        <section aria-label="Your plan">
+          <h2 className="text-xs font-medium uppercase tracking-wider text-[var(--label-secondary)] mb-3">
+            Your plan — {ROLE_LABEL[role as 'plus' | 'premium']}
+          </h2>
+          <UpgradePlansSection role={role} onPickPlan={onPickPlan} />
+        </section>
+      )}
     </div>
   );
 };

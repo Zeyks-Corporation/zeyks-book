@@ -17,6 +17,7 @@ import { NotFoundView } from './components/NotFoundView';
 import { SubscribeView } from './components/SubscribeView';
 import { KingPanel } from './components/KingPanel';
 import { isPayingTier, isAppAdmin, roleHasFeature, type AppRole } from './lib/roles';
+import { PlanLockedView } from './components/UpgradeViews';
 import { gateway, GatewayConfig, takePending } from './services/paymentGateway';
 import { useRoute } from './lib/useRoute';
 import { parseRoute, pathForTab, redirectFor } from './lib/routes';
@@ -573,8 +574,21 @@ export default function App() {
     sales: 'sale', purchases: 'purchase', expenses: 'expense', payments: 'payment',
   };
 
+  const userRole: AppRole | undefined = user?.appRole;
+  const dashboardAccess = isPayingTier(userRole) || isAppAdmin(userRole);
+
+  /**
+   * Which sidebar sections this role has not paid for. They stay listed —
+   * with a lock in the drawer — and clicking one opens the plan screen
+   * instead of the feature. A free account keeps the dashboard tab itself
+   * open (it is the door that shows the plans) and locks everything else.
+   */
+  const lockedTabs: ViewTab[] = (Object.keys(TITLES) as ViewTab[]).filter(
+    (tab) => !roleHasFeature(userRole, tab) && !(tab === 'dashboard' && !dashboardAccess),
+  );
+
   const headerActions = useMemo(() => {
-    if (currentDocKind) {
+    if (currentDocKind && !lockedTabs.includes(activeTab)) {
       const kind = quickActionForTab[currentDocKind]!;
       const supported = isSupported(CAPABILITY_FOR_TXN[kind]);
       return (
@@ -590,7 +604,7 @@ export default function App() {
     }
     return null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentDocKind, openQuickAction]);
+  }, [currentDocKind, openQuickAction, lockedTabs, activeTab]);
 
   const signOutNow = useCallback(() => { void exitSession('this-device'); }, [exitSession]);
   const retryLoad = useCallback(() => { void loadUserBusinessAndData(); }, [loadUserBusinessAndData]);
@@ -605,41 +619,22 @@ export default function App() {
    * person asking for a book screen is NOT redirected: they keep the path and
    * see the sign-in screen, so signing in lands them where they were going.
    *
-   * A signed-in person whose role does not unlock the dashboard is sent to
-   * `/subscribe` instead — the only screen they can reach until they pick a
-   * plan. An admin's `/king` is not affected; the role-aware gating happens
-   * when the route is matched below.
+   * Every role reaches the dashboard now. What a plan unlocks is decided per
+   * section (`lockedTabs` below), not by bouncing URLs. An admin's `/king`
+   * is not affected; the role-aware gating happens when the route is matched.
    */
   const authenticated = Boolean(user) && sessionPhase === 'authenticated';
   const isExplicitLanding = typeof window !== 'undefined' && window.location.search.includes('landing=1');
-  const userRole: AppRole | undefined = user?.appRole;
-  const dashboardAccess = isPayingTier(userRole) || isAppAdmin(userRole);
 
   let redirect: string | null = null;
   if (!isExplicitLanding && authenticated) {
     redirect = redirectFor(route, authenticated);
-    if (redirect && !dashboardAccess) {
-      // Marketing → /dashboard would just bounce straight to /subscribe; send
-      // them there directly to skip the flash of the dashboard skeleton.
-      redirect = '/subscribe';
-    }
     // If they typed /king without admin role, route it away to 404 below —
     // do not redirect silently so the URL stays honest in the address bar.
   }
   useEffect(() => {
     if (redirect) navigate(redirect, { replace: true });
   }, [redirect, navigate]);
-
-  /**
-   * Which sidebar tabs this role may reach. Plus role hides Expenses,
-   * Payments, Reports, Health, Settings (settings is reachable via the
-   * avatar menu in the header — see below). Admin sees everything.
-   */
-  const hiddenTabs: ViewTab[] = (() => {
-    if (isAppAdmin(userRole) || userRole === 'premium') return [];
-    if (userRole === 'plus') return ['expenses', 'payments', 'reports', 'health'];
-    return [];
-  })();
 
   /**
    * When a signed-in user lands on /pricing they can pick a plan. Until the
@@ -691,34 +686,43 @@ export default function App() {
   }
 
   /**
-   * A signed-in user with role='user' (no subscription) cannot reach the
-   * dashboard. /subscribe explains the situation and offers plans; /pricing,
-   * /about and the other public pages are still reachable as marketing.
+   * A signed-in user without a subscription (role='user') sees the whole app
+   * shell with every section locked: the dashboard tab is open — it is the
+   * door that lists the plans — and every other tab shows the plan screen.
+   * The onboarding form and the transaction modals are deliberately
+   * unreachable from this screen, so nothing can be added, edited or erased
+   * until a plan is bought. /pricing, /about and the other public pages stay
+   * reachable as marketing.
    */
   if (authenticated && !dashboardAccess && route.kind === 'app') {
     return (
-      <SubscribeView
-        role={userRole}
-        email={user?.email ?? null}
-        onHome={() => navigate('/?landing=1')}
-        onSignOut={() => exitSession('this-device')}
-      />
-    );
-  }
-
-  /**
-   * Inventory is a Premium-only feature. A plus-tier user typing /inventory
-   * (or following a stale bookmark) gets a real 404 — never a silent redirect
-   * — for the same reason /king does: the URL is honest about what the role
-   * can see.
-   */
-  if (route.kind === 'app' && route.tab === 'inventory' && !roleHasFeature(userRole, 'inventory')) {
-    return (
-      <NotFoundView
-        path={pathForTab('inventory')} authenticated
-        onHome={() => navigate(pathForTab('dashboard'))}
-        onSignIn={() => navigate('/signin')}
-      />
+      <div className="min-h-screen bg-[var(--bg-secondary)]">
+        <Sidebar
+          currentTab={activeTab}
+          onSelect={(t) => { navigate(pathForTab(t)); setMobileSidebarOpen(false); }}
+          businessName={business.businessName}
+          isOpenMobile={mobileSidebarOpen} onCloseMobile={() => setMobileSidebarOpen(false)}
+          issueCount={0}
+          lockedTabs={lockedTabs}
+          onHome={() => navigate('/?landing=1')}
+        />
+        <div className="lg:pl-60">
+          <Header
+            title={TITLES[activeTab]}
+            onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
+            mobileSidebarOpen={mobileSidebarOpen}
+          />
+          <main>
+            <PlanLockedView
+              role={userRole}
+              section={activeTab === 'dashboard' ? undefined : TITLES[activeTab]}
+              feature={activeTab === 'dashboard' ? undefined : activeTab}
+              onSignOut={signOutNow}
+            />
+          </main>
+        </div>
+        {toast && <Toast key={toast.key} message={toast.message} ok={toast.ok} onDismiss={() => setToast(null)} />}
+      </div>
     );
   }
 
@@ -846,7 +850,7 @@ export default function App() {
         businessName={business.businessName}
         isOpenMobile={mobileSidebarOpen} onCloseMobile={() => setMobileSidebarOpen(false)}
         issueCount={integrityIssues.filter((i) => i.severity === 'ERROR').length}
-        hideTabs={hiddenTabs}
+        lockedTabs={lockedTabs}
         onHome={() => navigate('/?landing=1')}
       />
 
@@ -873,11 +877,15 @@ export default function App() {
                 onHome={() => navigate(pathForTab('dashboard'))}
                 onSignIn={() => navigate('/signin')}
               />
+            ) : lockedTabs.includes(activeTab) ? (
+              <PlanLockedView role={userRole} section={TITLES[activeTab]} feature={activeTab} />
             ) : (
               <>
                 {activeTab === 'dashboard' && (
                   <DashboardView
                     books={books} range={range} onRangeChange={updateRange} calendar={calendar}
+                    role={userRole}
+                    onPickPlan={handlePickPlan}
                     onQuickAction={openQuickAction}
                     onGoToHealth={() => navigate(pathForTab('health'))}
                     onGoToInventory={() => navigate(pathForTab('inventory'))}

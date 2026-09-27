@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  CreditCard, FileText, Gauge, Heart, Menu, Package, Receipt, Settings,
+  CreditCard, FileText, Gauge, Heart, Lock, Menu, Package, Receipt, Settings,
   ShoppingBag, Wallet, X,
 } from 'lucide-react';
 import { ViewTab } from '../types';
@@ -57,10 +57,11 @@ const NAV: { tab: ViewTab; label: string; icon: React.ElementType }[] = [
 export const Sidebar: React.FC<{
   currentTab: ViewTab; onSelect: (t: ViewTab) => void; businessName: string;
   isOpenMobile: boolean; onCloseMobile: () => void; issueCount: number;
-  hideTabs?: ViewTab[];
+  /** Tabs the current plan does not unlock. They stay visible, marked with a lock. */
+  lockedTabs?: ViewTab[];
   /** Jump out to the public landing page. */
   onHome?: () => void;
-}> = ({ currentTab, onSelect, businessName, isOpenMobile, onCloseMobile, issueCount, hideTabs = [], onHome }) => {
+}> = ({ currentTab, onSelect, businessName, isOpenMobile, onCloseMobile, issueCount, lockedTabs = [], onHome }) => {
   const isDesktop = useIsDesktop();
   // Closed on a phone means gone: `inert` takes the whole drawer out of the tab
   // order and away from assistive technology, which `-translate-x-full` cannot.
@@ -119,8 +120,9 @@ export const Sidebar: React.FC<{
 
       <nav aria-label="Main" className="flex-1 overflow-y-auto p-2">
         <ul className="space-y-0.5">
-          {NAV.filter((item) => !hideTabs.includes(item.tab)).map(({ tab, label, icon: Icon }) => {
+          {NAV.map(({ tab, label, icon: Icon }) => {
             const active = currentTab === tab;
+            const locked = lockedTabs.includes(tab);
             return (
               <li key={tab}>
                 <button
@@ -131,7 +133,10 @@ export const Sidebar: React.FC<{
                 >
                   <Icon size={15} strokeWidth={1.8} aria-hidden="true" />
                   <span>{label}</span>
-                  {tab === 'health' && issueCount > 0 && (
+                  {locked && (
+                    <Lock size={12} strokeWidth={2} aria-hidden="true" className="ml-auto shrink-0 text-[var(--label-tertiary)]" />
+                  )}
+                  {!locked && tab === 'health' && issueCount > 0 && (
                     <span className="ml-auto rounded bg-[var(--destructive-bg)] px-1.5 py-0.5 text-[12px] font-semibold text-[var(--destructive)] tabular-nums">
                       {issueCount}
                     </span>

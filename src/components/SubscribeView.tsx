@@ -1,9 +1,7 @@
 import React from 'react';
 import { ArrowLeft, Lock } from 'lucide-react';
 import { Button } from './ui';
-import { ROLE_LABEL, ROLE_PRICE_NPR, type AppRole } from '../lib/roles';
-
-const WHATSAPP_URL = 'https://wa.me/9779701066114?text=I%20want%20to%20buy%20a%20plan%20of%20Zeyks%20Book';
+import { ROLE_LABEL, ROLE_PRICE_NPR, WHATSAPP_PLAN_URL, type AppRole } from '../lib/roles';
 
 /**
  * Shown to a signed-in user whose role does not unlock the dashboard.
@@ -42,7 +40,7 @@ export const SubscribeView: React.FC<{
           <div className="rounded-[10px] border border-[var(--separator)] p-4 text-left">
             <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--label-tertiary)]">Starter</p>
             <p className="mt-1 text-[20px] font-bold text-[var(--label)]">NPR {ROLE_PRICE_NPR.plus}</p>
-            <p className="mt-1 text-[12px] text-[var(--label-secondary)]">Dashboard, sales, purchase</p>
+            <p className="mt-1 text-[12px] text-[var(--label-secondary)]">Dashboard, sales, purchases & expenses</p>
           </div>
           <div className="rounded-[10px] border-2 border-[var(--accent)] p-4 text-left bg-[var(--accent)]/5">
             <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--accent)]">Premium</p>
@@ -52,7 +50,7 @@ export const SubscribeView: React.FC<{
         </div>
         <div className="flex flex-col gap-2">
           <a
-            href={WHATSAPP_URL}
+            href={WHATSAPP_PLAN_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex w-full items-center justify-center gap-1.5 font-medium transition-[transform,background-color] active:scale-[0.97] rounded-full px-6 py-3 text-[17px] min-h-[44px] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]"

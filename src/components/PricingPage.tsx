@@ -2,46 +2,30 @@ import React from 'react';
 import { Check, HelpCircle, Sparkles } from 'lucide-react';
 import { PublicLayout } from './PublicLayout';
 import { Button } from './ui';
-import { ROLE_LABEL, type AppRole } from '../lib/roles';
+import { PLAN_FEATURES, ROLE_LABEL, type AppRole } from '../lib/roles';
 
 /**
  * Two-tier pricing page.
  *
- *   Starter  — NPR 399 / month. Dashboard, sales, purchase. Designed for
- *              kirana counters that just need daily books and a stock view.
- *   Premium  — NPR 599 / month. Every feature: reports, data health, expenses,
- *              payments, inventory.
+ *   Starter  — NPR 399 / month. Dashboard, sales, purchases, expenses and
+ *              settings. Designed for kirana counters that just need daily
+ *              books and a stock view.
+ *   Premium  — NPR 599 / month. Every feature: inventory, aged receivables &
+ *              payables, reports, data health and settlements.
  *
  * Both tiers route through the same payment flow once the eSewa / Khalti
  * integration is wired up. Until then, picking a plan routes a signed-in user
  * to the admin-controlled flow (a no-op until the RPC is connected); signed-
  * out users are asked to sign in first.
+ *
+ * The bullet lists come from PLAN_FEATURES so this page and the dashboard's
+ * upgrade card cannot drift apart.
  */
-
-const STARTER_FEATURES = [
-  'Double-entry accounting engine by construction',
-  'Bikram Sambat (BS) & AD calendar support',
-  'Sales recording with invoice numbers and credit terms',
-  'Purchase recording with bill numbers and credit terms',
-  'Inventory tracking with reorder alerts',
-  'Settings: currency, fiscal year, VAT, branding',
-  'JSON backup from Settings',
-];
-
-const PREMIUM_FEATURES = [
-  'Everything in Starter, plus:',
-  'Aged receivables & payables (30, 60, 90 days)',
-  'A4 print-ready financial statements & tax reports',
-  'Automatic ledger & document health checks',
-  'Expense tracking with category mapping',
-  'Settlements & receipts against any invoice or bill',
-  'Stock summary, ledger, valuation, low-stock alerts',
-];
 
 const FAQS = [
   {
     q: 'How does pricing work?',
-    a: 'Two plans, billed monthly. Starter (NPR 399) is sized for kirana counters — daily books, sales and purchase. Premium (NPR 599) unlocks reports, data health, expenses, payments and inventory. There are no per-seat charges.',
+    a: 'Two plans, billed monthly. Starter (NPR 399) is sized for kirana counters — daily books, sales, purchases and expenses. Premium (NPR 599) unlocks inventory, aged receivables & payables, print-ready reports, data health and settlements. There are no per-seat charges.',
   },
   {
     q: 'Can I upgrade from Starter to Premium later?',
@@ -97,7 +81,7 @@ export const PricingPage: React.FC<{
             name={ROLE_LABEL.plus}
             priceNPR={399}
             highlight={false}
-            features={STARTER_FEATURES}
+            features={PLAN_FEATURES.plus}
             ctaLabel={signedIn ? 'Choose Starter' : 'Sign in to start'}
             onCta={() => {
               if (signedIn && onPickPlan) handlePick('plus');
@@ -109,7 +93,7 @@ export const PricingPage: React.FC<{
             priceNPR={599}
             highlight
             badge={<Sparkles size={12} strokeWidth={1.8} className="inline-block" />}
-            features={PREMIUM_FEATURES}
+            features={PLAN_FEATURES.premium}
             ctaLabel={signedIn ? 'Choose Premium' : 'Sign in to start'}
             onCta={() => {
               if (signedIn && onPickPlan) handlePick('premium');
@@ -143,7 +127,7 @@ const PlanCard: React.FC<{
   priceNPR: number;
   highlight: boolean;
   badge?: React.ReactNode;
-  features: string[];
+  features: ReadonlyArray<string>;
   ctaLabel: string;
   onCta: () => void;
 }> = ({ name, priceNPR, highlight, badge, features, ctaLabel, onCta }) => {
