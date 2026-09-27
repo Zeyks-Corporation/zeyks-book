@@ -195,7 +195,7 @@ export const LandingPage: React.FC<{
               </p>
             </div>
 
-            {/* Bento Card 5: Self-Hosted on Firebase */}
+            {/* Bento Card 5: Private by design */}
             <div className="apple-card p-8">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--fill-secondary)] text-[var(--accent)] shadow-xs">
                 <Database size={24} strokeWidth={1.8} />

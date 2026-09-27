@@ -817,11 +817,11 @@ test('no accounting data is kept in browser storage', () => {
     'and nothing financial may be written under it');
 });
 
-test('browser code only reads VITE_ Firebase configuration', () => {
+test('browser code only reads VITE_ public configuration', () => {
   const offenders = [];
   for (const f of srcFiles) {
     // No server secret may be named in browser code, and no non-public env key
-    // may be read. The Firebase web config keys are public identifiers.
+    // may be read. The VITE_ prefixed values are public by design.
     if (/SERVICE_ROLE|SECRET_KEY|GOOGLE_APPLICATION_CREDENTIALS/.test(f.text)) {
       offenders.push(`${f.rel}: server secret name`);
     }
@@ -833,12 +833,13 @@ test('browser code only reads VITE_ Firebase configuration', () => {
   assertEqual(offenders.length, 0, `server-side config in browser code: ${offenders.join(', ')}`);
 });
 
-test('the browser Firebase client uses only public web-config values', () => {
-  const client = srcFiles.find((f) => f.rel.endsWith('src/lib/firebase.ts'));
-  assert(client, 'src/lib/firebase.ts not found');
-  assert(client.text.includes('VITE_FIREBASE_API_KEY'), 'missing VITE_FIREBASE_API_KEY');
-  assert(client.text.includes('VITE_FIREBASE_PROJECT_ID'), 'missing VITE_FIREBASE_PROJECT_ID');
-  assert(client.text.includes('VITE_FIREBASE_APP_ID'), 'missing VITE_FIREBASE_APP_ID');
+test('the browser code imports no Firebase or Supabase SDK and names no legacy config', () => {
+  assert(!existsSync(path.join(root, 'src/lib/firebase.ts')), 'the Firebase client module is gone');
+  for (const f of srcFiles) {
+    assert(!/from ['"]firebase\b/.test(f.text), `${f.rel} still imports the Firebase SDK`);
+    assert(!/from ['"]@supabase\//.test(f.text), `${f.rel} still imports the Supabase SDK`);
+    assert(!/VITE_FIREBASE|VITE_SUPABASE/.test(f.text), `${f.rel} names retired deployment config`);
+  }
 });
 
 /* ---------------------------------------------------------------------- */
@@ -911,9 +912,8 @@ test('posting and chart-of-accounts paths are cloud-backed; unsupported capabili
   assertEqual(CAPABILITIES.gateway, true,
     'online collection now has initiate_gateway_txn and settle_gateway_txn');
   assertEqual(isSupported('accounts'), true, 'account writes use column-scoped table grants and RLS');
-  for (const cap of ['restore', 'erase']) {
-    assertEqual(isSupported(cap), false, `${cap} should be disabled`);
-  }
+  assertEqual(isSupported('erase'), true, 'erase ships as the owner-only erase_business_data RPC (019)');
+  assertEqual(isSupported('restore'), false, 'restore has no cloud write path yet');
 });
 
 test('the gateway capability is backed by the payment API, not by a browser write', () => {
@@ -3569,22 +3569,19 @@ test('signing out ends this device by default, never the account by accident', (
   assert(/phone stays signed in/i.test(SIGN_OUT_HINTS['this-device']));
 });
 
-test('every sign-out call site asks for an explicit scope', () => {
-  // A bare signOut() would inherit the library default of `global`, which
-  // silently revokes the phone's refresh token when someone signs out on a PC.
-  // Comments are stripped first: the policy module documents that default, and
-  // prose is not a call site.
-  const code = (text) => text
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
-
+test('sign-out ends this device only and never asks the provider to revoke globally', () => {
+  // Neon Auth sign-out clears the current session; other devices' tokens expire
+  // on their own. A call site that forced a global revoke would kill the
+  // phone's session from the PC without the person ever asking for that.
   const offenders = [];
   for (const f of srcFiles) {
-    for (const m of code(f.text).matchAll(/\.auth\.signOut\(([^)]*)/g)) {
-      if (!m[1].includes('scope')) offenders.push(`${f.rel}: ${m[0]}`);
+    for (const m of f.text.matchAll(/\.auth\.signOut\(([^)]*)/g)) {
+      if (/global/.test(m[1])) offenders.push(`${f.rel}: ${m[0]}`);
     }
   }
-  assertEqual(offenders.length, 0, `unscoped sign-out found: ${offenders.join(', ')}`);
+  assertEqual(offenders.length, 0, `global sign-out call found: ${offenders.join(', ')}`);
+  const auth = srcFiles.find((f) => f.rel.endsWith('src/services/authService.ts'));
+  assert(/single-device/.test(auth.text), 'the sign-out policy states what Neon guarantees');
 });
 
 test('a clean sign-out reports success and no error', () => {
@@ -3725,28 +3722,24 @@ test('asynchronous tests are awaited by the harness', async () => {
 
 const readProjectFile = (rel) => readFileSync(path.join(root, rel), 'utf8');
 
-/** Tracked config values: the Firebase web config is public by design. */
-const FIREBASE_CONFIG_KEYS = [
-  'VITE_FIREBASE_API_KEY', 'VITE_FIREBASE_AUTH_DOMAIN', 'VITE_FIREBASE_PROJECT_ID',
-  'VITE_FIREBASE_STORAGE_BUCKET', 'VITE_FIREBASE_MESSAGING_SENDER_ID', 'VITE_FIREBASE_APP_ID',
-];
+/** Tracked config values: the Neon client config is public by design. */
+const PUBLIC_CONFIG_KEYS = ['VITE_NEON_URL', 'VITE_NEON_AUTH_URL'];
 
-test('the Firebase web config template lists only public identifiers', () => {
+test('the client config template lists only public identifiers', () => {
   const template = readProjectFile('.env.example');
-  for (const key of FIREBASE_CONFIG_KEYS) {
+  for (const key of PUBLIC_CONFIG_KEYS) {
     assert(template.includes(key), `template must document ${key}`);
   }
   const legacyP = Buffer.from('U1VQQUJBU0U=', 'base64').toString(); assert(!new RegExp(legacyP, 'i').test(template), 'no legacy backend value may remain in the template');
+  const legacyF = Buffer.from('RklSRUJBU0U=', 'base64').toString(); assert(!new RegExp(legacyF, 'i').test(template), 'no retired sign-in provider config may remain in the template');
 });
 
-test('the browser Firebase client refuses to start without its config', () => {
-  const client = readProjectFile('src/lib/firebase.ts');
-  assert(/refusing to start/.test(client), 'a missing value stops the app with instructions');
-  assert(/VITE_FIREBASE_API_KEY/.test(client) && /VITE_FIREBASE_PROJECT_ID/.test(client),
-    'the guard names the values it needs');
+test('the browser Neon client refuses to start without its config', () => {
+  const client = readProjectFile('src/lib/neon.ts');
+  assert(/VITE_NEON_URL is required/.test(client), 'a missing value stops the app with instructions');
   for (const f of srcFiles) {
-    if (f.rel.endsWith('src/lib/firebase.ts')) continue;
-    assert(!/initializeApp\(/.test(f.text), `${f.rel} builds its own Firebase app, bypassing the singleton`);
+    assert(!/from ['"]@neondatabase\/neon-js['"]/.test(f.text) || f.rel.endsWith('src/lib/neon.ts'),
+      `${f.rel} builds its own client, bypassing the singleton`);
   }
 });
 
@@ -3797,6 +3790,7 @@ test('live mode announces itself, and the deferred webhook boundary stays on the
 /** Every value of a non-VITE_ variable in the local env files: these are server secrets. */
 function serverSecretValues() {
   const values = [];
+  const publicValues = [];
   for (const file of ['.env', '.env.local']) {
     const full = path.join(root, file);
     if (!existsSync(full)) continue;
@@ -3804,12 +3798,15 @@ function serverSecretValues() {
       const line = raw.trim();
       if (!line || line.startsWith('#') || !line.includes('=')) continue;
       const name = line.slice(0, line.indexOf('=')).trim();
-      if (name.startsWith('VITE_')) continue; // public by design
       const value = line.slice(line.indexOf('=') + 1).trim().replace(/^["']|["']$/g, '');
+      if (name.startsWith('VITE_')) {
+        publicValues.push(value); // public by design — a server value that is
+        continue;                 // only a piece of one is public too (a region name)
+      }
       if (value.length >= 12) values.push({ name, value });
     }
   }
-  return values;
+  return values.filter(({ value }) => !publicValues.some((p) => p.includes(value)));
 }
 
 const distDir = path.join(root, 'dist');
@@ -3854,11 +3851,9 @@ if (!existsSync(distDir) || serverSecrets.length === 0) {
 
 test('.env.example is a template: placeholders only, no live value', () => {
   const text = readProjectFile('.env.example');
-  assert(/VITE_FIREBASE_API_KEY/.test(text), 'the browser key must be documented');
-  assert(/VITE_FIREBASE_PROJECT_ID/.test(text), 'the browser project ID must be documented');
+  assert(/VITE_NEON_URL/.test(text), 'the browser Neon URL must be documented');
+  assert(/NEON_AUTH_JWKS_URL/.test(text), 'the server JWKS endpoint must be documented');
   assert(/PUBLIC \/ CLIENT SAFE/.test(text) && /SERVER SECRETS/.test(text), 'the file must say which values may reach the browser');
-  assert(/PUBLIC \/ CLIENT SAFE/.test(text) && /SERVER SECRETS/.test(text),
-    'the file must say which values may reach the browser');
   assert(/LOCAL/.test(text) && /STAGING/.test(text) && /PRODUCTION/.test(text),
     'and must describe the three environments');
   // A template may only hold commented-out assignments, so a real value cannot
@@ -3900,12 +3895,12 @@ if (!tracked) {
   });
 }
 
-test('Firebase client library and config are structured correctly', () => {
-  const firebaseLib = readProjectFile('src/lib/firebase.ts');
-  assert(firebaseLib.includes('initializeApp'), 'Firebase app initialized');
-  assert(firebaseLib.includes('getAuth'), 'Firebase Auth initialized');
-  assert(firebaseLib.includes('getFirestore'), 'Firestore initialized');
-  assert(firebaseLib.includes('zeyksbook-fa70a'), 'Project ID configured');
+test('the Neon client library and config are structured correctly', () => {
+  const neonLib = readProjectFile('src/lib/neon.ts');
+  assert(neonLib.includes('@neondatabase/neon-js'), 'the Neon SDK is the only client');
+  assert(neonLib.includes('createClient'), 'a single client is created');
+  assert(neonLib.includes('VITE_NEON_URL'), 'the client reads the Neon URL');
+  assert(neonLib.includes('SupabaseAuthAdapter'), 'the Supabase-shaped auth adapter is wired');
 });
 
 test('Firestore security rules enforce authorization and immutability', () => {
@@ -4170,7 +4165,7 @@ test('the signed reference and the payer name come from the invoice, not the bod
 
 test('the browser attaches its session token and names only the invoice', () => {
   const client = readProjectFile('src/services/paymentGateway.ts');
-  assert(/getIdToken/.test(client), 'the token must come from the live session');
+  assert(/getAccessToken|getIdToken/.test(client), 'the token must come from the live session');
   assert(/Authorization: `Bearer \$\{token\}`/.test(client), 'and travel as a bearer header');
   assert(/initiateEsewa\(input: \{ saleId: string; amount: number; taxAmount: number \}\)/.test(client),
     'the eSewa request is the invoice and the amount');

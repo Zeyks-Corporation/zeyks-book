@@ -3,14 +3,14 @@
  *
  * `SupabaseAuthAdapter()` keeps the Supabase-shaped method names so existing
  * call sites can be migrated without a wider rewrite. The browser client lives
- * in `lib/supabase.ts`; this file is the only place the auth flow is shaped.
+ * in `lib/neon.ts`; this file is the only place the auth flow is shaped.
  *
  * Google-only sign-in. Email + password and magic-link / OTP have been turned
  * off on the Neon Auth side; this file no longer exposes them, so the only way
  * the front door opens is signInWithGoogle().
  */
 
-import { supabase, claimProfile, fetchMyProfile } from '../lib/supabase';
+import { supabase, claimProfile, fetchMyProfile } from '../lib/neon';
 import { resolveSignOutOutcome } from '../lib/session';
 import type { SignOutKind, SignOutOutcome } from '../lib/session';
 

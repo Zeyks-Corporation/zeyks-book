@@ -1,5 +1,5 @@
 /**
- * Snake_case ↔ camelCase mappers for Firestore database documents.
+ * Snake_case ↔ camelCase mappers for Postgres database rows.
  *
  * The database uses snake_case column names. The app uses camelCase.
  * These pure functions convert between the two representations.

@@ -24,7 +24,7 @@ export const PrivacyPage: React.FC<{
             </h1>
 
             <p className="mx-auto mt-4 max-w-2xl text-[16px] leading-[26px] text-[var(--label-secondary)] sm:text-[18px]">
-              Zeyks Book is a managed cloud app. Business records use Supabase; sign-in uses Firebase. Here is what that means in practice.
+              Zeyks Book is a managed cloud app. Business records use Neon Postgres; sign-in uses Neon Auth. Here is what that means in practice.
             </p>
           </div>
 
@@ -36,7 +36,7 @@ export const PrivacyPage: React.FC<{
                 1. Data Ownership & Storage Isolation
               </h2>
               <p className="mt-2">
-                Business records are stored in a managed Supabase database. The app uses PostgreSQL row level security (RLS) to limit access to records based on the signed-in user's business membership. This is cloud storage, not a database hosted in your own account. Firebase provides account sign-in. Both services are third parties that process information needed to operate the app.
+                Business records are stored in a managed Neon Postgres database. The app uses PostgreSQL row level security (RLS) to limit access to records based on the signed-in user's business membership. This is cloud storage, not a database hosted in your own account. Sign-in is provided by Neon Auth, and a Google sign-in passes your Google profile information to it. These services are third parties that process information needed to operate the app.
               </p>
             </div>
 
@@ -46,7 +46,7 @@ export const PrivacyPage: React.FC<{
                 2. Zero Third-Party Telemetry & Tracking
               </h2>
               <p className="mt-2">
-                The app does not use behavioral ad pixels or session recording tools. Core app functions rely on Supabase and Firebase, and contact messages are sent through the configured email service. Google Fonts may be contacted to load typefaces. These providers receive the technical information required for their services; review their policies for their handling practices.
+                The app does not use behavioral ad pixels or session recording tools. Core app functions rely on Neon (database and sign-in), and contact messages are sent through the configured email service. Google Fonts may be contacted to load typefaces. These providers receive the technical information required for their services; review their policies for their handling practices.
               </p>
             </div>
 

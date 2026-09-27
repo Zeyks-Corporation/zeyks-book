@@ -5,7 +5,7 @@
  * settlements (`post_payment`), voiding (`void_document` for documents,
  * `void_payment` for settlements) and online collection
  * (`initiate_gateway_txn` + `settle_gateway_txn` for eSewa/Khalti) are backed by
- * Cloud Functions / Firestore. Chart-of-accounts writes use the accounts
+ * Neon Postgres RPC functions. Chart-of-accounts writes use the accounts
  * table's column-scoped grants and membership-checked RLS policies. Backup
  * restore has no cloud write path yet.
  *

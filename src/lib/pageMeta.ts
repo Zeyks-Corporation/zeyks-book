@@ -92,7 +92,7 @@ export const PUBLIC_PAGE_META: PublicPageMeta[] = [
     path: '/privacy',
     title: `Privacy — ${SITE_NAME}`,
     description:
-      'Learn how Zeyks Book stores accounting records in a managed Supabase database, uses Firebase sign-in, and handles demo data, downloadable backups, and service providers.',
+      'Learn how Zeyks Book stores accounting records in a managed Neon Postgres database, uses Neon Auth sign-in, and handles demo data, downloadable backups, and service providers.',
     sitemap: true,
     changefreq: 'yearly',
     priority: '0.5',

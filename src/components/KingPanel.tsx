@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ShieldCheck, RefreshCw, LogOut } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../lib/neon';
 import { ALL_ROLES, ROLE_LABEL, type AppRole } from '../lib/roles';
 import { Button, Callout } from './ui';
 

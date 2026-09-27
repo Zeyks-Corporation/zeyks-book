@@ -20,7 +20,6 @@
     "@supabase/supabase-js": "^2.117.2",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
-    "firebase": "^11.10.0",
     "firebase-admin": "^14.5.0",
     "lucide-react": "^0.546.0",
     "pg": "^8.23.0",

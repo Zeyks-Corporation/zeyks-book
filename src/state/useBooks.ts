@@ -736,7 +736,7 @@ export function useBooks() {
   /**
    * Clear the in-memory application state.
    *
-   * Used on sign-out only — it never touches Firestore and is never presented
+   * Used on sign-out only — it never touches the database and is never presented
    * as "erasing" the cloud books.
    */
   const resetAll = useCallback(() => {
@@ -748,7 +748,7 @@ export function useBooks() {
   }, []);
 
   /**
-   * Persist business settings through Firestore (Security Rules enforce OWNER).
+   * Persist business settings through Postgres (RLS enforces OWNER).
    *
    * The database row returned by the update becomes the canonical state, so a
    * rejected write (for example a non-owner) never leaves the UI claiming the

@@ -6,7 +6,7 @@
  * session-sync step.
  */
 
-import { supabase } from '../lib/supabase';
+import { supabase } from '../lib/neon';
 import type { BusinessProfile } from '../types';
 import type { DbBusiness, BusinessSettingsPatch } from '../lib/dbTypes';
 import { toBusinessProfile, toBusinessUpdate } from '../lib/dbTypes';

@@ -17,7 +17,7 @@ import type {
   InventoryItem, InventoryMovement, InventoryStockRow,
   InventoryMovementReason,
 } from '../types';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../lib/neon';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 

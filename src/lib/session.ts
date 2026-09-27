@@ -1,7 +1,7 @@
 /**
  * Session exit policy — pure, so it can be tested without a browser.
  *
- * Three questions live here, all answered without touching React or Firebase:
+ * Three questions live here, all answered without touching React or the SDK:
  *
  *   1. Which sessions does a sign-out end? Signing out on one device must not
  *      silently kill the other one, so the default scope is `local`
@@ -20,11 +20,11 @@
 
 export type SignOutKind = 'this-device' | 'everywhere';
 
-/** Firebase's own scopes. `local` ends this device, `global` revokes the rest. */
+/** The two exit scopes. `local` ends this device, `global` revokes the rest. */
 export type SignOutScope = 'local' | 'global';
 
 /**
- * Map the user's choice to a Firebase scope.
+ * Map the user's choice to a sign-out scope.
  *
  * Deliberately not the auth library's default: signing out everywhere defaults to
  * `global`, so an ordinary sign-out on a PC would revoke the phone's refresh

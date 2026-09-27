@@ -93,7 +93,7 @@ const PUBLIC_PAGES: Record<string, PageMetadata> = {
   },
   '/privacy': {
     title: 'Privacy — Zeyks Book',
-    description: 'Learn how Zeyks Book stores accounting records in a managed Supabase database, uses Firebase sign-in, and handles demo data, downloadable backups, and service providers.',
+    description: 'Learn how Zeyks Book stores accounting records in a managed Neon Postgres database, uses Neon Auth sign-in, and handles demo data, downloadable backups, and service providers.',
     path: '/privacy',
     indexable: true,
   },

@@ -1,7 +1,7 @@
 /**
  * Expenses: cloud request shaping and pure state transitions.
  *
- * Kept free of React and of the Firebase SDK so both the wire contract with
+ * Kept free of React and of the client SDK so both the wire contract with
  * post_expense (migration 007) and the guarantee that a just-posted expense is
  * in state immediately can be tested directly.
  */

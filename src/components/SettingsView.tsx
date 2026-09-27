@@ -9,7 +9,7 @@ import { isSupported, unsupportedMessage } from '../lib/capabilities';
 import { SIGN_OUT_HINTS, SIGN_OUT_LABELS } from '../lib/session';
 import type { SignOutKind } from '../lib/session';
 import type { CalendarPreference } from '../lib/preferences';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../lib/neon';
 
 /**
  * Settings.

@@ -1,5 +1,5 @@
 /**
- * Cloud read/write service — all book data from Supabase.
+ * Cloud read/write service — all book data from Neon Postgres.
  *
  * Read paths query the business-scoped tables (RLS gates them on membership);
  * write paths call PostgreSQL atomic RPCs (post_sale, post_purchase, post_expense,
@@ -8,7 +8,7 @@
  * posting RPCs.
  */
 
-import { supabase } from '../lib/supabase';
+import { supabase } from '../lib/neon';
 import { settlementError } from '../lib/paymentState';
 import type {
   Account, ControlIntegrityReport, Customer, Expense, GatewayTransaction,
