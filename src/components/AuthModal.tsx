@@ -79,7 +79,7 @@ export const AuthModal: React.FC<{
     >
       <div className="space-y-4">
         <div className="flex items-center gap-3">
-          <img src="/favicon.svg" alt="Zeyks Book Logo" className="h-5 w-5 object-contain shrink-0" />
+          <img src="/zeyks-mark.png" alt="Zeyks Book" className="h-5 w-5 object-contain shrink-0" />
           <span className="text-[12px] font-semibold uppercase tracking-[0.22em] text-[var(--label-secondary)]">Zeyks Book</span>
           <span className="h-px grow bg-[var(--separator)]" aria-hidden="true" />
           <span className="text-[12px] text-[var(--label-tertiary)]">Google</span>
