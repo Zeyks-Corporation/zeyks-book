@@ -168,7 +168,7 @@ const redactMod = await import(pathToFileURL(path.join(root, 'server', 'redact.j
 const serverAuth = await import(pathToFileURL(path.join(root, 'server', 'auth.js')).href);
 
 const { CAPABILITIES, VOIDABLE_DOCUMENTS, isSupported, isVoidable, unsupported, unsupportedMessage } = capabilitiesMod;
-const { resolveAppPhase, resolveAuthEvent, selectActiveMembership } = appPhasesMod;
+const { resolveAppPhase, resolveAuthEvent, selectActiveMembership, membershipsOwnedBy } = appPhasesMod;
 const { applyPostedSale } = saleStateMod;
 const { applyPostedPurchase, toPostPurchaseArgs } = purchaseStateMod;
 const { applyPostedExpense, toPostExpenseArgs } = expenseStateMod;
@@ -897,6 +897,26 @@ test('selectActiveMembership breaks ties by businessId and handles empty input',
   ]);
   assertEqual(picked.businessId, 'b1');
   assertEqual(selectActiveMembership([]), null);
+});
+
+test('memberships answered for another account are never loaded', () => {
+  const mine = { businessId: 'b-mine', userId: 'u-1', createdAt: '2026-01-01T00:00:00Z' };
+  const theirs = { businessId: 'b-theirs', userId: 'u-2', createdAt: '2026-01-02T00:00:00Z' };
+  assertEqual(membershipsOwnedBy([mine, theirs], 'u-1').map((m) => m.businessId).join(), 'b-mine',
+    'a row carrying another user id is dropped, not shown as this person\'s business');
+  assertEqual(membershipsOwnedBy([theirs], 'u-1').length, 0,
+    'a list made entirely of another account rows yields nothing');
+  assertEqual(membershipsOwnedBy([mine], null).length, 0,
+    'an unverifiable identity trusts no rows');
+});
+
+test('an account switch clears the previous account before its books load', () => {
+  const app = srcFiles.find((f) => f.rel.endsWith('src/App.tsx')).text;
+  const switchGuard = /sessionOwnerRef\.current !== null[\s\S]{0,120}sessionOwnerRef\.current !== authUser\.id[\s\S]{0,120}clearLocalSession\(\)/;
+  assert(switchGuard.test(app),
+    'choosing another Google account must empty the session before loading, not after');
+  assert(/const stillCurrent = \(\) =>[\s\S]{0,200}sessionOwnerRef\.current === owner/.test(app),
+    'a load started for one account must not write state once another is signed in');
 });
 
 /* ---------------------------------------------------------------------- */

@@ -79,6 +79,24 @@ export function selectActiveMembership<T extends MembershipLike>(memberships: T[
   return sorted[0] ?? null;
 }
 
+/**
+ * Keep only the memberships that provably belong to the signed-in user.
+ *
+ * Row-level security already filters `business_memberships` on `auth.uid()`, so
+ * a row carrying a different user id means the token that answered is NOT the
+ * token this screen thinks is signed in — the usual shape of an account switch
+ * where a load started for person A resolves after person B signed in. Dropping
+ * those rows is the difference between showing an empty account and showing
+ * someone else's books. An unknown id (null) cannot be verified either, so it
+ * yields nothing rather than trusting the whole list.
+ */
+export function membershipsOwnedBy<T extends MembershipLike>(
+  memberships: T[], userId: string | null | undefined,
+): T[] {
+  if (!userId) return [];
+  return memberships.filter((m) => m.userId === userId);
+}
+
 export type AuthAction =
   | 'bootstrap'
   | 'sign-out'

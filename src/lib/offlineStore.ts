@@ -35,6 +35,8 @@ export interface OfflineBooksRecord {
 export interface OfflineSessionRecord {
   key: 'current';
   savedAt: string;
+  /** The books belong to this identity; a restore must never serve them to another. */
+  userId: string;
   user: UserProfile;
   business: BusinessProfile;
   memberships: MembershipLike[];
@@ -110,7 +112,7 @@ export function cacheOfflineSession(
 ): Promise<void> {
   return attempt('cacheOfflineSession', async () => {
     const record: OfflineSessionRecord = {
-      key: 'current', savedAt: new Date().toISOString(), user, business, memberships,
+      key: 'current', savedAt: new Date().toISOString(), userId: user.id, user, business, memberships,
     };
     await withStore(STORE_SESSION, 'readwrite', (store) => store.put(record));
   }).then(() => undefined);

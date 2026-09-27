@@ -40,8 +40,23 @@ if (!envUrl) {
 // and `/rest/v1` itself, so any `/rest/v1` already in the input has to go.
 const url = envUrl.replace(/\/rest\/v1\/?$/, '');
 
+/**
+ * Never let a book row be served from the HTTP cache.
+ *
+ * Every Data API answer is private to the JWT that asked for it — row-level
+ * security decides which rows come back, and two accounts asking for the same
+ * URL must not get the same bytes. The Data API replies without
+ * `Cache-Control` and without `Vary: Authorization`, so a cache keyed only on
+ * the URL is free to reuse one person's rows for the next. `no-store` closes
+ * that at the single place all data requests are made.
+ */
+function noStoreFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  return fetch(input, { ...init, cache: 'no-store' });
+}
+
 const baseClient = createClient(url, {
   auth: { adapter: SupabaseAuthAdapter() as unknown as never },
+  dataApi: { options: { global: { fetch: noStoreFetch } } },
 });
 
 /** Combined client surface used by the rest of the app. */

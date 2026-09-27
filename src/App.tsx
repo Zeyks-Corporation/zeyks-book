@@ -31,7 +31,7 @@ import { todayNpt } from './lib/nepaliDate';
 import * as authService from './services/authService';
 import * as businessService from './services/businessService';
 import {
-  resolveAppPhase, resolveAuthEvent, selectActiveMembership,
+  resolveAppPhase, resolveAuthEvent, selectActiveMembership, membershipsOwnedBy,
 } from './lib/appPhases';
 import type {
   AuthAction, DataState, MembershipState, SessionPhase,
@@ -233,6 +233,27 @@ export default function App() {
   useEffect(() => { userRef.current = user; }, [user]);
   const lastBusinessIdRef = useRef<string | null>(null);
 
+  /**
+   * Write the signed-in profile, keeping the ref in step with the state.
+   *
+   * The `useEffect` mirror above runs one render late, and the cloud load reads
+   * the ref immediately after sign-in — a lagging ref would label one person's
+   * books with the previous person's profile. Assigning here closes that gap.
+   */
+  const applyUser = useCallback((next: UserProfile | null) => {
+    userRef.current = next;
+    setUser(next);
+  }, [setUser]);
+
+  /**
+   * The user id the on-screen books belong to.
+   *
+   * Choosing another Google account is a switch, not a sign-out: no SIGNED_OUT
+   * event arrives, so the epoch never moves and the previous person's rows are
+   * still in state. Comparing ids is what makes that switch visible to the app.
+   */
+  const sessionOwnerRef = useRef<string | null>(null);
+
   const [onboardingBusy, setOnboardingBusy] = useState(false);
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
 
@@ -290,22 +311,39 @@ export default function App() {
    *   memberships -> selected business -> fetchAllBookData.
    * Nothing here consults browser-local state, so PC and phone resolve the
    * same membership for the same signed-in user.
+   *
+   * `expectedUserId` is the identity this load is allowed to write state for.
+   * Every await is followed by a check that this person is still the signed-in
+   * one, so a load that started for account A cannot finish under account B.
    */
-  const loadUserBusinessAndData = useCallback(async () => {
+  const loadUserBusinessAndData = useCallback(async (
+    expectedUserId?: string | null,
+  ) => {
     // Recorded once per load. If the session ends while this is running, every
     // write below is abandoned instead of landing in the cleared state.
     const startedAt = sessionEpoch.current;
-    const stillCurrent = () => isCurrentEpoch(sessionEpoch.current, startedAt);
+    const owner = expectedUserId !== undefined ? expectedUserId : (userRef.current?.id ?? null);
+    const stillCurrent = () =>
+      isCurrentEpoch(sessionEpoch.current, startedAt)
+      && (owner === null || sessionOwnerRef.current === owner);
 
     setMembership({ kind: 'pending' });
     setDataState({ kind: 'idle' });
-    const signedInUser = userRef.current;
+    const signedInUser = owner ? (userRef.current?.id === owner ? userRef.current : null) : userRef.current;
     try {
-      const { memberships, error: memErr } = await businessService.getMyMemberships();
+      const { memberships: rawMemberships, error: memErr } = await businessService.getMyMemberships();
       if (!stillCurrent()) return;
       if (memErr) {
         // A failed lookup is NOT the same as having no business.
         setMembership({ kind: 'error', message: memErr });
+        return;
+      }
+      // Rows carry their own user id, so a list answered with someone else's
+      // token is detectable here rather than rendered as this person's books.
+      const memberships = membershipsOwnedBy(rawMemberships, owner);
+      if (owner && rawMemberships.length > 0 && memberships.length === 0) {
+        // The data came back for a different account. Refuse to show it.
+        setMembership({ kind: 'error', message: 'That data belongs to a different sign-in. Please reload.' });
         return;
       }
       if (memberships.length === 0) {
@@ -361,16 +399,22 @@ export default function App() {
   const restoreOfflineSession = useCallback(async (): Promise<boolean> => {
     const record = await readOfflineSession();
     if (!record) return false;
+    // A different person may have used this browser since the cache was written.
+    if (sessionOwnerRef.current !== null && sessionOwnerRef.current !== record.userId) {
+      void clearOfflineStore();
+      return false;
+    }
     const restored = await loadFromOffline(record.business.id);
     if (!restored) return false;
-    setUser(record.user);
+    applyUser(record.user);
     setBusiness(record.business);
     setMembership({ kind: 'ready', memberships: record.memberships });
     setDataState({ kind: 'ready' });
     setSessionPhase('authenticated');
+    sessionOwnerRef.current = record.userId;
     lastBusinessIdRef.current = record.business.id;
     return true;
-  }, [loadFromOffline, setBusiness, setUser]);
+  }, [applyUser, loadFromOffline, setBusiness]);
 
   /**
    * Clear everything that belongs to the signed-out session.
@@ -381,10 +425,11 @@ export default function App() {
    */
   const clearLocalSession = useCallback(() => {
     sessionEpoch.current = nextEpoch(sessionEpoch.current);
+    sessionOwnerRef.current = null;
     setSessionPhase('unauthenticated');
     setMembership({ kind: 'pending' });
     setDataState({ kind: 'idle' });
-    setUser(null);
+    applyUser(null);
     setResolving(false);
     // No open modal, draft or toast survives into the next session.
     setTxnModal(null);
@@ -397,7 +442,7 @@ export default function App() {
     // The offline copy belongs to this session only. A signed-out person must
     // never be able to reopen someone else's books from the browser cache.
     void clearOfflineStore();
-  }, [resetAll, setUser]);
+  }, [applyUser, resetAll]);
 
   // 1. Initial session check + subscribe. The auth callback is synchronous:
   //    it only records the event so network work never runs inside the lock.
@@ -418,7 +463,7 @@ export default function App() {
           if (await restoreOfflineSession()) return;
         }
         setSessionPhase('unauthenticated');
-        setUser(null);
+        applyUser(null);
         return;
       }
       setAuthEvent({ action: 'bootstrap', session, key: Date.now() });
@@ -436,7 +481,7 @@ export default function App() {
       mounted = false;
       unsubscribe();
     };
-  }, [restoreOfflineSession, route.kind, setUser]);
+  }, [applyUser, restoreOfflineSession, route.kind]);
 
   // 2. Deferred auth work — all network calls happen here, never in the callback.
   useEffect(() => {
@@ -459,28 +504,40 @@ export default function App() {
 
       if (!session?.user) {
         setSessionPhase('unauthenticated');
-        setUser(null);
+        applyUser(null);
         return;
       }
+
+      const authUser = session.user;
+      /**
+       * Picking another Google account is a switch, not a sign-out: no
+       * SIGNED_OUT event arrives first, so the previous person's books are
+       * still in state and any load they started is still in flight. Emptying
+       * the session here — which also moves the epoch, dropping those loads —
+       * is what stops one account's rows being shown under another's name.
+       */
+      if (sessionOwnerRef.current !== null && sessionOwnerRef.current !== authUser.id) {
+        clearLocalSession();
+      }
+      sessionOwnerRef.current = authUser.id;
 
       setResolving(true);
       // A new session starts: any notice from the previous sign-out is spent.
       setSessionNotice(null);
       try {
-        const authUser = session.user;
         const { profile } = await authService.getProfile(authUser.id);
-        if (cancelled) return;
-        setUser(profile ?? profileFromAuthUser(authUser));
+        if (cancelled || sessionOwnerRef.current !== authUser.id) return;
+        applyUser(profile ?? profileFromAuthUser(authUser));
         setSessionPhase('authenticated');
         if (action === 'refresh-profile') return;
-        await loadUserBusinessAndData();
+        await loadUserBusinessAndData(authUser.id);
       } finally {
         if (!cancelled) setResolving(false);
       }
     })();
 
     return () => { cancelled = true; };
-  }, [authEvent, clearLocalSession, loadUserBusinessAndData, setUser]);
+  }, [applyUser, authEvent, clearLocalSession, loadUserBusinessAndData]);
 
   // Once the person changes the period, stop silently resetting it to
   // "current fiscal year to date" every time the fiscal year setting loads.
@@ -569,9 +626,9 @@ export default function App() {
 
   const handleSignedIn = useCallback((signedInUser: UserProfile) => {
     // The SIGNED_IN event does the loading; this keeps the modal responsive.
-    setUser(signedInUser);
+    applyUser(signedInUser);
     setSessionPhase('authenticated');
-  }, [setUser]);
+  }, [applyUser]);
 
   const handleOnboardingComplete = useCallback(async (name: string, owner: string) => {
     setOnboardingBusy(true);
