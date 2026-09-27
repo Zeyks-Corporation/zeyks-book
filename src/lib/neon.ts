@@ -88,11 +88,19 @@ export async function claimProfile(): Promise<string | null> {
 /**
  * Fetch the signed-in user's profile (which carries the role used by route
  * guards and the admin panel). Returns null when signed-out or on read error.
+ *
+ * Scoped by id, never by "whatever row comes back": an admin passes
+ * `profiles_select_admin`, so an unscoped read matches every profile in the
+ * database and can hand another account's name, email and role to the UI.
  */
-export async function fetchMyProfile(): Promise<{ id: string; email: string; full_name: string; role: string } | null> {
+export async function fetchMyProfile(
+  userId: string,
+): Promise<{ id: string; email: string; full_name: string; role: string } | null> {
+  if (!userId) return null;
   const { data, error } = await baseClient
     .from('profiles')
     .select('id, email, full_name, role')
+    .eq('id', userId)
     .single();
   if (error || !data) return null;
   return data as { id: string; email: string; full_name: string; role: string };

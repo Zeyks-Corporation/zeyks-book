@@ -182,7 +182,8 @@ const {
   toVerificationPayload,
 } = gatewayStateMod;
 const {
-  SIGN_OUT_HINTS, SIGN_OUT_LABELS, isCurrentEpoch, nextEpoch, resolveSignOutOutcome, signOutScope,
+  SIGN_OUT_HINTS, SIGN_OUT_LABELS, isCurrentEpoch, nextEpoch, ownProfileRow,
+  resolveSignOutOutcome, signOutScope,
 } = sessionMod;
 const { redact, redactDetail } = redactMod;
 const {
@@ -3655,6 +3656,34 @@ test('the epoch only ever moves forward, once per sign-out', () => {
   assertEqual(nextEpoch(1), 2);
   assertEqual(isCurrentEpoch(2, 2), true);
   assertEqual(isCurrentEpoch(2, 1), false);
+});
+
+test('a profile row is only used when it belongs to the signed-in user', () => {
+  const mine = { id: 'u1', email: 'me@example.com', role: 'user' };
+  const theirs = { id: 'u2', email: 'someone-else@example.com', role: 'admin' };
+  assertEqual(ownProfileRow(mine, 'u1'), mine, 'own row is kept');
+  assertEqual(ownProfileRow(theirs, 'u1'), null, 'another account row is refused');
+  assertEqual(ownProfileRow(mine, null), null, 'no signed-in user, no profile');
+  assertEqual(ownProfileRow(mine, undefined), null);
+  assertEqual(ownProfileRow(null, 'u1'), null, 'a missing row stays missing');
+});
+
+test('the profile read is scoped to the signed-in id', () => {
+  const neonSrc = srcFiles.find((f) => f.rel.endsWith('src/lib/neon.ts'));
+  assert(neonSrc, 'neon.ts not found');
+  const read = neonSrc.text.slice(neonSrc.text.indexOf('export async function fetchMyProfile'));
+  assert(/fetchMyProfile\(\s*\n?\s*userId: string/.test(read),
+    'fetchMyProfile must be given the signed-in user id');
+  assert(/\.eq\('id', userId\)/.test(read),
+    'and must filter profiles by it: an admin passes profiles_select_admin, so an '
+    + 'unscoped read would match every profile in the database');
+
+  const authSrc = srcFiles.find((f) => f.rel.endsWith('src/services/authService.ts'));
+  assert(/getProfile\(userId: string\)/.test(authSrc.text),
+    'getProfile must take the id it is called with, not ignore it');
+  assert(!/_userId/.test(authSrc.text), 'no unused identity parameter left behind');
+  assert(/ownProfileRow\(await fetchMyProfile\(userId\), userId\)/.test(authSrc.text),
+    'and every profile row must pass the ownership guard before it reaches the UI');
 });
 
 test('a stale book load is refused before it writes a single row', () => {

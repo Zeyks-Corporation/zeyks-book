@@ -1,7 +1,7 @@
 /**
- * Session exit policy — pure, so it can be tested without a browser.
+ * Session identity and exit policy — pure, so it can be tested without a browser.
  *
- * Three questions live here, all answered without touching React or the SDK:
+ * Four questions live here, all answered without touching React or the SDK:
  *
  *   1. Which sessions does a sign-out end? Signing out on one device must not
  *      silently kill the other one, so the default scope is `local`
@@ -102,4 +102,25 @@ export function nextEpoch(epoch: number): number {
 
 export function isCurrentEpoch(epoch: number, startedAt: number): boolean {
   return epoch === startedAt;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Profile identity                                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Keep a profile row only when it is the signed-in person's own.
+ *
+ * Row-level security lets an admin read every profile row
+ * (`profiles_select_admin USING (is_app_admin())`), so an unscoped profile
+ * lookup can hand back another person's name, email and role — and the UI then
+ * says "signed in as" somebody else. The query filters by id; this decides the
+ * answer is safe to use even when the server returns something unexpected.
+ */
+export function ownProfileRow<T extends { id: string }>(
+  row: T | null,
+  userId: string | null | undefined,
+): T | null {
+  if (!row || !userId) return null;
+  return row.id === userId ? row : null;
 }

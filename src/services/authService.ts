@@ -11,7 +11,7 @@
  */
 
 import { supabase, claimProfile, fetchMyProfile } from '../lib/neon';
-import { resolveSignOutOutcome } from '../lib/session';
+import { resolveSignOutOutcome, ownProfileRow } from '../lib/session';
 import type { SignOutKind, SignOutOutcome } from '../lib/session';
 
 /** What Neon Auth's getSession returns. We name it here so callers can read it. */
@@ -143,8 +143,12 @@ export function onAuthStateChange(
  *
  * `claim_profile()` runs first when no profile row exists yet, so the very
  * first sign-in lands a usable record. The role field defaults to 'user'.
+ *
+ * The row is accepted only when it belongs to `userId`. An admin's profile read
+ * is not limited by row-level security, so without that check another person's
+ * profile could be shown as the current one.
  */
-export async function getProfile(_userId: string): Promise<{
+export async function getProfile(userId: string): Promise<{
   profile: {
     id: string;
     email: string;
@@ -155,10 +159,10 @@ export async function getProfile(_userId: string): Promise<{
   error: string | null;
 }> {
   try {
-    let row = await fetchMyProfile();
+    let row = ownProfileRow(await fetchMyProfile(userId), userId);
     if (!row) {
       const claimed = await claimProfile();
-      if (claimed) row = await fetchMyProfile();
+      if (claimed) row = ownProfileRow(await fetchMyProfile(userId), userId);
     }
     if (!row) return { profile: null, error: null };
     const { data: sess } = await supabase.auth.getSession();

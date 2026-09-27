@@ -5,6 +5,7 @@
 # Dependencies and build output
 node_modules/
 dist/
+*.tsbuildinfo
 
 # Environment files. Every .env* is ignored except the template, so a staging or
 # production file cannot be committed by accident. Real values live only in
