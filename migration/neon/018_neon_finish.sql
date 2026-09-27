@@ -30,7 +30,7 @@ alter table public.profiles
 -- ============================================================================
 create or replace function public.claim_profile()
 returns uuid
-language plpgsql stable security definer set search_path = ''
+language plpgsql volatile security definer set search_path = ''
 as $$
 declare
   v_uid   uuid;
