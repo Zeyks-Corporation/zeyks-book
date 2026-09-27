@@ -56,7 +56,7 @@ export const PrivacyPage: React.FC<{
                 3. Demo Mode Local Storage
               </h2>
               <p className="mt-2">
-                The interactive demo starts with sample books and keeps demo changes in this browser. Demo data is separate from a signed-in business account. Clearing browser storage removes the local demo changes.
+                The interactive demo starts with sample books and keeps your demo edits only while the page stays open — refreshing resets it to the sample data. Demo data is separate from a signed-in business account and nothing from the demo is saved to your browser or sent to the server.
               </p>
             </div>
 

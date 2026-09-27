@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   Account, BooksSnapshot, BusinessProfile, ControlIntegrityReport, Customer, DateRange, Expense,
   GatewayTransaction, JournalEntry, Payment, Purchase, PurchaseDraft,
@@ -15,6 +15,10 @@ import { newId } from '../lib/ids';
 import type { ActionResult, GatewayStartResult } from './useBooks';
 
 const DEMO_STORAGE_KEY = 'zeyks.demo_snapshot';
+// Demo edits live only in memory: a refresh reseeds the demo books so every
+// visitor (and every revisit) starts from the same sample data. Older builds
+// persisted a snapshot here, so the key is purged on load.
+try { localStorage.removeItem(DEMO_STORAGE_KEY); } catch { /* Non-fatal */ }
 const demoAccountId = (code: string) => `acc_${code}`;
 
 const initialDemoBusiness: BusinessProfile = {
@@ -261,7 +265,7 @@ export function useDemoBooks() {
   const [user, setUser] = useState<UserProfile | null>({
     id: 'demo_user',
     email: 'demo@zeyksbook.app',
-    fullName: 'Demo User (Local Storage)',
+    fullName: 'Demo User',
     createdAt: '2026-04-14T00:00:00Z',
   });
 
@@ -339,26 +343,9 @@ export function useDemoBooks() {
     journalsFromDemoSnapshot(storedSnapshot, accounts),
   );
 
-  // Save to localStorage on every change
-  useEffect(() => {
-    try {
-      const snap: BooksSnapshot = {
-        schemaVersion: BACKUP_SCHEMA_VERSION,
-        exportedAt: new Date().toISOString(),
-        business,
-        accounts,
-        customers,
-        suppliers,
-        sales: rawSales,
-        purchases: rawPurchases,
-        expenses,
-        payments,
-        gatewayTransactions: gatewayTxns,
-        journalEntries,
-      };
-      localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(snap));
-    } catch { /* Non-fatal */ }
-  }, [business, accounts, customers, suppliers, rawSales, rawPurchases, expenses, payments, gatewayTxns, journalEntries]);
+  // Demo state is intentionally not persisted: a refresh reseeds the sample
+  // books (see the module-level purge above), so every visitor experiments on
+  // the same starting data and can never stack on a previous session's edits.
 
   // Derived state
   const { sales, purchases } = useMemo(
