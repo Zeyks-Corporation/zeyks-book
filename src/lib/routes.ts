@@ -24,6 +24,7 @@ const TAB_PATHS: Record<ViewTab, string> = {
   reports: '/reports',
   health: '/health',
   settings: '/settings',
+  inventory: '/inventory',
 };
 
 /** Every path that maps to a signed-in screen. */
@@ -34,6 +35,8 @@ export type Route =
   | { kind: 'landing' }
   /** The sign-in / sign-up screen, as a page of its own, not a modal over a book. */
   | { kind: 'signin' }
+  /** A page shown to a signed-in user whose role does not unlock the dashboard. */
+  | { kind: 'subscribe' }
   /** Public informational pages. */
   | { kind: 'demo' }
   | { kind: 'pricing' }
@@ -43,6 +46,8 @@ export type Route =
   | { kind: 'terms' }
   /** A signed-in screen. */
   | { kind: 'app'; tab: ViewTab }
+  /** The hidden admin panel; reachable only at `/king` and only for admins. */
+  | { kind: 'king' }
   /** Nothing here. Rendered as a real 404, never as a random application screen. */
   | { kind: 'not-found'; path: string };
 
@@ -77,6 +82,7 @@ export function parseRoute(pathname: string): Route {
   if (path === '/') return { kind: 'landing' };
   // Both spellings, because people type both and neither should 404.
   if (path === '/signin' || path === '/login') return { kind: 'signin' };
+  if (path === '/subscribe') return { kind: 'subscribe' };
   if (path === '/demo') return { kind: 'demo' };
   if (path === '/pricing') return { kind: 'pricing' };
   if (path === '/about') return { kind: 'about' };
@@ -87,6 +93,10 @@ export function parseRoute(pathname: string): Route {
   for (const tab of APP_TABS) {
     if (TAB_PATHS[tab] === path) return { kind: 'app', tab };
   }
+
+  // The admin panel has no nav button — a staff member types `/king` and only
+  // an admin role may render it; everyone else sees 404.
+  if (path === '/king') return { kind: 'king' };
 
   return { kind: 'not-found', path };
 }

@@ -26,19 +26,19 @@ export function useRoute(): {
   }, []);
 
   const navigate = useCallback((to: string, opts?: { replace?: boolean }) => {
-    const next = normalizePath(to);
+    const qIdx = to.indexOf('?');
+    const pathPart = qIdx >= 0 ? to.slice(0, qIdx) : to;
+    const queryPart = qIdx >= 0 ? to.slice(qIdx) : '';
+    const next = normalizePath(pathPart);
+    const fullUrl = next + queryPart;
     if (typeof window === 'undefined') return;
-    if (normalizePath(window.location.pathname) === next) {
-      // Same screen: refresh the state so a caller can rely on it having run,
-      // and leave no duplicate entry in the session history.
+    if (normalizePath(window.location.pathname) === next && window.location.search === queryPart) {
       setPath(next);
       return;
     }
-    if (opts?.replace) window.history.replaceState({}, '', next);
-    else window.history.pushState({}, '', next);
+    if (opts?.replace) window.history.replaceState({}, '', fullUrl);
+    else window.history.pushState({}, '', fullUrl);
     setPath(next);
-    // A new screen starts at the top. Previously the scroll position of the
-    // previous screen carried over, which looked like a half-loaded page.
     window.scrollTo(0, 0);
   }, []);
 

@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { ArrowRight, Package } from 'lucide-react';
 import { DateRange } from '../types';
 import { Books } from '../state/useBooks';
 import { AccountingEngine } from '../services/accountingEngine';
@@ -8,6 +9,8 @@ import { PeriodPicker } from './PeriodPicker';
 import { formatCompactNpr, formatNpr, round2 } from '../lib/money';
 import { addDays } from '../lib/nepaliDate';
 import { outstandingParties, PartyBalanceList } from '../services/reportData';
+import { listStockRows, summariseStock } from '../services/inventoryService';
+import type { InventoryStockRow } from '../types';
 
 /**
  * One side of the party rollup: the biggest balances, the true total, and how
@@ -44,8 +47,9 @@ export const DashboardView: React.FC<{
   books: Books; range: DateRange; onRangeChange: (r: DateRange) => void;
   calendar: 'BS' | 'AD'; onQuickAction: (k: 'sale' | 'purchase' | 'expense' | 'payment') => void;
   onGoToHealth: () => void;
+  onGoToInventory?: () => void;
   hideHealthBanner?: boolean;
-}> = ({ books, range, onRangeChange, calendar, onQuickAction, onGoToHealth, hideHealthBanner = false }) => {
+}> = ({ books, range, onRangeChange, calendar, onQuickAction, onGoToHealth, onGoToInventory, hideHealthBanner = false }) => {
   const {
     accounts, journalEntries, sales, purchases, expenses, payments, business, integrityIssues,
     customers, suppliers, receivableByCustomer, payableBySupplier,
@@ -184,6 +188,10 @@ export const DashboardView: React.FC<{
         </p>
       </section>
 
+      {business.trackInventory && onGoToInventory && (
+        <InventorySummarySection businessId={business.id} symbol={symbol} onGoToInventory={onGoToInventory} />
+      )}
+
       <section aria-label="Trend">
         <h2 className="text-xs font-medium uppercase tracking-wider text-[var(--label-secondary)] mb-3">Revenue and expenses over the period</h2>
         {trend.length > 1 ? (
@@ -247,5 +255,68 @@ export const DashboardView: React.FC<{
         )}
       </section>
     </div>
+  );
+};
+
+/**
+ * Inventory summary cards on the dashboard. Loads stock rows once per
+ * business and renders the four most useful totals: stock value, active
+ * items, on-hand quantity, and low-stock count. Gated on trackInventory
+ * by the parent, so this only renders for businesses that have opted in.
+ */
+const InventorySummarySection: React.FC<{
+  businessId: string; symbol: string; onGoToInventory: () => void;
+}> = ({ businessId, symbol, onGoToInventory }) => {
+  const [rows, setRows] = useState<InventoryStockRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void listStockRows(businessId, { includeArchived: false }).then(({ rows: r, error }) => {
+      if (cancelled) return;
+      if (!error) setRows(r);
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [businessId]);
+
+  const summary = useMemo(() => summariseStock(rows, { activeOnly: true }), [rows]);
+
+  return (
+    <section aria-label="Inventory">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-xs font-medium uppercase tracking-wider text-[var(--label-secondary)]">
+          <Package size={13} className="inline mr-1.5 -mt-0.5" aria-hidden="true" /> Inventory snapshot
+        </h2>
+        <button
+          type="button" onClick={onGoToInventory}
+          className="inline-flex items-center gap-1 text-[13px] font-medium text-[var(--accent)] hover:underline">
+          View inventory <ArrowRight size={12} aria-hidden="true" />
+        </button>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="rounded-lg border border-[var(--separator)] bg-[var(--bg-tertiary)] px-3 py-2.5">
+          <p className="text-[11px] font-medium text-[var(--label-secondary)] mb-0.5">Stock value</p>
+          {loading
+            ? <p className="text-[13px] text-[var(--label-tertiary)]">…</p>
+            : <Money value={summary.totalStockValue} symbol={symbol} />}
+        </div>
+        <div className="rounded-lg border border-[var(--separator)] bg-[var(--bg-tertiary)] px-3 py-2.5">
+          <p className="text-[11px] font-medium text-[var(--label-secondary)] mb-0.5">Active items</p>
+          <p className="text-[15px] font-medium tabular-nums">{summary.activeItems}</p>
+        </div>
+        <div className="rounded-lg border border-[var(--separator)] bg-[var(--bg-tertiary)] px-3 py-2.5">
+          <p className="text-[11px] font-medium text-[var(--label-secondary)] mb-0.5">On hand</p>
+          <p className="text-[15px] font-medium tabular-nums">{summary.totalOnHand.toLocaleString('en-NP', { maximumFractionDigits: 2 })}</p>
+        </div>
+        <div className="rounded-lg border border-[var(--separator)] bg-[var(--bg-tertiary)] px-3 py-2.5">
+          <p className="text-[11px] font-medium text-[var(--label-secondary)] mb-0.5">Low / out of stock</p>
+          <p className={`text-[15px] font-medium tabular-nums ${summary.outOfStockCount > 0 ? 'text-[var(--destructive)]' : summary.lowStockCount > 0 ? 'text-[var(--accent)]' : ''}`}>
+            {summary.lowStockCount} / {summary.outOfStockCount}
+          </p>
+        </div>
+      </div>
+    </section>
   );
 };

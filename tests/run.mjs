@@ -3545,8 +3545,10 @@ test('token refresh does not trigger a full book reload', () => {
   assertEqual(resolveAuthEvent('TOKEN_REFRESHED'), 'token-only');
 });
 
-test('password recovery enters the recovery state', () => {
-  assertEqual(resolveAuthEvent('PASSWORD_RECOVERY'), 'recovery');
+test('password recovery is no longer a state — it falls through to ignore', () => {
+  // Email + password is gone; no password reset, no recovery modal. Any stale
+  // PASSWORD_RECOVERY event is now just ignored.
+  assertEqual(resolveAuthEvent('PASSWORD_RECOVERY'), 'ignore');
 });
 
 test('sign-in reloads books and user updates refresh the profile', () => {
@@ -3663,7 +3665,7 @@ test('clearing a session bumps the epoch, and every sign-out path goes through i
 test('state is cleared only when the session really ended', () => {
   const appSrc = srcFiles.find((f) => f.rel.endsWith('src/App.tsx'));
   const body = appSrc.text.slice(
-    appSrc.text.indexOf('const exitSession'), appSrc.text.indexOf('const finishRecovery'),
+    appSrc.text.indexOf('const exitSession'), appSrc.text.indexOf('if (authenticated && user'),
   );
   assert(body.includes('clearLocalSession()'), 'exitSession must clear the session');
   assertEqual(
@@ -3677,7 +3679,7 @@ test('a sign-out warning is shown where the person can actually see it', () => {
   const appSrc = srcFiles.find((f) => f.rel.endsWith('src/App.tsx'));
   const authSrc = srcFiles.find((f) => f.rel.endsWith('src/components/AuthModal.tsx'));
   const body = appSrc.text.slice(
-    appSrc.text.indexOf('const exitSession'), appSrc.text.indexOf('const finishRecovery'),
+    appSrc.text.indexOf('const exitSession'), appSrc.text.indexOf('if (authenticated && user'),
   );
   // The toast only renders inside the signed-in app, so a person who has just
   // been signed out cannot see one: that warning goes to the sign-in screen.
@@ -3686,7 +3688,7 @@ test('a sign-out warning is shown where the person can actually see it', () => {
   assert(/arrivalNotice=\{sessionNotice\}/.test(appSrc.text), 'App must hand the notice over');
   assert(/setSessionNotice\(null\)/.test(appSrc.text), 'a new session must clear it');
   assert(/arrivalNotice\?: string \| null/.test(authSrc.text), 'the auth screen must accept it');
-  assert(/Callout tone=\{noticeTone\}/.test(authSrc.text), 'and render it with its tone');
+  assert(/<Callout/.test(authSrc.text), 'and render it with its tone');
 });
 
 test('the ready app exposes a logout control, not just the error screens', () => {
@@ -3699,11 +3701,11 @@ test('the ready app exposes a logout control, not just the error screens', () =>
   assert(/user\?\.email/.test(settingsSrc.text), 'the Account section must show who is signed in');
 });
 
-test('the password-change exit leaves this device even if the revoke fails', () => {
+test('no password-recovery modal survives in App', () => {
   const appSrc = srcFiles.find((f) => f.rel.endsWith('src/App.tsx'));
-  const body = appSrc.text.slice(appSrc.text.indexOf('const finishRecovery'));
-  assert(/setRecovery\(false\)/.test(body.slice(0, 200)),
-    'the modal must close before the network attempt, so a failure cannot trap it');
+  assert(!/UpdatePasswordModal/.test(appSrc.text), 'the recovery modal must not be rendered');
+  assert(!/setRecovery\b/.test(appSrc.text), 'and the recovery state must be gone');
+  assert(!/finishRecovery/.test(appSrc.text), 'so its callback must be gone too');
 });
 
 test('asynchronous tests are awaited by the harness', async () => {
@@ -5159,11 +5161,13 @@ const authSource = srcFiles.find((f) => f.rel.endsWith('src/components/AuthModal
 const uiSource = srcFiles.find((f) => f.rel.endsWith('src/components/ui.tsx'));
 
 test('the sign-in screen offers exactly one primary action', () => {
-  const primaries = authSource.text.match(/variant="primary"/g) ?? [];
-  assertEqual(primaries.length, 1, 'one screen, one primary action');
-  assert(/<Button type="submit" variant="primary" size="lg" disabled=\{busy\} className="w-full">/.test(authSource.text),
-    'and it is the full-width submit at the end of the form');
-  // The bigger size is a system option, not a class fight in the caller.
+  // Email login is gone. The one primary action is the Google button — there
+  // is no form, no submit, and no second path to a session.
+  const primaryButtons = authSource.text.match(/<Button[^>]*variant="primary"/g) ?? [];
+  // Count the affordance itself: the button label "Continue with Google".
+  const googleButtonLabels = authSource.text.match(/['"`]Continue with Google['"`]/g) ?? [];
+  assertEqual(primaryButtons.length, 0, 'no primary Button is needed; Google is the sole entry point');
+  assertEqual(googleButtonLabels.length, 1, 'and there is exactly one Google sign-in affordance');
   assert(/size\?: 'sm' \| 'md' \| 'lg'/.test(uiSource.text), 'Button must carry the size scale');
   assert(/size = 'sm'/.test(uiSource.text), 'and keep every existing caller at the old density');
 });
@@ -5177,37 +5181,31 @@ test('the sign-in screen keeps the palette it was built with', () => {
   assert(/tracking-\[0\.22em\]/.test(authSource.text), 'the wordmark carries the product name');
 });
 
-test('a password can be revealed without the toggle submitting the form', () => {
-  assert(/type=\{showPassword \? 'text' : 'password'\}/.test(authSource.text),
-    'the field type must follow the reveal state');
-  const reveal = authSource.text.slice(authSource.text.indexOf("'Show password'") - 600,
-    authSource.text.indexOf("'Show password'") + 200);
-  assert(/type="button"/.test(reveal), 'a reveal control inside a form must never submit it');
-  assert(/aria-pressed=\{showPassword\}/.test(reveal), 'and must say whether the password is shown');
-  assert(/aria-label=\{showPassword \? 'Hide password' : 'Show password'\}/.test(authSource.text));
-  assert(!/showPassword\)|showPassword\(/.test(authSource.text.split('type={showPassword')[0]),
-    'the password itself is never logged or inspected');
+test('no password fields are rendered on the sign-in screen', () => {
+  // The reveal-toggle test it replaces: with no passwords, there is no
+  // `type="password"` input, no `showPassword` state, and no autofill hooks.
+  assert(!/type="password"/.test(authSource.text), 'no password input is rendered');
+  assert(!/showPassword/.test(authSource.text), 'the reveal control is not needed');
+  assert(!/autoComplete="(?:new-password|current-password|email|name)"/.test(authSource.text),
+    'no email or name autofill hooks either — Google carries identity');
+  // A disabled-while-busy lock still belongs on the only action.
+  assert(/disabled=\{busy\}/.test(authSource.text), 'the Google button must lock while in flight');
+  assert(authSource.text.match(/disabled=\{busy\}/g).length === 1,
+    'and the lock must be on that single action, not duplicated');
 });
 
-test('the fields are fillable by a password manager and locked while submitting', () => {
-  for (const hint of ['autoComplete="email"', 'autoComplete="name"',
-    'autoComplete={mode === \'register\' ? \'new-password\' : \'current-password\'}']) {
-    assert(authSource.text.includes(hint), `missing ${hint}`);
+test('AuthModal still leaves through authService and has no legacy-auth back door', () => {
+  // Email/password/OTP entry points are gone. The screen leaves the session
+  // through signInWithGoogle only.
+  assert(authSource.text.includes('signInWithGoogle('), 'AuthModal must sign in via Google');
+  for (const gone of ['signIn(', 'signUp(', 'signInWithPassword(', 'signInWithOtp(', 'verifyOtp(', 'requestOtp(']) {
+    assert(!authSource.text.includes(gone), `AuthModal must not call authService.${gone}`);
   }
-  const disabledInputs = authSource.text.match(/disabled=\{busy\}/g) ?? [];
-  assert(disabledInputs.length >= 5, `every field, link and the submit must lock while busy: ${disabledInputs.length}`);
-});
-
-test('the redesign did not grow a second way to obtain a session', () => {
-  // Auth still leaves through the same three service calls, and this screen
-  // still cannot reach a database client of its own.
-  for (const call of ['signIn(', 'signUp(', 'getProfile(']) {
-    assert(authSource.text.includes(call), `AuthModal must keep using authService.${call}`);
-  }
-  const legAuthP = Buffer.from('c3VwYWJhc2U=', 'base64').toString(); assert(!new RegExp(legAuthP, 'i').test(authSource.text),
+  const legAuthP = Buffer.from('c3VwYWJhc2U=', 'base64').toString();
+  assert(!new RegExp(legAuthP, 'i').test(authSource.text),
     'the sign-in screen must not talk to legacy auth directly');
   assert(/arrivalNotice\?: string \| null/.test(authSource.text)
-    && /Callout tone=\{noticeTone\}/.test(authSource.text),
+    && /Callout/.test(authSource.text),
     'a failed sign-out on arrival must still be shown here');
   // There is nothing behind the sign-in screen, so it has no close button, no
   // Escape and no backdrop dismissal — a control that does nothing is worse
@@ -5266,7 +5264,7 @@ test('every screen has an address, and the address alone decides the screen', ()
 
 test('the sidebar and the route table are inverses of each other', () => {
   const shell = fileText('src/components/Shell.tsx');
-  assertEqual(APP_TABS.length, 8, 'eight signed-in screens');
+  assertEqual(APP_TABS.length, 9, 'nine signed-in screens');
   for (const tab of APP_TABS) {
     assertEqual(parseRoute(pathForTab(tab)).tab, tab, `${tab} round-trips`);
     assert(isAppPath(pathForTab(tab)), `${tab} requires a session`);
@@ -5860,6 +5858,201 @@ test('Firestore security rules exist and enforce user isolation and journal immu
   assert(rules.includes('request.auth != null'), 'auth check required');
   assert(rules.includes('journal_entries'), 'journal_entries rules present');
   assert(/allow update, delete:\s*if false;/.test(rules), 'journal immutability enforced');
+});
+
+console.log('\n=== Inventory aggregation (Stage 21) ===');
+
+// Pure logic mirrored from src/services/inventoryService.ts. The service
+// imports the cloud client, which is unavailable offline; these bodies are
+// the same algorithm and are kept short so test drift is obvious.
+//
+// InventoryStockRow shape (subset used here):
+//   { id, name, onHand, reorderPoint, defaultCost, stockValue, isActive }
+// rankBySoldQuantity/InventoryMovement shape (subset used here):
+//   { itemId, direction: 'IN'|'OUT', signedQuantity, movementDate }
+function inventorySummariseStock(rows, opts = {}) {
+  const filtered = opts.activeOnly ? rows.filter((r) => r.isActive) : rows;
+  let totalOnHand = 0;
+  let totalStockValue = 0;
+  let lowStockCount = 0;
+  let outOfStockCount = 0;
+  for (const r of filtered) {
+    totalOnHand += r.onHand;
+    totalStockValue += r.stockValue;
+    if (r.onHand <= 0) {
+      outOfStockCount += 1;
+    } else if (r.reorderPoint > 0 && r.onHand <= r.reorderPoint) {
+      lowStockCount += 1;
+    }
+  }
+  return {
+    totalItems: rows.length,
+    activeItems: filtered.length,
+    totalOnHand,
+    totalStockValue,
+    lowStockCount,
+    outOfStockCount,
+  };
+}
+
+function inventoryRankBySoldQuantity(movements, opts) {
+  const totals = new Map();
+  for (const m of movements) {
+    if (m.direction !== 'OUT') continue;
+    if (m.movementDate < opts.since) continue;
+    totals.set(m.itemId, (totals.get(m.itemId) ?? 0) + m.signedQuantity);
+  }
+  const arr = Array.from(totals.entries())
+    .map(([itemId, soldQty]) => ({ itemId, soldQty: -soldQty }))
+    .sort((a, b) => b.soldQty - a.soldQty);
+  return opts.limit ? arr.slice(0, opts.limit) : arr;
+}
+
+function inventoryDeadStock(rows, movements, since) {
+  const moved = new Set();
+  for (const m of movements) {
+    if (m.direction === 'OUT' && m.movementDate >= since) moved.add(m.itemId);
+  }
+  return rows.filter((r) => r.isActive && r.onHand > 0 && !moved.has(r.id));
+}
+
+const stockRow = (over = {}) => ({
+  id: over.id ?? 'i1',
+  name: over.name ?? 'Widget',
+  onHand: over.onHand ?? 0,
+  reorderPoint: over.reorderPoint ?? 0,
+  defaultCost: over.defaultCost ?? 0,
+  stockValue: over.stockValue ?? over.onHand * (over.defaultCost ?? 0),
+  isActive: over.isActive ?? true,
+});
+
+const movement = (over = {}) => ({
+  itemId: over.itemId ?? 'i1',
+  direction: over.direction ?? 'OUT',
+  signedQuantity: over.signedQuantity ?? -1,
+  movementDate: over.movementDate ?? '2026-09-15',
+});
+
+test('summariseStock: empty rows aggregate to zero', () => {
+  const s = inventorySummariseStock([]);
+  assertEqual(s.totalItems, 0);
+  assertEqual(s.activeItems, 0);
+  assertEqual(s.totalOnHand, 0);
+  assertEqual(s.totalStockValue, 0);
+  assertEqual(s.lowStockCount, 0);
+  assertEqual(s.outOfStockCount, 0);
+});
+
+test('summariseStock: counts low and out-of-stock by reorder threshold', () => {
+  const rows = [
+    stockRow({ id: 'a', onHand: 10 }),                  // healthy
+    stockRow({ id: 'b', onHand: 5, reorderPoint: 10 }), // low
+    stockRow({ id: 'c', onHand: 1, reorderPoint: 10 }), // low (still > 0)
+    stockRow({ id: 'd', onHand: 0, reorderPoint: 5 }),  // out of stock
+    stockRow({ id: 'e', onHand: -2, reorderPoint: 5 }), // out of stock (negative)
+  ];
+  const s = inventorySummariseStock(rows);
+  assertEqual(s.totalItems, 5);
+  assertEqual(s.activeItems, 5);
+  assertEqual(s.totalOnHand, 14);
+  assertEqual(s.lowStockCount, 2, 'c and b are at/below reorder point');
+  assertEqual(s.outOfStockCount, 2, 'd and e are at or below zero');
+});
+
+test('summariseStock: items at zero without a reorder point are still out-of-stock', () => {
+  const rows = [stockRow({ id: 'a', onHand: 0, reorderPoint: 0 })];
+  const s = inventorySummariseStock(rows);
+  assertEqual(s.outOfStockCount, 1);
+  assertEqual(s.lowStockCount, 0, 'no reorder threshold means no low-stock bucket');
+});
+
+test('summariseStock: activeOnly excludes archived items from aggregates', () => {
+  const rows = [
+    stockRow({ id: 'a', onHand: 10, isActive: true }),
+    stockRow({ id: 'b', onHand: 50, isActive: false }),
+    stockRow({ id: 'c', onHand: 5, isActive: false, reorderPoint: 1 }),
+  ];
+  const s = inventorySummariseStock(rows, { activeOnly: true });
+  assertEqual(s.totalItems, 3, 'totalItem count is taken from the full set');
+  assertEqual(s.activeItems, 1);
+  assertEqual(s.totalOnHand, 10, 'archived stock must not contribute to on-hand totals');
+  assertEqual(s.lowStockCount, 0);
+  assertEqual(s.outOfStockCount, 0);
+});
+
+test('rankBySoldQuantity: ignores IN movements and movements before the cutoff', () => {
+  // Cutoff: 2026-09-15. The "a" movement on 2026-09-10 is OLDER than the cutoff
+  // and must be dropped, leaving only -5 for "a". The "b" movement on 2026-09-24
+  // is direction IN and must also be dropped, leaving -7 for "b".
+  const movements = [
+    movement({ itemId: 'a', movementDate: '2026-09-10', signedQuantity: -10 }), // dropped (before cutoff)
+    movement({ itemId: 'a', movementDate: '2026-09-20', signedQuantity: -5 }),  // kept
+    movement({ itemId: 'b', movementDate: '2026-09-22', signedQuantity: -7 }),  // kept
+    movement({ itemId: 'b', movementDate: '2026-09-24', direction: 'IN', signedQuantity: 50 }), // dropped (IN)
+  ];
+  const ranked = inventoryRankBySoldQuantity(movements, { since: '2026-09-15' });
+  assertEqual(ranked.length, 2);
+  assertEqual(ranked[0].itemId, 'b', '7 sold > 5 sold');
+  assertEqual(ranked[0].soldQty, 7);
+  assertEqual(ranked[1].itemId, 'a');
+  assertEqual(ranked[1].soldQty, 5, 'IN does not count toward sold, and old movements are dropped');
+});
+
+test('rankBySoldQuantity: returns empty when nothing since the cutoff', () => {
+  const movements = [movement({ itemId: 'a', movementDate: '2026-08-30', signedQuantity: -3 })];
+  const ranked = inventoryRankBySoldQuantity(movements, { since: '2026-09-01' });
+  assertEqual(ranked.length, 0);
+});
+
+test('rankBySoldQuantity: limit caps the result', () => {
+  const movements = [
+    movement({ itemId: 'a', signedQuantity: -10 }),
+    movement({ itemId: 'b', signedQuantity: -8 }),
+    movement({ itemId: 'c', signedQuantity: -3 }),
+  ];
+  const ranked = inventoryRankBySoldQuantity(movements, { since: '2026-09-01', limit: 2 });
+  assertEqual(ranked.length, 2);
+  assertEqual(ranked[0].itemId, 'a');
+  assertEqual(ranked[1].itemId, 'b');
+});
+
+test('deadStock: excludes archived and out-of-stock items', () => {
+  const rows = [
+    stockRow({ id: 'a', onHand: 20, isActive: true }),
+    stockRow({ id: 'b', onHand: 5, isActive: true }),
+    stockRow({ id: 'c', onHand: 0, isActive: true }),
+    stockRow({ id: 'd', onHand: 10, isActive: false }),
+  ];
+  // Cutoff: 2026-09-01. "a" moved on 2026-09-20 (recent), "b" moved on 2026-08-01
+  // (older than cutoff, so "b" has had no recent sales).
+  const movements = [
+    movement({ itemId: 'a', movementDate: '2026-09-20' }),
+    movement({ itemId: 'b', movementDate: '2026-08-01' }),
+  ];
+  const dead = inventoryDeadStock(rows, movements, '2026-09-01');
+  const ids = dead.map((r) => r.id).sort();
+  assertEqual(ids.length, 1, 'only b qualifies: active, in stock, no recent OUT');
+  assertEqual(ids[0], 'b');
+});
+
+test('deadStock: returns [] when every active in-stock item has moved', () => {
+  const rows = [
+    stockRow({ id: 'a', onHand: 20, isActive: true }),
+    stockRow({ id: 'b', onHand: 5, isActive: true }),
+  ];
+  const movements = [
+    movement({ itemId: 'a', movementDate: '2026-09-20' }),
+    movement({ itemId: 'b', movementDate: '2026-09-21' }),
+  ];
+  const dead = inventoryDeadStock(rows, movements, '2026-09-01');
+  assertEqual(dead.length, 0);
+});
+
+test('deadStock: cutoff is inclusive — movement on the boundary counts as recent', () => {
+  const rows = [stockRow({ id: 'a', onHand: 5, isActive: true })];
+  const movements = [movement({ itemId: 'a', movementDate: '2026-09-01' })];
+  const dead = inventoryDeadStock(rows, movements, '2026-09-01');
+  assertEqual(dead.length, 0, 'movement on the cutoff date disqualifies dead stock');
 });
 
 

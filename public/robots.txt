@@ -19,5 +19,6 @@ Disallow: /payments
 Disallow: /reports
 Disallow: /health
 Disallow: /settings
+Disallow: /inventory
 
 Sitemap: https://zeyksbook.app/sitemap.xml

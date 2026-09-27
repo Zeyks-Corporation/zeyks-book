@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  CreditCard, FileText, Gauge, Heart, Menu, Receipt, Settings,
+  CreditCard, FileText, Gauge, Heart, Menu, Package, Receipt, Settings,
   ShoppingBag, Wallet, X,
 } from 'lucide-react';
 import { ViewTab } from '../types';
@@ -46,6 +46,7 @@ const NAV: { tab: ViewTab; label: string; icon: React.ElementType }[] = [
   { tab: 'dashboard', label: 'Dashboard', icon: Gauge },
   { tab: 'sales', label: 'Sales', icon: Receipt },
   { tab: 'purchases', label: 'Purchases', icon: ShoppingBag },
+  { tab: 'inventory', label: 'Inventory', icon: Package },
   { tab: 'expenses', label: 'Expenses', icon: Wallet },
   { tab: 'payments', label: 'Payments', icon: CreditCard },
   { tab: 'reports', label: 'Reports', icon: FileText },
@@ -57,7 +58,9 @@ export const Sidebar: React.FC<{
   currentTab: ViewTab; onSelect: (t: ViewTab) => void; businessName: string;
   isOpenMobile: boolean; onCloseMobile: () => void; issueCount: number;
   hideTabs?: ViewTab[];
-}> = ({ currentTab, onSelect, businessName, isOpenMobile, onCloseMobile, issueCount, hideTabs = [] }) => {
+  /** Jump out to the public landing page. */
+  onHome?: () => void;
+}> = ({ currentTab, onSelect, businessName, isOpenMobile, onCloseMobile, issueCount, hideTabs = [], onHome }) => {
   const isDesktop = useIsDesktop();
   // Closed on a phone means gone: `inert` takes the whole drawer out of the tab
   // order and away from assistive technology, which `-translate-x-full` cannot.
@@ -70,6 +73,11 @@ export const Sidebar: React.FC<{
     }
     wasOpen.current = isOpenMobile;
   }, [isOpenMobile]);
+
+  const handleHome = () => {
+    onCloseMobile();
+    onHome?.();
+  };
 
   return (
   <>
@@ -84,15 +92,25 @@ export const Sidebar: React.FC<{
         isOpenMobile ? 'translate-x-0' : '-translate-x-full'
       }`}
     >
-      <div className="h-14 px-4 flex items-center justify-between border-b border-[var(--separator)]">
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="h-14 px-4 flex items-center justify-between border-b border-[var(--separator)] gap-2">
+        <button
+          type="button"
+          onClick={handleHome}
+          className="flex items-center gap-2 min-w-0 min-h-[44px] px-1 -ml-1 rounded-[10px] hover:bg-[var(--fill-secondary)] active:bg-[var(--fill-secondary)] transition-colors text-left"
+          aria-label="Go to landing page"
+          title="Go to landing page"
+        >
           <img src="/zeyks-mark.png" alt="Zeyks Book" className="h-9 w-8 shrink-0 object-contain" />
-          {businessName && (
+          {businessName ? (
             <span className="text-[15px] font-semibold text-[var(--label)] truncate">
               {businessName}
             </span>
+          ) : (
+            <span className="text-[15px] font-semibold text-[var(--label)] truncate">
+              Zeyks Book
+            </span>
           )}
-        </div>
+        </button>
         <button type="button" onClick={onCloseMobile} aria-label="Close menu"
           className="lg:hidden min-h-[44px] min-w-[44px] flex items-center justify-center text-[var(--label-tertiary)] hover:text-[var(--label)] p-1 -mr-1 rounded">
           <X size={16} strokeWidth={1.8} aria-hidden="true" />
@@ -144,7 +162,7 @@ export const Header: React.FC<{
   mobileSidebarOpen?: boolean;
   actions?: React.ReactNode;
 }> = ({ title, onOpenMobileSidebar, mobileSidebarOpen = false, actions }) => (
-  <header className="app-header h-14 glass-regular border-b border-[var(--separator)] sticky top-0 z-20 flex items-center gap-3 px-4">
+  <header className="app-header h-14 glass-regular border-b border-[var(--separator)] sticky top-0 z-20 flex items-center gap-2 px-3 sm:px-4">
     <button type="button" id="app-menu-trigger" onClick={onOpenMobileSidebar} aria-label="Open menu"
       aria-expanded={mobileSidebarOpen}
       aria-controls="app-sidebar"

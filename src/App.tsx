@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, Home, Plus, XCircle } from 'lucide-react';
+import { CheckCircle2, Plus, XCircle } from 'lucide-react';
 import { UserProfile, ViewTab } from './types';
 import { useBooks } from './state/useBooks';
 import { Sidebar, Header } from './components/Shell';
@@ -251,6 +251,9 @@ export default function App() {
     writeCalendarPreference(next);
   }, []);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  // Any in-app navigation closes the mobile drawer so the new screen isn't
+  // half-covered. The hamburger open-button sets it back to true.
+  useEffect(() => { setMobileSidebarOpen(false); }, [path]);
   const [toast, setToast] = useState<{ message: string; ok: boolean; key: number } | null>(null);
 
   const [txnModal, setTxnModal] = useState<TxnKind | null>(null);
@@ -585,18 +588,7 @@ export default function App() {
         </Button>
       );
     }
-    return (
-      <a
-        href="/?landing=1"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 rounded-full border border-[var(--separator)] bg-[var(--fill-secondary)] px-3 py-1.5 text-[13px] font-medium text-[var(--label)] hover:bg-[var(--separator)] transition-all"
-        title="View Landing Page"
-      >
-        <Home size={13} className="text-[var(--accent)] shrink-0" />
-        <span>Home</span>
-      </a>
-    );
+    return null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDocKind, openQuickAction]);
 
@@ -649,10 +641,6 @@ export default function App() {
     return [];
   })();
 
-  if (authenticated && user && isExplicitLanding && route.kind === 'landing') {
-    return <LandingPage onSignIn={() => navigate('/dashboard')} currentPath="/" navigate={navigate} />;
-  }
-
   /**
    * When a signed-in user lands on /pricing they can pick a plan. Until the
    * eSewa / Khalti wiring is live, the pick is a no-op (the only path to a
@@ -667,6 +655,10 @@ export default function App() {
       );
     }
   }, [notify]);
+
+  if (authenticated && user && isExplicitLanding && route.kind === 'landing') {
+    return <LandingPage onSignIn={() => navigate('/dashboard')} currentPath="/" navigate={navigate} />;
+  }
 
   if (phase === 'checking-session' || redirect) {
     // `redirect` is set only for a session we already know about, so waiting
@@ -708,7 +700,7 @@ export default function App() {
       <SubscribeView
         role={userRole}
         email={user?.email ?? null}
-        onPricing={() => navigate('/pricing')}
+        onHome={() => navigate('/?landing=1')}
         onSignOut={() => exitSession('this-device')}
       />
     );
@@ -735,7 +727,7 @@ export default function App() {
       <SubscribeView
         role={userRole}
         email={user?.email ?? null}
-        onPricing={() => navigate('/pricing')}
+        onHome={() => navigate('/?landing=1')}
         onSignOut={() => exitSession('this-device')}
       />
     );
@@ -855,6 +847,7 @@ export default function App() {
         isOpenMobile={mobileSidebarOpen} onCloseMobile={() => setMobileSidebarOpen(false)}
         issueCount={integrityIssues.filter((i) => i.severity === 'ERROR').length}
         hideTabs={hiddenTabs}
+        onHome={() => navigate('/?landing=1')}
       />
 
       <div className="lg:pl-60">

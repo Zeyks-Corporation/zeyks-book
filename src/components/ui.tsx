@@ -313,7 +313,7 @@ export const DualDate: React.FC<{ iso: string; calendar: 'BS' | 'AD'; className?
 
 export interface Column<T> {
   key: string;
-  header: string;
+  header: React.ReactNode;
   align?: 'left' | 'right';
   width?: string;
   render: (row: T) => React.ReactNode;

@@ -1,47 +1,80 @@
 import React from 'react';
-import { Check, HelpCircle } from 'lucide-react';
+import { Check, HelpCircle, Sparkles } from 'lucide-react';
 import { PublicLayout } from './PublicLayout';
 import { Button } from './ui';
+import { ROLE_LABEL, type AppRole } from '../lib/roles';
+
+/**
+ * Two-tier pricing page.
+ *
+ *   Starter  — NPR 399 / month. Dashboard, sales, purchase. Designed for
+ *              kirana counters that just need daily books and a stock view.
+ *   Premium  — NPR 599 / month. Every feature: reports, data health, expenses,
+ *              payments, inventory.
+ *
+ * Both tiers route through the same payment flow once the eSewa / Khalti
+ * integration is wired up. Until then, picking a plan routes a signed-in user
+ * to the admin-controlled flow (a no-op until the RPC is connected); signed-
+ * out users are asked to sign in first.
+ */
+
+const STARTER_FEATURES = [
+  'Double-entry accounting engine by construction',
+  'Bikram Sambat (BS) & AD calendar support',
+  'Sales recording with invoice numbers and credit terms',
+  'Purchase recording with bill numbers and credit terms',
+  'Inventory tracking with reorder alerts',
+  'Settings: currency, fiscal year, VAT, branding',
+  'JSON backup from Settings',
+];
+
+const PREMIUM_FEATURES = [
+  'Everything in Starter, plus:',
+  'Aged receivables & payables (30, 60, 90 days)',
+  'A4 print-ready financial statements & tax reports',
+  'Automatic ledger & document health checks',
+  'Expense tracking with category mapping',
+  'Settlements & receipts against any invoice or bill',
+  'Stock summary, ledger, valuation, low-stock alerts',
+];
+
+const FAQS = [
+  {
+    q: 'How does pricing work?',
+    a: 'Two plans, billed monthly. Starter (NPR 399) is sized for kirana counters — daily books, sales and purchase. Premium (NPR 599) unlocks reports, data health, expenses, payments and inventory. There are no per-seat charges.',
+  },
+  {
+    q: 'Can I upgrade from Starter to Premium later?',
+    a: 'Yes. Switching plans takes effect on the next page load — the role is read from your profile each time.',
+  },
+  {
+    q: 'Where are my financial records stored?',
+    a: 'Records live in a managed Neon Postgres database; sign-in is via Neon Auth (email code). You can download a JSON snapshot from Settings.',
+  },
+  {
+    q: 'Is there a free trial or refund policy?',
+    a: 'Trial terms and a refund policy are not currently published. Please contact us to confirm the current subscription terms before paying.',
+  },
+  {
+    q: 'Is Zeyks Book approved by Nepal’s IRD?',
+    a: 'The site does not publish an IRD approval or verification status. VAT reports and A4 statements are product features, not proof of government approval. Confirm your compliance requirements with the IRD or your accountant.',
+  },
+];
 
 export const PricingPage: React.FC<{
   currentPath: string;
   navigate: (to: string) => void;
   onSignIn: () => void;
-}> = ({ currentPath, navigate, onSignIn }) => {
-  const FEATURES = [
-    'Double-entry accounting engine by construction',
-    'Bikram Sambat (BS) & AD calendar support',
-    'Aged receivables & payables (30, 60, 90 days)',
-    'A4 print-ready financial statements & tax reports',
-    'Automatic ledger & document health checks',
-    'Managed cloud database with business level access controls',
-    'One simple plan — no per-user fees',
-    'Downloadable JSON backup from Settings',
-  ];
-
-  const FAQS = [
-    {
-      q: 'How does pricing work?',
-      a: 'One simple plan at NPR 999 per month. No per-seat charges, no hidden tiers — every feature, including the full double-entry engine and A4 reports, is included.'
-    },
-    {
-      q: 'Where are my financial records stored?',
-      a: 'Business records are stored in a managed Supabase database; Firebase handles sign-in. You can download a JSON snapshot from Settings. Restoring a backup is not available yet.',
-    },
-    {
-      q: 'Can I export statements for my bank or auditor?',
-      a: 'Yes. Profit & Loss, Balance Sheet, Trial Balance, General Ledger, VAT return, and Cash/Bank statements are designed as standard A4 sheets ready to print or export as PDF.',
-    },
-    {
-      q: 'Is there a free trial or refund policy?',
-      a: 'Trial terms and a refund policy are not currently published. Please contact us to confirm the current subscription terms before paying.',
-    },
-    {
-      q: 'Is Zeyks Book approved by Nepal’s IRD?',
-      a: 'The site does not publish an IRD approval or verification status. VAT reports and A4 statements are product features, not proof of government approval. Confirm your compliance requirements with the IRD or your accountant.',
-    },
-  ];
-
+  /** Optional: when present, the buttons route through a real plan-pick flow. */
+  onPickPlan?: (plan: AppRole) => void;
+  signedIn?: boolean;
+}> = ({ currentPath, navigate, onSignIn, onPickPlan, signedIn = false }) => {
+  const handlePick = (plan: AppRole) => {
+    if (!onPickPlan) return;
+    // Only plus/premium unlock books; the picker still receives 'user' and
+    // 'admin' for type-completeness, but those are no-ops in the UI.
+    if (plan === 'plus' || plan === 'premium') onPickPlan(plan);
+  };
   return (
     <PublicLayout currentPath={currentPath} navigate={navigate} onSignIn={onSignIn}>
       <section className="mx-auto max-w-5xl px-4 py-14 sm:px-6 sm:py-20">
@@ -53,39 +86,36 @@ export const PricingPage: React.FC<{
             Honest pricing for your business
           </h1>
           <p className="mt-4 text-[17px] leading-[22px] text-[var(--label-secondary)]">
-            No hidden tiers, per-seat charges, or vendor lock-in.
+            Pick the plan that fits the size of your shop. No per-seat charges,
+            no hidden tiers.
           </p>
         </div>
 
-        {/* Pricing Card */}
-        <div className="mt-12 max-w-lg mx-auto bg-[var(--bg)] border border-[var(--separator)] rounded-[14px] p-8 shadow-sm">
-          <div className="flex items-baseline justify-between border-b border-[var(--separator)] pb-6">
-            <div>
-              <h2 className="text-[22px] font-bold text-[var(--label)]">Zeyks Book</h2>
-              <p className="mt-1 text-[13px] text-[var(--label-secondary)]">Every feature included</p>
-            </div>
-            <div className="text-right">
-              <span className="text-[34px] font-bold text-[var(--label)]">NPR 999</span>
-              <span className="text-[13px] text-[var(--label-tertiary)]"> / Mo</span>
-            </div>
-          </div>
-
-          <ul className="mt-6 space-y-3.5">
-            {FEATURES.map((item) => (
-              <li key={item} className="flex items-center gap-3 text-[15px] text-[var(--label-secondary)]">
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--success-bg)] text-[var(--success)]">
-                  <Check size={13} strokeWidth={2.2} />
-                </span>
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-
-          <div className="mt-8">
-            <Button variant="primary" size="lg" className="w-full" onClick={onSignIn}>
-              Get started with your books
-            </Button>
-          </div>
+        {/* Pricing Cards */}
+        <div className="mt-12 grid gap-6 sm:grid-cols-2 max-w-3xl mx-auto">
+          <PlanCard
+            name={ROLE_LABEL.plus}
+            priceNPR={399}
+            highlight={false}
+            features={STARTER_FEATURES}
+            ctaLabel={signedIn ? 'Choose Starter' : 'Sign in to start'}
+            onCta={() => {
+              if (signedIn && onPickPlan) handlePick('plus');
+              else onSignIn();
+            }}
+          />
+          <PlanCard
+            name={ROLE_LABEL.premium}
+            priceNPR={599}
+            highlight
+            badge={<Sparkles size={12} strokeWidth={1.8} className="inline-block" />}
+            features={PREMIUM_FEATURES}
+            ctaLabel={signedIn ? 'Choose Premium' : 'Sign in to start'}
+            onCta={() => {
+              if (signedIn && onPickPlan) handlePick('premium');
+              else onSignIn();
+            }}
+          />
         </div>
 
         {/* FAQ Section */}
@@ -105,5 +135,64 @@ export const PricingPage: React.FC<{
         </div>
       </section>
     </PublicLayout>
+  );
+};
+
+const PlanCard: React.FC<{
+  name: string;
+  priceNPR: number;
+  highlight: boolean;
+  badge?: React.ReactNode;
+  features: string[];
+  ctaLabel: string;
+  onCta: () => void;
+}> = ({ name, priceNPR, highlight, badge, features, ctaLabel, onCta }) => {
+  return (
+    <div
+      className={`relative rounded-[14px] p-7 shadow-sm border ${
+        highlight
+          ? 'border-[var(--accent)] bg-[var(--bg)] ring-2 ring-[var(--accent)]/30'
+          : 'border-[var(--separator)] bg-[var(--bg)]'
+      }`}
+    >
+      {highlight && (
+        <span className="absolute -top-3 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 rounded-full bg-[var(--accent)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-white">
+          {badge}
+          <span>Most chosen</span>
+        </span>
+      )}
+      <div className="flex items-baseline justify-between border-b border-[var(--separator)] pb-5">
+        <div>
+          <h2 className="text-[20px] font-bold text-[var(--label)]">{name}</h2>
+          <p className="mt-1 text-[13px] text-[var(--label-secondary)]">
+            {highlight ? 'Every feature included' : 'For kirana counters'}
+          </p>
+        </div>
+        <div className="text-right">
+          <span className="text-[28px] font-bold text-[var(--label)]">NPR {priceNPR}</span>
+          <span className="text-[13px] text-[var(--label-tertiary)]"> / Mo</span>
+        </div>
+      </div>
+      <ul className="mt-5 space-y-3">
+        {features.map((item) => (
+          <li key={item} className="flex items-start gap-2.5 text-[14px] text-[var(--label-secondary)]">
+            <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[var(--success-bg)] text-[var(--success)]">
+              <Check size={11} strokeWidth={2.2} />
+            </span>
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-7">
+        <Button
+          variant={highlight ? 'primary' : 'secondary'}
+          size="lg"
+          className="w-full"
+          onClick={onCta}
+        >
+          {ctaLabel}
+        </Button>
+      </div>
+    </div>
   );
 };

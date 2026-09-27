@@ -1,12 +1,12 @@
 /**
  * Business lifecycle service — onboarding, memberships, and settings.
  *
- * Uses Supabase database for storage.
- * User identity comes from Firebase Auth, synchronized to Supabase Auth.
+ * All calls go through the Neon Data API. Identity comes from Neon Auth (the
+ * supabase client's auth header carries the JWT); there is no separate
+ * session-sync step.
  */
 
-import { supabase, syncSupabaseSession } from '../lib/supabase';
-import { auth } from '../lib/firebase';
+import { supabase } from '../lib/supabase';
 import type { BusinessProfile } from '../types';
 import type { DbBusiness, BusinessSettingsPatch } from '../lib/dbTypes';
 import { toBusinessProfile, toBusinessUpdate } from '../lib/dbTypes';
@@ -20,63 +20,28 @@ export interface Membership {
 
 /**
  * Fetch the current user's business memberships.
- * Ensures the database session is synchronized before querying.
  */
 export async function getMyMemberships(): Promise<{
   memberships: Membership[];
   error: string | null;
 }> {
   try {
-    if (auth.currentUser) {
-      await syncSupabaseSession(auth.currentUser);
+    const { data, error } = await supabase
+      .from('business_memberships')
+      .select('business_id, user_id, role, created_at');
+
+    if (error) {
+      return { memberships: [], error: error.message };
     }
+    if (!data) return { memberships: [], error: null };
 
-    const { data: { session } } = await supabase.auth.getSession();
-    let clientErr: { message: string } | null = null;
-
-    if (session?.user) {
-      const { data, error } = await supabase
-        .from('business_memberships')
-        .select('business_id, user_id, role, created_at');
-
-      if (!error && data) {
-        const memberships: Membership[] = data.map((row) => ({
-          businessId: row.business_id as string,
-          userId: row.user_id as string,
-          role: (row.role as Membership['role']) || 'OWNER',
-          createdAt: (row.created_at as string) || '',
-        }));
-        return { memberships, error: null };
-      }
-      clientErr = error;
-    }
-
-    // Fallback: If client session was not established, query via API
-    const email = auth.currentUser?.email;
-    if (email) {
-      try {
-        const res = await fetch('/api/business/my-memberships', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email }),
-        });
-        if (res.ok) {
-          const json = await res.json();
-          if (Array.isArray(json?.memberships)) {
-            void syncSupabaseSession(auth.currentUser);
-            return { memberships: json.memberships, error: null };
-          }
-        }
-      } catch {
-        // Continue to return primary error
-      }
-    }
-
-    if (clientErr) {
-      return { memberships: [], error: clientErr.message };
-    }
-
-    return { memberships: [], error: null };
+    const memberships: Membership[] = (data as Array<Record<string, unknown>>).map((row) => ({
+      businessId: row.business_id as string,
+      userId: row.user_id as string,
+      role: ((row.role as Membership['role']) || 'OWNER'),
+      createdAt: (row.created_at as string) || '',
+    }));
+    return { memberships, error: null };
   } catch (e) {
     return {
       memberships: [],
@@ -92,52 +57,20 @@ export async function getBusiness(
   businessId: string,
 ): Promise<{ business: BusinessProfile | null; error: string | null }> {
   try {
-    if (auth.currentUser) {
-      await syncSupabaseSession(auth.currentUser);
-    }
+    const { data, error } = await supabase
+      .from('businesses')
+      .select('*')
+      .eq('id', businessId)
+      .single();
 
-    const { data: { session } } = await supabase.auth.getSession();
-    let clientErr: { message: string } | null = null;
-
-    if (session?.user) {
-      const { data, error } = await supabase
-        .from('businesses')
-        .select('*')
-        .eq('id', businessId)
-        .single();
-
-      if (!error && data) {
-        return { business: toBusinessProfile(data as DbBusiness), error: null };
-      }
-      clientErr = error;
-    }
-
-    // Fallback to server endpoint if client query encountered permission or RLS delay
-    const email = auth.currentUser?.email;
-    try {
-      const res = await fetch('/api/business/get', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ businessId, email }),
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (json?.business) {
-          return { business: toBusinessProfile(json.business as DbBusiness), error: null };
-        }
-      }
-    } catch {
-      // Continue to handle primary error
-    }
-
-    if (clientErr) {
+    if (error) {
       return {
         business: null,
-        error: clientErr.message || 'This business could not be found, or you are not a member of it.',
+        error: error.message || 'This business could not be found, or you are not a member of it.',
       };
     }
-
-    return { business: null, error: 'Business not found.' };
+    if (!data) return { business: null, error: 'Business not found.' };
+    return { business: toBusinessProfile(data as DbBusiness), error: null };
   } catch (e) {
     return {
       business: null,
@@ -199,10 +132,6 @@ export async function createBusiness(
   params: CreateBusinessParams,
 ): Promise<{ business: BusinessProfile | null; error: string | null }> {
   try {
-    if (auth.currentUser) {
-      await syncSupabaseSession(auth.currentUser);
-    }
-
     const { data, error } = await supabase.rpc('create_business', {
       p_business_name: params.businessName,
       p_owner_name: params.ownerName ?? '',

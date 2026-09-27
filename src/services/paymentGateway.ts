@@ -1,5 +1,5 @@
 import { GatewayProvider, GatewayStatus } from '../types';
-import { auth } from '../lib/firebase';
+import { getAccessToken } from './authService';
 import {
   PAYMENT_API_DISABLED_MESSAGE, paymentApiConfigured, paymentApiUrl,
 } from '../lib/paymentApi';
@@ -12,9 +12,9 @@ import {
  * form payload or a redirect URL.
  *
  * Every route on that API requires the signed-in session, so each call carries
- * the caller's Firebase ID token. Identity is never sent as a field: the server
- * verifies the token against Firebase Admin and nothing in a request body can
- * override it.
+ * the caller's Neon Auth JWT as `Authorization: Bearer …`. Identity is never
+ * sent as a field: the server verifies the token against the Neon Auth JWKS,
+ * and nothing in a request body can override it.
  */
 
 export interface GatewayConfig {
@@ -74,14 +74,14 @@ export class GatewayError extends Error {
 /**
  * The `Authorization` header the payment API requires.
  *
- * `getSession` refreshes an expired access token, so this never hands over a
- * stale one. No session means no header at all — the API then answers 401 and
- * the person is told to sign in, which is more honest than a client-side guess
- * about who they are.
+ * The token comes from Neon Auth (EdDSA-signed JWT, 15-minute expiry). No
+ * session means no header at all — the API then answers 401 and the person is
+ * told to sign in, which is more honest than a client-side guess about who
+ * they are.
  */
 async function authHeaders(): Promise<Record<string, string>> {
   try {
-    const token = await auth.currentUser?.getIdToken();
+    const token = await getAccessToken();
     return token ? { Authorization: `Bearer ${token}` } : {};
   } catch {
     return {};

@@ -18,6 +18,7 @@ import type { Capability } from '../lib/capabilities';
 const TITLES: Record<ViewTab, string> = {
   dashboard: 'Dashboard', sales: 'Sales', purchases: 'Purchases', expenses: 'Expenses',
   payments: 'Payments', reports: 'Reports', health: 'Data health', settings: 'Settings',
+  inventory: 'Inventory',
 };
 
 const CAPABILITY_FOR_TXN: Record<TxnKind, Capability> = {

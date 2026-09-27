@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Download, Plus, Upload } from 'lucide-react';
+import { Download, Plus, Trash2, Upload } from 'lucide-react';
 import { AccountType } from '../types';
 import { Books } from '../state/useBooks';
 import { Badge, Button, Callout, Field, inputClass, Modal, Money } from './ui';
@@ -9,6 +9,7 @@ import { isSupported, unsupportedMessage } from '../lib/capabilities';
 import { SIGN_OUT_HINTS, SIGN_OUT_LABELS } from '../lib/session';
 import type { SignOutKind } from '../lib/session';
 import type { CalendarPreference } from '../lib/preferences';
+import { supabase } from '../lib/supabase';
 
 /**
  * Settings.
@@ -45,6 +46,10 @@ export const SettingsView: React.FC<{
   const [savingAccount, setSavingAccount] = useState(false);
   const [archivingAccountId, setArchivingAccountId] = useState<string | null>(null);
   const [confirmSignOutEverywhere, setConfirmSignOutEverywhere] = useState(false);
+  const [confirmErase, setConfirmErase] = useState(false);
+  const [eraseConfirmText, setEraseConfirmText] = useState('');
+  const [erasing, setErasing] = useState(false);
+  const [eraseError, setEraseError] = useState<string | null>(null);
 
   // Re-seed the form if a different business is loaded.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -71,6 +76,44 @@ export const SettingsView: React.FC<{
   const exportBackup = () => {
     downloadJson(`ZeyksBook_backup_${todayNpt()}.json`, books.snapshot());
     onDone('Backup downloaded. Keep it somewhere safe.', true);
+  };
+
+  /**
+   * Wipe this business back to its freshly-created state.
+   *
+   * Goes through `public.erase_business_data`, the owner-only RPC that deletes
+   * every transaction / party / account and reseeds the default chart. The
+   * confirm modal requires the person to type ERASE — that is the one place
+   * where the consequence (every figure in every report) is named in words
+   * the person has to read to get past.
+   */
+  const runErase = async () => {
+    if (erasing) return;
+    if (eraseConfirmText.trim().toUpperCase() !== 'ERASE') {
+      setEraseError('Type ERASE in capitals to confirm.');
+      return;
+    }
+    setEraseError(null);
+    setErasing(true);
+    try {
+      const { error } = await supabase.rpc('erase_business_data', {
+        p_business_id: business.id,
+      });
+      if (error) {
+        setEraseError(error.message);
+        setErasing(false);
+        return;
+      }
+      setConfirmErase(false);
+      setEraseConfirmText('');
+      setErasing(false);
+      onDone('Books erased. The default chart of accounts has been reseeded.', true);
+      // Reload the books from the cloud so every screen reflects the wipe.
+      window.location.assign('/dashboard');
+    } catch (e) {
+      setEraseError(e instanceof Error ? e.message : 'Erase failed.');
+      setErasing(false);
+    }
   };
 
   const saveAccount = async () => {
@@ -345,17 +388,20 @@ export const SettingsView: React.FC<{
         </div>
       </Section>
 
-      <Section title="Danger zone" hint="Destructive actions are disabled while your books are cloud-backed.">
+      <Section title="Danger zone" hint="Destructive actions are irreversible. Cloud-side; needs you to confirm.">
         <Callout tone="warn">
-          {unsupportedMessage('Erasing everything')} Your financial data lives in a private cloud database, and nothing in the
-          app can delete it.
+          <strong>Erase everything</strong> deletes every sale, purchase, expense,
+          payment, customer, supplier and account you have recorded, then
+          reseeds the default chart of accounts. Your business profile and
+          memberships stay. There is no undo.
         </Callout>
         <div className="flex flex-wrap gap-2">
           <Button
             variant="danger"
-            disabled={!isSupported('erase')}
+            onClick={() => setConfirmErase(true)}
             title={isSupported('erase') ? undefined : unsupportedMessage('Erasing everything')}
           >
+            <Trash2 size={13} strokeWidth={1.8} className="mr-1" aria-hidden="true" />
             Erase everything
           </Button>
         </div>
@@ -387,6 +433,60 @@ export const SettingsView: React.FC<{
           Every device signed in to this account — including your phone — will be signed out and will need the
           password again. Nothing in your books is changed.
         </p>
+      </Modal>
+
+      <Modal
+        isOpen={confirmErase}
+        onClose={() => {
+          if (erasing) return;
+          setConfirmErase(false);
+          setEraseError(null);
+          setEraseConfirmText('');
+        }}
+        title="Erase everything"
+        size="sm"
+        description="This cannot be undone. Type ERASE in capitals to confirm."
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button onClick={() => setConfirmErase(false)} disabled={erasing}>Cancel</Button>
+            <Button
+              variant="danger"
+              onClick={() => void runErase()}
+              disabled={erasing || eraseConfirmText.trim().toUpperCase() !== 'ERASE'}
+            >
+              {erasing ? 'Erasing…' : 'Erase everything'}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          {eraseError && <Callout tone="error">{eraseError}</Callout>}
+          <Callout tone="error">
+            Deletes every sale, purchase, expense, payment, customer, supplier and account recorded
+            for this business, then reseeds the default chart of accounts. Your business profile,
+            membership and subscription stay. There is no undo.
+          </Callout>
+          <Field label='Type ERASE to confirm' required>
+            {(id) => (
+              <input
+                id={id}
+                className={inputClass}
+                value={eraseConfirmText}
+                disabled={erasing}
+                autoFocus
+                autoComplete="off"
+                spellCheck={false}
+                onChange={(e) => setEraseConfirmText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && eraseConfirmText.trim().toUpperCase() === 'ERASE' && !erasing) {
+                    e.preventDefault();
+                    void runErase();
+                  }
+                }}
+              />
+            )}
+          </Field>
+        </div>
       </Modal>
 
       <Modal isOpen={showNewAccount} onClose={() => setShowNewAccount(false)} title={editingAccountId ? 'Edit account' : 'Add an account'} size="sm"

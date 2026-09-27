@@ -39,6 +39,7 @@ export const TITLES: Record<ViewTab, string> = {
   reports: 'Reports',
   health: 'Data health',
   settings: 'Settings',
+  inventory: 'Inventory',
 };
 
 export interface PageMetadata {

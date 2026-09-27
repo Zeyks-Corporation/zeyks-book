@@ -4,7 +4,16 @@ export interface UserProfile {
   id: string;
   email: string;
   fullName: string;
+  /** Legacy per-business role; the app-level subscription/admin role lives in profiles.role. */
   role?: 'OWNER' | 'ACCOUNTANT' | 'VIEWER';
+  /**
+   * App-level role that drives route guards and the admin panel.
+   *   user    — signed up, no subscription, dashboard locked.
+   *   plus    — Starter plan (399 NPR, kirana-tier, dashboard + sales + purchase only).
+   *   premium — Premium plan (599 NPR, every feature).
+   *   admin   — staff at zeyksbook, hidden /king panel.
+   */
+  appRole?: 'user' | 'plus' | 'premium' | 'admin';
   createdAt: string;
 }
 
@@ -313,7 +322,8 @@ export interface JournalEntry {
 
 export type ViewTab =
   | 'dashboard' | 'sales' | 'purchases' | 'expenses'
-  | 'payments' | 'reports' | 'health' | 'settings';
+  | 'payments' | 'reports' | 'health' | 'settings'
+  | 'inventory';
 
 export interface LedgerEntry {
   date: string;
@@ -371,6 +381,61 @@ export interface IntegrityIssue {
   message: string;
   /** Where to look — an entry reference, account name or document number. */
   subject?: string;
+}
+
+/**
+ * Stage 21 — Inventory Management System types.
+ *
+ * `inventory_items` is the catalogue of stockable things the business sells
+ * or uses. `inventory_movements` is the immutable ledger of every change in
+ * on-hand quantity — a sale, a purchase receipt, an adjustment, a voiding
+ * reversal. The view `inventory_stock_value` joins them and computes the
+ * weighted-average cost and the on-hand total on every read, so there is no
+ * cached `current_qty` that can drift out of sync.
+ */
+export interface InventoryItem {
+  id: string;
+  businessId: string;
+  sku: string;
+  name: string;
+  description: string;
+  unit: string;
+  category: string;
+  defaultCost: number;
+  reorderPoint: number;
+  reorderQty: number;
+  isActive: boolean;
+  createdAt: string;
+  createdBy: string;
+}
+
+/** A row in `inventory_stock_value` — the catalogue enriched with totals. */
+export interface InventoryStockRow extends InventoryItem {
+  onHand: number;
+  avgCost: number;
+  stockValue: number;
+}
+
+export type InventoryMovementDirection = 'IN' | 'OUT';
+export type InventoryMovementReason =
+  | 'PURCHASE' | 'SALE' | 'ADJUST_IN' | 'ADJUST_OUT'
+  | 'SCRAP' | 'OPENING' | 'VOID_REVERSAL';
+
+export interface InventoryMovement {
+  id: string;
+  businessId: string;
+  itemId: string;
+  movementDate: string;
+  direction: InventoryMovementDirection;
+  reason: InventoryMovementReason;
+  quantity: number;
+  unitCost: number | null;
+  sourceType: 'SALE' | 'PURCHASE' | 'ADJUSTMENT' | 'OPENING' | null;
+  sourceId: string | null;
+  signedQuantity: number;
+  notes: string;
+  createdAt: string;
+  createdBy: string;
 }
 
 /**
