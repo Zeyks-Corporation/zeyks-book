@@ -139,5 +139,19 @@ export function isPayingTier(role: AppRole | undefined): boolean {
   return role === 'plus' || role === 'premium';
 }
 
+/**
+ * Whether the subscription wall should replace the app for this account.
+ *
+ * The wall is a second, coarser gate than `roleHasFeature`: it hides the whole
+ * shell rather than one section, so it has to read the same switch. Deriving
+ * it from `isPayingTier` alone left a signed-in free account outside the app
+ * even with `ROLE_GATING_ENABLED` off — the sections were unlocked, but the
+ * screen in front of them was the plan page.
+ */
+export function paywallHoldsAccount(role: AppRole | undefined): boolean {
+  if (!ROLE_GATING_ENABLED) return false;
+  return !(isPayingTier(role) || isAppAdmin(role));
+}
+
 /** Default role for newly-created profiles (matches the DB column default). */
 export const DEFAULT_ROLE: AppRole = 'user';

@@ -157,6 +157,7 @@ const paymentApiConfigMod = await import(pathToFileURL(path.join(tmp, 'lib/payme
 const rolesMod = await import(pathToFileURL(path.join(tmp, 'lib/roles.mjs')).href);
 const {
   ALL_ROLES, FEATURE_FOR_ROLE, ROLE_GATING_ENABLED, roleHasFeature,
+  paywallHoldsAccount, isPayingTier, isAppAdmin,
 } = rolesMod;
 const {
   APP_TABS, isAppPath, normalizePath, parseRoute, pathForTab, redirectFor,
@@ -3783,6 +3784,33 @@ test('the paid matrix is intact behind the switch', () => {
   }
   assertEqual(FEATURE_FOR_ROLE.admin.length, known.length,
     'the matrix and the app sections have drifted apart');
+});
+
+/*
+ * The subscription wall is a second, coarser gate than the section locks: it
+ * replaces the whole app shell, so a signed-in free account that never gets
+ * past it sees the plan page no matter how the section matrix is set. Turning
+ * the switch off has to open that door too.
+ */
+test('the subscription wall obeys the same switch as the section locks', () => {
+  assertEqual(paywallHoldsAccount('user'), false,
+    'a signed-in free account is walled out of the app while the gate is off');
+  for (const role of ALL_ROLES) {
+    const tiered = isPayingTier(role) || isAppAdmin(role);
+    assertEqual(paywallHoldsAccount(role), ROLE_GATING_ENABLED && !tiered,
+      `${role} is walled the wrong way`);
+  }
+  assertEqual(paywallHoldsAccount(undefined), ROLE_GATING_ENABLED,
+    'nobody signed in is not a paywall case');
+});
+
+test('the app shell decides the wall through the switch, not the tier', () => {
+  const app = srcFiles.find((f) => f.rel.endsWith('src/App.tsx'));
+  assert(app, 'App.tsx not found');
+  assert(/if \(authenticated && paywallHoldsAccount\(userRole\) && route\.kind === 'app'\)/.test(app.text),
+    'the free-account shell must be gated by paywallHoldsAccount');
+  assert(!/if \(authenticated && !dashboardAccess/.test(app.text),
+    'the shell cannot fall back to a tier check the switch does not reach');
 });
 
 test('a stale book load is refused before it writes a single row', () => {

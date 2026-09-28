@@ -16,7 +16,7 @@ import { TermsPage } from './components/TermsPage';
 import { NotFoundView } from './components/NotFoundView';
 import { SubscribeView } from './components/SubscribeView';
 import { KingPanel } from './components/KingPanel';
-import { isPayingTier, isAppAdmin, roleHasFeature, type AppRole } from './lib/roles';
+import { isPayingTier, isAppAdmin, roleHasFeature, paywallHoldsAccount, type AppRole } from './lib/roles';
 import { PlanLockedView } from './components/UpgradeViews';
 import { gateway, GatewayConfig, takePending } from './services/paymentGateway';
 import { useRoute } from './lib/useRoute';
@@ -831,8 +831,12 @@ export default function App() {
    * unreachable from this screen, so nothing can be added, edited or erased
    * until a plan is bought. /pricing, /about and the other public pages stay
    * reachable as marketing.
+   *
+   * This wall is gated by the same switch as the section locks, so with
+   * `ROLE_GATING_ENABLED` off every signed-in account walks straight into the
+   * app instead of meeting the plan page here.
    */
-  if (authenticated && !dashboardAccess && route.kind === 'app') {
+  if (authenticated && paywallHoldsAccount(userRole) && route.kind === 'app') {
     return (
       <div className="min-h-screen bg-[var(--bg-secondary)]">
         <Sidebar
