@@ -713,10 +713,13 @@ export default function App() {
   const dashboardAccess = isPayingTier(userRole) || isAppAdmin(userRole);
 
   /**
-   * Which sidebar sections this role has not paid for. They stay listed —
-   * with a lock in the drawer — and clicking one opens the plan screen
-   * instead of the feature. A free account keeps the dashboard tab itself
-   * open (it is the door that shows the plans) and locks everything else.
+   * Which sidebar sections this role has not paid for — the list that drives
+   * the drawer locks, the plan-lock screen and whether "New" appears.
+   *
+   * It is empty right now: `ROLE_GATING_ENABLED` in lib/roles is off, so every
+   * signed-in account reaches every section regardless of its plan. The
+   * derivation stays here so switching the gate back on restores the locks
+   * without touching this file.
    */
   const lockedTabs: ViewTab[] = (Object.keys(TITLES) as ViewTab[]).filter(
     (tab) => !roleHasFeature(userRole, tab) && !(tab === 'dashboard' && !dashboardAccess),

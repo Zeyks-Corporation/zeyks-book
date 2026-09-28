@@ -14,6 +14,9 @@
  *
  * Permissions are NOT additive (a premium does not also inherit `plus`); they
  * are intentionally distinct so a tier change is meaningful and visible.
+ *
+ * CURRENTLY DORMANT: `ROLE_GATING_ENABLED` below is false, so every signed-in
+ * account has all of it. Read that constant before acting on this table.
  */
 
 export type AppRole = 'user' | 'plus' | 'premium' | 'admin';
@@ -49,6 +52,9 @@ export type Feature =
 /**
  * Which features each role unlocks. Locked features stay visible in the
  * sidebar and open a plan-lock screen — nothing is hidden.
+ *
+ * `admin` is not a plan benefit at any setting of the switch: it is the staff
+ * panel, and only role='admin' reaches it.
  */
 export const FEATURE_FOR_ROLE: Record<AppRole, ReadonlyArray<Feature>> = {
   user: [],
@@ -57,8 +63,30 @@ export const FEATURE_FOR_ROLE: Record<AppRole, ReadonlyArray<Feature>> = {
   admin: ['dashboard', 'sales', 'purchases', 'expenses', 'settings', 'payments', 'reports', 'health', 'inventory', 'admin'],
 };
 
+/**
+ * Plan gating, switched off.
+ *
+ * While this is false every signed-in account reaches every bookkeeping
+ * section — the dashboard, sales, purchases, expenses, payments, reports,
+ * health, inventory and settings — regardless of `profiles.role`. The sidebar
+ * shows no locks, the plan-lock screen never renders, and the "New" action is
+ * available everywhere, because all three derive from `roleHasFeature`.
+ *
+ * `profiles.role` is still read, stored and displayed; nothing about a
+ * person's plan is lost by flipping this. Set it back to true to restore the
+ * matrix above exactly as it was.
+ *
+ * The `/king` admin panel is deliberately NOT covered by this. It is guarded
+ * by `isAppAdmin`, which still requires role='admin' — it can change other
+ * people's plans and erase their books, so it is not a section of the app.
+ */
+export const ROLE_GATING_ENABLED = false;
+
 export function roleHasFeature(role: AppRole | undefined, feature: Feature): boolean {
   if (!role) return false;
+  // Switching the gate off opens the paid sections; it does not hand out staff
+  // access, which keeps meaning what the matrix says it means.
+  if (!ROLE_GATING_ENABLED) return feature === 'admin' ? role === 'admin' : true;
   return FEATURE_FOR_ROLE[role].includes(feature);
 }
 

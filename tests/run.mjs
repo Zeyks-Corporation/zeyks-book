@@ -128,7 +128,7 @@ const files = [
   'lib/nepaliDate.ts', 'lib/money.ts', 'lib/ids.ts', 'lib/dbTypes.ts',
   'lib/capabilities.ts', 'lib/appPhases.ts', 'lib/saleState.ts', 'lib/purchaseState.ts',
   'lib/expenseState.ts', 'lib/voidState.ts', 'lib/paymentState.ts', 'lib/gatewayState.ts',
-  'lib/session.ts', 'lib/routes.ts', 'lib/preferences.ts',
+  'lib/session.ts', 'lib/routes.ts', 'lib/preferences.ts', 'lib/roles.ts',
   'lib/paymentApiConfig.ts',
   'services/accountingEngine.ts', 'services/posting.ts', 'services/referenceGenerator.ts',
   'services/reportData.ts',
@@ -154,6 +154,10 @@ const sessionMod = await import(pathToFileURL(path.join(tmp, 'lib/session.mjs'))
 const routesMod = await import(pathToFileURL(path.join(tmp, 'lib/routes.mjs')).href);
 const preferencesMod = await import(pathToFileURL(path.join(tmp, 'lib/preferences.mjs')).href);
 const paymentApiConfigMod = await import(pathToFileURL(path.join(tmp, 'lib/paymentApiConfig.mjs')).href);
+const rolesMod = await import(pathToFileURL(path.join(tmp, 'lib/roles.mjs')).href);
+const {
+  ALL_ROLES, FEATURE_FOR_ROLE, ROLE_GATING_ENABLED, roleHasFeature,
+} = rolesMod;
 const {
   APP_TABS, isAppPath, normalizePath, parseRoute, pathForTab, redirectFor,
 } = routesMod;
@@ -3688,6 +3692,47 @@ test('the profile read is scoped to the signed-in id', () => {
   assert(!/_userId/.test(authSrc.text), 'no unused identity parameter left behind');
   assert(/ownProfileRow\(await fetchMyProfile\(userId\), userId\)/.test(authSrc.text),
     'and every profile row must pass the ownership guard before it reaches the UI');
+});
+
+/*
+ * Plan gating is switched off on purpose: a signed-in account reaches every
+ * section. These pin what "off" means so it cannot quietly become "half off" —
+ * and so that flipping ROLE_GATING_ENABLED back restores the paid matrix
+ * exactly rather than a drifted version of it.
+ */
+const GATED_FEATURES = ['dashboard', 'sales', 'purchases', 'expenses', 'payments', 'reports', 'health', 'inventory', 'settings'];
+
+test('every signed-in role reaches every section while plan gating is off', () => {
+  assertEqual(ROLE_GATING_ENABLED, false, 'the switch is what this test is about');
+  for (const role of ALL_ROLES) {
+    for (const feature of GATED_FEATURES) {
+      assert(roleHasFeature(role, feature), `${role} is locked out of ${feature}`);
+    }
+  }
+});
+
+test('disabling the gate still requires a session, and still excludes the admin panel', () => {
+  for (const feature of GATED_FEATURES) {
+    assert(!roleHasFeature(undefined, feature), 'a signed-out visitor gets nothing');
+    assert(!roleHasFeature(null, feature));
+  }
+  assert(!roleHasFeature('user', 'admin'), 'a free account must not reach /king');
+  assert(!roleHasFeature('premium', 'admin'), 'paying does not buy staff access');
+  assert(roleHasFeature('admin', 'admin'), 'and staff still do');
+});
+
+test('the paid matrix is intact behind the switch', () => {
+  assertEqual(FEATURE_FOR_ROLE.user.length, 0, 'a free account unlocks nothing when gating returns');
+  for (const feature of FEATURE_FOR_ROLE.plus) {
+    assert(FEATURE_FOR_ROLE.premium.includes(feature), `premium lost ${feature} that plus has`);
+  }
+  assert(!FEATURE_FOR_ROLE.premium.includes('admin'), 'premium is not staff');
+  const known = [...GATED_FEATURES, 'admin'];
+  for (const feature of known) {
+    assert(FEATURE_FOR_ROLE.admin.includes(feature), `admin no longer names ${feature}`);
+  }
+  assertEqual(FEATURE_FOR_ROLE.admin.length, known.length,
+    'the matrix and the app sections have drifted apart');
 });
 
 test('a stale book load is refused before it writes a single row', () => {
