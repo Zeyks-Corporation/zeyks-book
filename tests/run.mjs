@@ -191,7 +191,7 @@ const {
 } = gatewayStateMod;
 const {
   SIGN_OUT_HINTS, SIGN_OUT_LABELS, isCurrentEpoch, nextEpoch, ownProfileRow,
-  resolveSignOutOutcome, signOutScope,
+  resolveSignInHandoff, resolveSignOutOutcome, signOutScope,
 } = sessionMod;
 const { redact, redactDetail } = redactMod;
 const {
@@ -3641,6 +3641,56 @@ test('a session that survived prefers the local attempt\'s error', () => {
     firstError: 'revoke failed', localRetryError: 'storage is blocked', sessionCleared: false,
   });
   assertEqual(outcome.error, 'storage is blocked');
+});
+
+test('a sign-in starts unless the browser is provably still held by another session', () => {
+  // Unreachable server: nothing to clear, and the redirect reports its own
+  // failure. Refusing here would lock a person out of a stalled network.
+  assertEqual(resolveSignInHandoff({ reachable: false, hadSession: false, signOutError: null }).proceed, true);
+  // Nobody home: the ordinary case.
+  assertEqual(resolveSignInHandoff({ reachable: true, hadSession: false, signOutError: null }).proceed, true);
+  // Somebody was there and is gone now.
+  assertEqual(resolveSignInHandoff({ reachable: true, hadSession: true, signOutError: null }).proceed, true);
+  // The one case that must not proceed: starting over a live session is
+  // answered by that session, so the person gets the account they were leaving.
+  const held = resolveSignInHandoff({
+    reachable: true, hadSession: true, signOutError: 'revoke failed',
+  });
+  assertEqual(held.proceed, false);
+  assert(/still signed in/i.test(held.error), 'and the reason must name the live session');
+});
+
+test('a fresh sign-in releases whatever session the browser still holds', () => {
+  const auth = withoutComments(srcFiles.find((f) => f.rel.endsWith('src/services/authService.ts')).text);
+  const handoff = auth.slice(auth.indexOf('async function signInWithGoogle'));
+  const oauth = handoff.indexOf('signInWithOAuth');
+  const stale = handoff.indexOf('inspectStaleSession');
+  assert(stale > -1 && oauth > -1 && stale < oauth,
+    'the stale-session check must run before the redirect, not after it');
+  assert(/getSession\(\{ forceFetch: true \}\)/.test(auth.slice(0, auth.indexOf('signInWithOAuth'))),
+    'the check must ask the server, not the SDK\'s in-memory session cache');
+});
+
+test('sign-out is believed only after the server agrees the session is gone', () => {
+  const auth = withoutComments(srcFiles.find((f) => f.rel.endsWith('src/services/authService.ts')).text);
+  const signOut = auth.slice(auth.indexOf('export async function signOut'), auth.indexOf('export async function getSession'));
+  const revoke = signOut.indexOf('supabase.auth.signOut()');
+  const verify = signOut.indexOf('sessionAfterExit()');
+  assert(revoke > -1 && verify > revoke,
+    'the library\'s own answer cannot confirm this browser gave the session up');
+  assert(/sessionCleared: !stillHeld/.test(signOut),
+    'the reported outcome must come from that verification, not from a constant');
+});
+
+test('whose books these are is visible from every screen of the app', () => {
+  const app = withoutComments(srcFiles.find((f) => f.rel.endsWith('src/App.tsx')).text);
+  const shells = app.split('<Sidebar').slice(1);
+  assertEqual(shells.length, 2, 'both authenticated shells are expected to carry the identity');
+  for (const shell of shells) {
+    const tag = shell.slice(0, shell.indexOf('/>'));
+    assert(/accountEmail=\{user\?\.email\}/.test(tag), 'the sidebar must name the signed-in account');
+    assert(/onSignOut=\{signOutNow\}/.test(tag), 'and offer the way out of it');
+  }
 });
 
 test('a load that started before sign-out can never write state', () => {

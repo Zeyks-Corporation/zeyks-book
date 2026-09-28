@@ -59,8 +59,8 @@ export const AuthModal: React.FC<{
       }
       // OAuth is a redirect: when no user comes back synchronously, the
       // browser is on its way to Google and the next state change is the
-      // one we listen for in App. Surfaces only as a callout when the
-      // library actually raised a failure (caught below).
+      // one we listen for in App.
+      if (res.error) setError(res.error);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Google sign-in failed.');
     } finally {

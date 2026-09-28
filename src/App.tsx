@@ -843,6 +843,7 @@ export default function App() {
           issueCount={0}
           lockedTabs={lockedTabs}
           onHome={() => navigate('/?landing=1')}
+          accountEmail={user?.email} onSignOut={signOutNow} signingOut={signingOut}
         />
         <div className="lg:pl-60">
           <Header
@@ -990,6 +991,7 @@ export default function App() {
         issueCount={integrityIssues.filter((i) => i.severity === 'ERROR').length}
         lockedTabs={lockedTabs}
         onHome={() => navigate('/?landing=1')}
+        accountEmail={user?.email} onSignOut={signOutNow} signingOut={signingOut}
       />
 
       <div className="lg:pl-60">

@@ -8,10 +8,19 @@
  * Google-only sign-in. Email + password and magic-link / OTP have been turned
  * off on the Neon Auth side; this file no longer exposes them, so the only way
  * the front door opens is signInWithGoogle().
+ *
+ * One limit that cannot be coded around: Google is Neon's shared OAuth app
+ * (`isShared: true` in `neon_auth.project_config`), and the authorization URL
+ * it builds carries no `prompt` parameter. Google therefore answers with the
+ * account this browser is already signed in to, without ever showing a chooser
+ * — and Neon's provider config exposes only client id/secret, so nothing here
+ * can ask for one. What this file *can* guarantee is that a sign-in never
+ * starts on top of a session the server still holds, and that a sign-out is
+ * only reported once the server agrees.
  */
 
 import { supabase, claimProfile, fetchMyProfile } from '../lib/neon';
-import { resolveSignOutOutcome, ownProfileRow } from '../lib/session';
+import { resolveSignInHandoff, resolveSignOutOutcome, ownProfileRow } from '../lib/session';
 import type { SignOutKind, SignOutOutcome } from '../lib/session';
 
 /** What Neon Auth's getSession returns. We name it here so callers can read it. */
@@ -51,12 +60,46 @@ function cleanAuthError(message: string | null | undefined): string | null {
 const GENERIC_SIGNIN = 'Sign-in is temporarily unavailable. Please try again later.';
 
 /**
+ * Ask the auth server what this browser is still holding, and let go of it.
+ *
+ * Returns the facts `resolveSignInHandoff` decides from. Every read is
+ * `forceFetch`: the SDK answers from an in-memory cache otherwise, and a cache
+ * filled earlier in this page's life is exactly the stale answer being cleared.
+ */
+async function inspectStaleSession(): Promise<{
+  reachable: boolean; hadSession: boolean; signOutError: string | null;
+}> {
+  let read;
+  try {
+    read = await supabase.auth.getSession({ forceFetch: true });
+  } catch {
+    return { reachable: false, hadSession: false, signOutError: null };
+  }
+  if (read.error) return { reachable: false, hadSession: false, signOutError: null };
+  if (!read.data.session?.user) return { reachable: true, hadSession: false, signOutError: null };
+  try {
+    const { error } = await supabase.auth.signOut();
+    return { reachable: true, hadSession: true, signOutError: error?.message ?? null };
+  } catch (e) {
+    return { reachable: true, hadSession: true, signOutError: e instanceof Error ? e.message : 'sign-out error' };
+  }
+}
+
+/**
  * Google OAuth. The browser is redirected to Google's consent screen, then back
  * to the Neon Auth callback. The session resolves asynchronously — App.tsx's
  * `onAuthStateChange` listener picks it up; this function returns `user: null`
  * on success because the redirect has not completed yet.
+ *
+ * A session the server still holds is ended first. The person clicking this
+ * button asked to sign in; if the browser answered from a session it never
+ * released, they would come back as the same account they were trying to leave.
  */
 export async function signInWithGoogle(): Promise<AuthResult> {
+  const handoff = resolveSignInHandoff(await inspectStaleSession());
+  if (!handoff.proceed) {
+    return { user: null, session: null, error: handoff.error };
+  }
   try {
     const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
     if (error) {
@@ -70,32 +113,61 @@ export async function signInWithGoogle(): Promise<AuthResult> {
 }
 
 /**
+ * Ask the server whether this browser is still signed in.
+ *
+ * Three answers, because "no" and "I cannot tell" are different facts: an
+ * unreachable auth server must not lock a person into an account they just
+ * left, but a server that still names a user is proof the sign-out did not
+ * take — and the next reload would quietly put them back in it.
+ */
+async function sessionAfterExit(): Promise<'gone' | 'present' | 'unknown'> {
+  try {
+    const { data, error } = await supabase.auth.getSession({ forceFetch: true });
+    if (error) return 'unknown';
+    return data.session?.user ? 'present' : 'gone';
+  } catch {
+    return 'unknown';
+  }
+}
+
+/**
  * Sign the current user out cleanly. Neon Auth has only a single-device scope
  * model — the JWT's 15-minute expiry is the bound on tokens already issued.
  */
 export async function signOut(_kind: SignOutKind = 'this-device'): Promise<SignOutOutcome> {
+  let firstError: string | null = null;
   try {
     const { error } = await supabase.auth.signOut();
-    if (error) {
-      return resolveSignOutOutcome({ firstError: cleanAuthError(error.message), localRetryError: null, sessionCleared: false });
-    }
-    return resolveSignOutOutcome({ firstError: null, localRetryError: null, sessionCleared: true });
+    firstError = error ? cleanAuthError(error.message) : null;
   } catch (e) {
-    return resolveSignOutOutcome({
-      firstError: cleanAuthError(e instanceof Error ? e.message : 'Sign out error'),
-      localRetryError: null,
-      sessionCleared: false,
-    });
+    firstError = cleanAuthError(e instanceof Error ? e.message : 'Sign out error');
   }
+  // A clean answer from `signOut()` is the library's opinion, not the server's.
+  // Only the read above can say whether this browser really gave the session up.
+  const stillHeld = await sessionAfterExit() === 'present';
+  return resolveSignOutOutcome({
+    firstError,
+    localRetryError: null,
+    sessionCleared: !stillHeld,
+  });
 }
 
-/** Retrieve the current Neon session, if any. */
+/**
+ * Who the auth server says is signed in, right now.
+ *
+ * `forceFetch` because this is the read the whole application is keyed off:
+ * whose books to load, whose name to show, whether to show the front door at
+ * all. Without it the SDK answers from a session cache filled earlier in this
+ * page's life, so a session that ended elsewhere — revoked, expired, replaced
+ * by another tab's sign-in — keeps running this screen against the wrong
+ * person's data.
+ */
 export async function getSession(): Promise<{
   session: { user: NeonSession['user'] } | null;
   error: string | null;
 }> {
   try {
-    const { data, error } = await supabase.auth.getSession();
+    const { data, error } = await supabase.auth.getSession({ forceFetch: true });
     if (error) return { session: null, error: cleanAuthError(error.message) };
     if (!data.session?.user) return { session: null, error: null };
     return {

@@ -9,7 +9,10 @@
  *   2. Did the sign-out actually work? `signOut()` can fail after the server
  *      revoke, so the outcome is decided from what the client reports about its
  *      stored session — never assumed.
- *   3. May an in-flight book load still write state? A load that began before a
+ *   3. May a sign-in start at all? A fresh hand-off on top of a session the
+ *      server still holds is answered by that session, so the previous person
+ *      comes back and it looks like the app ignores who signed in.
+ *   4. May an in-flight book load still write state? A load that began before a
  *      sign-out must never repopulate the books it was fetching, so each load
  *      carries the epoch it started in and is dropped once the epoch moves.
  */
@@ -53,7 +56,7 @@ export interface SignOutAttempt {
   firstError: string | null;
   /** Error from the fallback local-only attempt, if one was needed. */
   localRetryError: string | null;
-  /** Whether the client's own stored session is gone afterwards. */
+  /** Whether the session really is gone afterwards, as the server last said. */
   sessionCleared: boolean;
 }
 
@@ -81,6 +84,46 @@ export function resolveSignOutOutcome(attempt: SignOutAttempt): SignOutOutcome {
     cleared: false,
     error: attempt.localRetryError ?? attempt.firstError
       ?? 'This device could not be signed out. Close the browser to end the session.',
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Sign-in handoff                                                            */
+/* -------------------------------------------------------------------------- */
+
+export interface StaleSessionReport {
+  /** Whether the auth server answered the session read at all. */
+  reachable: boolean;
+  /** Whether the browser was still carrying a live session. */
+  hadSession: boolean;
+  /** Error from the sign-out that was attempted, when one was needed. */
+  signOutError: string | null;
+}
+
+/**
+ * Decide whether a fresh Google hand-off may start.
+ *
+ * The front door only appears when this app believes there is no session, and
+ * that belief can be wrong: the boot read failed, another tab signed in, the
+ * person came back to a tab left open overnight. Starting OAuth on top of a
+ * session the server still holds gets that session back — which is what "it
+ * keeps using the same session" looks like from the other side of the screen.
+ *
+ * Three answers, in order of what is knowable:
+ *   - the server could not be reached → there is nothing to clear, and the
+ *     redirect will report its own failure, so proceed;
+ *   - nobody is signed in → proceed;
+ *   - somebody is signed out of, but the sign-out failed → do not proceed. A
+ *     sign-in started here is answered by the account that is already there,
+ *     so the honest move is to say so instead of performing a no-op.
+ */
+export function resolveSignInHandoff(report: StaleSessionReport): { proceed: boolean; error: string | null } {
+  const held = report.reachable && report.hadSession && Boolean(report.signOutError);
+  if (!held) return { proceed: true, error: null };
+  return {
+    proceed: false,
+    error: 'This browser is still signed in to another account and could not be '
+      + 'signed out. Check your connection and try again.',
   };
 }
 

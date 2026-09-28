@@ -61,7 +61,18 @@ export const Sidebar: React.FC<{
   lockedTabs?: ViewTab[];
   /** Jump out to the public landing page. */
   onHome?: () => void;
-}> = ({ currentTab, onSelect, businessName, isOpenMobile, onCloseMobile, issueCount, lockedTabs = [], onHome }) => {
+  /**
+   * The signed-in account, shown at the foot of the list of books.
+   *
+   * A laptop in a shop is used by more than one person, and a session outlives
+   * the tab that opened it, so the first question on any screen is "whose books
+   * are these". The address answers it without anyone having to open Settings.
+   */
+  accountEmail?: string | null;
+  /** End this browser's session. Given only when there is a session to end. */
+  onSignOut?: () => void;
+  signingOut?: boolean;
+}> = ({ currentTab, onSelect, businessName, isOpenMobile, onCloseMobile, issueCount, lockedTabs = [], onHome, accountEmail, onSignOut, signingOut = false }) => {
   const isDesktop = useIsDesktop();
   // Closed on a phone means gone: `inert` takes the whole drawer out of the tab
   // order and away from assistive technology, which `-translate-x-full` cannot.
@@ -147,6 +158,23 @@ export const Sidebar: React.FC<{
           })}
         </ul>
       </nav>
+
+      {accountEmail && (
+        <div className="border-t border-[var(--separator)] p-3 flex items-center gap-2">
+          <div className="min-w-0 grow">
+            <p className="text-[11px] uppercase tracking-[0.14em] text-[var(--label-tertiary)]">Signed in</p>
+            <p className="text-[13px] text-[var(--label)] truncate" title={accountEmail}>{accountEmail}</p>
+          </div>
+          {onSignOut && (
+            <button
+              type="button" onClick={onSignOut} disabled={signingOut}
+              className="shrink-0 rounded-[10px] min-h-[36px] px-2.5 text-[13px] font-medium text-[var(--label-secondary)] border border-[var(--separator)] hover:bg-[var(--fill-secondary)] disabled:opacity-50"
+            >
+              {signingOut ? 'Signing out…' : 'Sign out'}
+            </button>
+          )}
+        </div>
+      )}
     </aside>
   </>
   );
