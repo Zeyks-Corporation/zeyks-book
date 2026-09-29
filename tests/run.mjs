@@ -6329,6 +6329,90 @@ test('deadStock: cutoff is inclusive — movement on the boundary counts as rece
   assertEqual(dead.length, 0, 'movement on the cutoff date disqualifies dead stock');
 });
 
+/* ---------------------------------------------------------------------- */
+/* The profile claim: a first sign-in has to create its own row             */
+/*                                                                          */
+/* claim_profile() moved an account's rows onto its new auth id *before*    */
+/* inserting that id into public.profiles, so the first relink UPDATE died  */
+/* on the foreign key into profiles(id). create_business() wrapped the      */
+/* claim in `exception when others then null`, so the real cause vanished   */
+/* and the user read "No profile exists for the current user". Deleting an  */
+/* auth user and signing in again reproduced it every time, because the     */
+/* email comes back with a brand-new id over a profile row keyed on the old */
+/* one. These pin the order, the coverage and the error, not the fix.       */
+/* ---------------------------------------------------------------------- */
+
+const migrationSqlFiles = readdirSync(path.join(root, 'migration', 'neon'))
+  .filter((f) => f.endsWith('.sql'))
+  .sort();
+const CLAIM_SQL = '023_claim_relink_order.sql';
+
+test('claim_profile creates the profile row before anything is pointed at it', () => {
+  const sql = readProjectFile(`migration/neon/${CLAIM_SQL}`);
+  const insert = sql.search(/insert into public\.profiles/im);
+  const firstRelink = sql.search(/update public\.business_memberships/im);
+  const dropStale = sql.search(/delete from public\.profiles where id = any/im);
+  assert(insert > 0 && firstRelink > 0 && dropStale > 0, 'the claim lost one of its three steps');
+  assert(insert < firstRelink,
+    'a child row cannot reference an id that is not in profiles yet');
+  assert(firstRelink < dropStale, 'the stale shell row may only go after its rows moved');
+});
+
+test('every table with a foreign key into profiles is relinked by the claim', () => {
+  const sql = readProjectFile(`migration/neon/${CLAIM_SQL}`);
+  const referenced = new Set();
+  for (const file of migrationSqlFiles) {
+    const body = readProjectFile(`migration/neon/${file}`);
+    for (const block of body.matchAll(/create table(?: if not exists)? public\.(\w+)[\s\S]*?\n\);/gi)) {
+      if (/references public\.profiles/i.test(block[0])) referenced.add(block[1]);
+    }
+  }
+  assert(referenced.size >= 9, `the scan found only: ${[...referenced].join(', ')}`);
+  for (const table of referenced) {
+    assert(new RegExp(`update public\\.${table}\\b[^\\n]*\\bset\\b`, 'i').test(sql),
+      `claim_profile no longer moves ${table}, so its stale row can never be dropped`);
+  }
+});
+
+test('a failed profile claim reaches the user instead of becoming a placeholder', () => {
+  const sql = readProjectFile(`migration/neon/${CLAIM_SQL}`);
+  const start = sql.search(/create or replace function public\.create_business/im);
+  assert(start > 0, 'create_business is missing from the claim fix');
+  const fn = sql.slice(start);
+  assert(!/exception when others/i.test(fn), 'the claim failure must not be swallowed again');
+  assert(/perform public\.claim_profile\(\);/i.test(fn), 'Start must still self-heal a missing profile');
+  assert(!/No profile exists for the current user/i.test(fn),
+    'the message that hid the real cause must not come back');
+});
+
+test('the claim opens the append-only guards only for its own relink', () => {
+  const sql = readProjectFile(`migration/neon/${CLAIM_SQL}`);
+  const list = sql.match(/v_guarded\s+text\[\]\s*:=\s*array\s*\[([\s\S]*?)\]/i);
+  assert(list, 'the relink must name the tables whose guards it opens');
+  const tables = list[1].replace(/[\s']/g, '');
+  for (const table of ['journal_entries', 'sales', 'purchases', 'expenses', 'payments']) {
+    assert(tables.includes(table), `${table} rejects UPDATE and must be listed`);
+  }
+  const disable = sql.search(/disable trigger user/i);
+  const enable = sql.search(/enable trigger user/i);
+  const firstUpdate = sql.search(/update public\.business_memberships/im);
+  const dropStale = sql.search(/delete from public\.profiles where id = any/im);
+  assert(disable > 0 && enable > 0, 'the guards must be closed as well as opened');
+  assert(disable < firstUpdate && firstUpdate < enable, 'the window is exactly the relink');
+  assert(enable < dropStale, 'the stale row is deleted with every guard back in place');
+});
+
+test('no later migration quietly redefines the claim functions', () => {
+  for (const fnName of ['claim_profile', 'create_business']) {
+    let last = '';
+    for (const file of migrationSqlFiles) {
+      if (new RegExp(`create (or replace )?function public\\.${fnName}\\b`, 'i')
+        .test(readProjectFile(`migration/neon/${file}`))) last = file;
+    }
+    assertEqual(last, CLAIM_SQL, `${fnName} is redefined after the fix`);
+  }
+});
+
 
 await Promise.all(pendingTests);
 
