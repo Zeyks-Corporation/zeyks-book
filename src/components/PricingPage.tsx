@@ -33,7 +33,7 @@ const FAQS = [
   },
   {
     q: 'Where are my financial records stored?',
-    a: 'Records live in a managed Neon Postgres database; sign-in is through Google via Neon Auth, and each account only ever sees the books it owns. You can download a JSON snapshot from Settings.',
+    a: 'Records live in a managed Neon Postgres database; sign-in is by email and password through Neon Auth, and each account only ever sees the books it owns. You can download a JSON snapshot from Settings.',
   },
   {
     q: 'Is there a free trial or refund policy?',

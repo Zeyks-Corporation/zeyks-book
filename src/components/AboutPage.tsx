@@ -37,7 +37,7 @@ export const AboutPage: React.FC<{
             Accurate accounting for Nepali enterprises
           </h1>
           <p className="mt-5 text-[17px] leading-[26px] text-[var(--label-secondary)]">
-            Zeyks Book is a web-based double-entry bookkeeping app for businesses in Nepal. It supports Bikram Sambat and Gregorian dates, NPR amounts, and printable A4 reports. The interactive demo lets you explore sample books before signing up.
+            Zeyks Book is a web-based double-entry bookkeeping app for businesses in Nepal. It supports Bikram Sambat and Gregorian dates, NPR amounts, and printable A4 reports. The interactive demo lets you explore sample books before you sign in.
           </p>
         </div>
 
@@ -63,7 +63,7 @@ export const AboutPage: React.FC<{
         <div className="mt-16 bg-[var(--bg)] border border-[var(--separator)] rounded-[14px] p-8">
           <h2 className="text-[22px] font-bold text-[var(--label)]">Designed with precision</h2>
           <p className="mt-3 text-[15px] leading-[24px] text-[var(--label-secondary)]">
-            Zeyks Book stores business records in a managed Neon Postgres database and signs in through Neon Auth with a Google account. Posted journal entries and settlements follow the app's accounting rules. Downloadable JSON backups are available in Settings; restore and a published recovery guarantee are not available. A4 reports are provided as working documents, and should be reviewed with an accountant before statutory use.
+            Zeyks Book stores business records in a managed Neon Postgres database and signs in through Neon Auth with the email and password issued for each account. Posted journal entries and settlements follow the app's accounting rules. Downloadable JSON backups are available in Settings; restore and a published recovery guarantee are not available. A4 reports are provided as working documents, and should be reviewed with an accountant before statutory use.
           </p>
           <div className="mt-6">
             <Button variant="primary" size="md" onClick={onSignIn}>

@@ -5,18 +5,14 @@
  * call sites can be migrated without a wider rewrite. The browser client lives
  * in `lib/neon.ts`; this file is the only place the auth flow is shaped.
  *
- * Google-only sign-in. Email + password and magic-link / OTP have been turned
- * off on the Neon Auth side; this file no longer exposes them, so the only way
- * the front door opens is signInWithGoogle().
+ * Email + password only, and only for accounts the owner created. There is no
+ * self sign-up (`disable-sign-up` is on in Neon Auth) and no OAuth provider, so
+ * the only way the front door opens is signInWithEmail() with credentials handed
+ * out by an admin.
  *
- * One limit that cannot be coded around: Google is Neon's shared OAuth app
- * (`isShared: true` in `neon_auth.project_config`), and the authorization URL
- * it builds carries no `prompt` parameter. Google therefore answers with the
- * account this browser is already signed in to, without ever showing a chooser
- * — and Neon's provider config exposes only client id/secret, so nothing here
- * can ask for one. What this file *can* guarantee is that a sign-in never
- * starts on top of a session the server still holds, and that a sign-out is
- * only reported once the server agrees.
+ * What this file guarantees: a sign-in never starts on top of a session the
+ * server still holds, the identity it reports is the one the server just
+ * granted, and a sign-out is only reported once the server agrees.
  */
 
 import { supabase, claimProfile, fetchMyProfile } from '../lib/neon';
@@ -42,11 +38,12 @@ function cleanAuthError(message: string | null | undefined): string | null {
   if (lower.includes('rate') || lower.includes('too many')) {
     return 'Too many attempts. Please wait a minute and try again.';
   }
+  if (lower.includes('password') || lower.includes('credential')
+    || lower.includes('unauthorized') || lower.includes('401')) {
+    return 'That email and password do not match an account.';
+  }
   if (lower.includes('network') || lower.includes('fetch')) {
     return 'You appear to be offline. Check your connection and try again.';
-  }
-  if (lower.includes('invalid') || lower.includes('expired')) {
-    return 'That code is invalid or has expired.';
   }
   if (lower.includes('not found') || lower.includes('no user')) {
     return 'No account exists for that email.';
@@ -86,27 +83,34 @@ async function inspectStaleSession(): Promise<{
 }
 
 /**
- * Google OAuth. The browser is redirected to Google's consent screen, then back
- * to the Neon Auth callback. The session resolves asynchronously — App.tsx's
- * `onAuthStateChange` listener picks it up; this function returns `user: null`
- * on success because the redirect has not completed yet.
+ * Email + password sign-in, for an account the owner created.
  *
- * A session the server still holds is ended first. The person clicking this
- * button asked to sign in; if the browser answered from a session it never
- * released, they would come back as the same account they were trying to leave.
+ * The person typing the credentials is who the app becomes, so the identity
+ * handed back is read from the server after the sign-in rather than taken from
+ * whatever session the SDK still remembers. A session this browser is holding
+ * is ended first: starting a sign-in on top of one can be answered by the
+ * account that is already there.
  */
-export async function signInWithGoogle(): Promise<AuthResult> {
+export async function signInWithEmail(email: string, password: string): Promise<AuthResult> {
+  const address = email.trim().toLowerCase();
+  if (!address || !password) {
+    return { user: null, session: null, error: 'Enter your email and password.' };
+  }
   const handoff = resolveSignInHandoff(await inspectStaleSession());
   if (!handoff.proceed) {
     return { user: null, session: null, error: handoff.error };
   }
   try {
-    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
+    const { error } = await supabase.auth.signInWithPassword({ email: address, password });
     if (error) {
       return { user: null, session: null, error: cleanAuthError(error.message) ?? GENERIC_SIGNIN };
     }
-    // Redirect is in flight. The session will arrive via onAuthStateChange.
-    return { user: null, session: null, error: null };
+    const { session, error: readError } = await getSession();
+    if (readError) return { user: null, session: null, error: readError };
+    if (!session?.user) {
+      return { user: null, session: null, error: GENERIC_SIGNIN };
+    }
+    return { user: { ...session.user }, session, error: null };
   } catch (e) {
     return { user: null, session: null, error: cleanAuthError(e instanceof Error ? e.message : null) ?? GENERIC_SIGNIN };
   }

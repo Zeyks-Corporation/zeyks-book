@@ -72,6 +72,68 @@ type SupabaseShape = {
 export const supabase = baseClient as unknown as SupabaseShape;
 
 /**
+ * The Neon Auth endpoint, derived from the database URL exactly the way the SDK
+ * does it: `neonauth` is inserted after the first host label and the path is
+ * kept. Deriving it instead of reading `VITE_NEON_AUTH_URL` means the admin API
+ * can never point at a different endpoint from the one the SDK signs into.
+ */
+function authBaseUrl(): string {
+  const parsed = new URL(url);
+  const [first, ...rest] = parsed.hostname.split('.');
+  parsed.hostname = `${first}.neonauth.${rest.join('.')}`;
+  return `${parsed.protocol}//${parsed.host}${parsed.pathname.replace(/\/+$/, '')}/auth`;
+}
+
+/**
+ * Create a login for a person the admin is onboarding.
+ *
+ * Self sign-up is disabled in the auth project, so this admin endpoint is the
+ * only way an account comes into existence. The request is authenticated by the
+ * admin's own session cookie (`HttpOnly; SameSite=None`), which is why
+ * `credentials: 'include'` is required and why it only works from a signed-in
+ * admin's browser.
+ *
+ * A password is the one secret that leaves this process in plaintext — over TLS,
+ * to the service that stores it hashed. Nothing here logs or caches it.
+ */
+export async function createAuthUser(opts: {
+  email: string;
+  name: string;
+  password: string;
+}): Promise<{ id: string; error: null } | { id: null; error: string }> {
+  let res: Response;
+  try {
+    res = await fetch(`${authBaseUrl()}/admin/create-user`, {
+      method: 'POST',
+      credentials: 'include',
+      cache: 'no-store',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: opts.email,
+        name: opts.name,
+        password: opts.password,
+      }),
+    });
+  } catch {
+    return { id: null, error: 'Could not reach the sign-in service. Check your connection and try again.' };
+  }
+  const body: unknown = await res.json().catch(() => null);
+  const created = (body as { user?: { id?: string } } | null)?.user?.id;
+  const message = (body as { error?: { message?: string } } | null)?.error?.message;
+  if (res.ok && created) return { id: created, error: null };
+  if (/exist/i.test(message ?? '')) {
+    return { id: null, error: 'That email already has a sign-in account.' };
+  }
+  if (res.status === 403) {
+    return {
+      id: null,
+      error: 'The sign-in service does not let this account create users. It needs the admin role there, which is granted outside the app.',
+    };
+  }
+  return { id: null, error: message ? `Sign-in account failed: ${message}` : 'The sign-in account could not be created.' };
+}
+
+/**
  * Run the Neon-side claim_profile() RPC once after first sign-in to create
  * (or relink) a public.profiles row keyed on the Neon Auth user id. Returns
  * the resulting profiles.id or null if the claim failed.

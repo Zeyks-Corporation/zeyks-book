@@ -101,17 +101,17 @@ export interface StaleSessionReport {
 }
 
 /**
- * Decide whether a fresh Google hand-off may start.
+ * Decide whether a fresh sign-in may start.
  *
  * The front door only appears when this app believes there is no session, and
  * that belief can be wrong: the boot read failed, another tab signed in, the
- * person came back to a tab left open overnight. Starting OAuth on top of a
- * session the server still holds gets that session back — which is what "it
- * keeps using the same session" looks like from the other side of the screen.
+ * person came back to a tab left open overnight. Signing in on top of a session
+ * the server still holds gets that session back — which is what "it keeps using
+ * the same session" looks like from the other side of the screen.
  *
  * Three answers, in order of what is knowable:
  *   - the server could not be reached → there is nothing to clear, and the
- *     redirect will report its own failure, so proceed;
+ *     sign-in will report its own failure, so proceed;
  *   - nobody is signed in → proceed;
  *   - somebody is signed out of, but the sign-out failed → do not proceed. A
  *     sign-in started here is answered by the account that is already there,

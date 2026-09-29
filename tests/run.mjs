@@ -3663,13 +3663,22 @@ test('a sign-in starts unless the browser is provably still held by another sess
 
 test('a fresh sign-in releases whatever session the browser still holds', () => {
   const auth = withoutComments(srcFiles.find((f) => f.rel.endsWith('src/services/authService.ts')).text);
-  const handoff = auth.slice(auth.indexOf('async function signInWithGoogle'));
-  const oauth = handoff.indexOf('signInWithOAuth');
-  const stale = handoff.indexOf('inspectStaleSession');
-  assert(stale > -1 && oauth > -1 && stale < oauth,
-    'the stale-session check must run before the redirect, not after it');
-  assert(/getSession\(\{ forceFetch: true \}\)/.test(auth.slice(0, auth.indexOf('signInWithOAuth'))),
-    'the check must ask the server, not the SDK\'s in-memory session cache');
+  const signInAt = auth.indexOf('export async function signInWithEmail');
+  assert(signInAt > -1, "the sign-in entry point is signInWithEmail()");
+  const body = auth.slice(signInAt, auth.indexOf('export async function', signInAt + 10));
+  const password = body.indexOf('signInWithPassword');
+  const stale = body.indexOf('inspectStaleSession()');
+  assert(stale > -1 && password > -1 && stale < password,
+    'the stale-session check must run before the credentials are sent, not after it');
+  const inspect = auth.slice(
+    auth.indexOf('async function inspectStaleSession'), signInAt);
+  assert(/getSession\(\{ forceFetch: true \}\)/.test(inspect),
+    "the check must ask the server, not the SDK's in-memory session cache");
+  // The person typed an email and a password; the identity the screen is handed
+  // has to be the session the server just granted, not a cached one.
+  assert(body.indexOf('await getSession()') > password,
+    'the signed-in user is re-read from the server after the password check');
+  assert(!/signInWithOAuth/.test(body), 'no OAuth hand-off is left in the sign-in path');
 });
 
 test('sign-out is believed only after the server agrees the session is gone', () => {
@@ -5425,23 +5434,29 @@ test('the sheet no longer claims these books record no terms', () => {
 /* ---------------------------------------------------------------------- */
 /* Stage 17b: the sign-in screen                                             */
 /*                                                                          */
-/* A presentation change is still a change somebody can get wrong, so the    */
-/* things that matter are pinned: one primary action, no new colours, the    */
-/* reveal control cannot submit the form, and — most of all — the redesign   */
-/* did not grow a second path to the session.                               */
+/* Accounts are issued, not created: the screen has one job — send an email  */
+/* and a password through authService and nothing else. So the things that   */
+/* matter are pinned: one primary action, no new colours, the reveal control */
+/* cannot submit the form, no self sign-up or reset path, and — most of all —*/
+/* the screen did not grow a second path to the session.                     */
 /* ---------------------------------------------------------------------- */
 
 const authSource = srcFiles.find((f) => f.rel.endsWith('src/components/AuthModal.tsx'));
 const uiSource = srcFiles.find((f) => f.rel.endsWith('src/components/ui.tsx'));
 
 test('the sign-in screen offers exactly one primary action', () => {
-  // Email login is gone. The one primary action is the Google button — there
-  // is no form, no submit, and no second path to a session.
   const primaryButtons = authSource.text.match(/<Button[^>]*variant="primary"/g) ?? [];
-  // Count the affordance itself: the button label "Continue with Google".
-  const googleButtonLabels = authSource.text.match(/['"`]Continue with Google['"`]/g) ?? [];
-  assertEqual(primaryButtons.length, 0, 'no primary Button is needed; Google is the sole entry point');
-  assertEqual(googleButtonLabels.length, 1, 'and there is exactly one Google sign-in affordance');
+  assertEqual(primaryButtons.length, 1, 'the credentials form has exactly one primary action');
+  assert(/type="submit"/.test(authSource.text), 'and it is the form submit');
+  assertEqual((authSource.text.match(/<button\b/g) ?? []).length, 1,
+    'the only raw button is the password reveal');
+  // A control inside a form defaults to type="submit": clicking the eye would
+  // sign the person in with a half-typed password.
+  const reveal = authSource.text.slice(authSource.text.indexOf('<button'),
+    authSource.text.indexOf('aria-label'));
+  assert(/type="button"/.test(reveal), 'the reveal control must never submit the form');
+  assert(!/Continue with Google|signInWithOAuth|GoogleMark/.test(authSource.text),
+    'no OAuth affordance is left on the screen');
   assert(/size\?: 'sm' \| 'md' \| 'lg'/.test(uiSource.text), 'Button must carry the size scale');
   assert(/size = 'sm'/.test(uiSource.text), 'and keep every existing caller at the old density');
 });
@@ -5455,24 +5470,37 @@ test('the sign-in screen keeps the palette it was built with', () => {
   assert(/tracking-\[0\.22em\]/.test(authSource.text), 'the wordmark carries the product name');
 });
 
-test('no password fields are rendered on the sign-in screen', () => {
-  // The reveal-toggle test it replaces: with no passwords, there is no
-  // `type="password"` input, no `showPassword` state, and no autofill hooks.
-  assert(!/type="password"/.test(authSource.text), 'no password input is rendered');
-  assert(!/showPassword/.test(authSource.text), 'the reveal control is not needed');
-  assert(!/autoComplete="(?:new-password|current-password|email|name)"/.test(authSource.text),
-    'no email or name autofill hooks either — Google carries identity');
+test('the credentials form asks for exactly the two fields an issued account has', () => {
+  assert(/type="email"/.test(authSource.text) && /autoComplete="username"/.test(authSource.text),
+    'the email field must be autofillable for the browser to help');
+  assert(/type=\{showPassword \? 'text' : 'password'\}/.test(authSource.text)
+    && /autoComplete="current-password"/.test(authSource.text),
+    'the password field is a password field, revealed only on request');
+  assert(!/autoComplete="new-password"/.test(authSource.text),
+    'this is a sign-in screen, not a password change');
+  assert(/<form onSubmit=\{handleSubmit\}/.test(authSource.text) && /noValidate/.test(authSource.text),
+    'Enter submits, and the app — not the browser — decides what a valid entry is');
   // A disabled-while-busy lock still belongs on the only action.
-  assert(/disabled=\{busy\}/.test(authSource.text), 'the Google button must lock while in flight');
-  assert(authSource.text.match(/disabled=\{busy\}/g).length === 1,
-    'and the lock must be on that single action, not duplicated');
+  const locks = authSource.text.match(/disabled=\{busy\}/g) ?? [];
+  assertEqual(locks.length, 1, 'the lock must be on that single action, not duplicated');
+});
+
+test('no route to creating or recovering an account is offered', () => {
+  // The owner's rule: the Zeyks Book team issues accounts. Nothing on this
+  // screen may sign anybody up, or email a link to get back in.
+  for (const forbidden of ['signUp(', 'signUp', 'resetPassword', 'Forgot', 'forgot',
+    'Create an account', 'Sign up', 'verifyOtp(']) {
+    assert(!authSource.text.includes(forbidden),
+      `the sign-in screen must not offer ${forbidden} — accounts are issued`);
+  }
 });
 
 test('AuthModal still leaves through authService and has no legacy-auth back door', () => {
-  // Email/password/OTP entry points are gone. The screen leaves the session
-  // through signInWithGoogle only.
-  assert(authSource.text.includes('signInWithGoogle('), 'AuthModal must sign in via Google');
-  for (const gone of ['signIn(', 'signUp(', 'signInWithPassword(', 'signInWithOtp(', 'verifyOtp(', 'requestOtp(']) {
+  // The screen leaves the session through signInWithEmail only; every other
+  // auth entry point stays unreachable from here.
+  assert(authSource.text.includes('signInWithEmail('), 'AuthModal must sign in via authService');
+  for (const gone of ['signIn(', 'signUp(', 'signInWithPassword(', 'signInWithOtp(',
+    'verifyOtp(', 'requestOtp(', 'signInWithOAuth(']) {
     assert(!authSource.text.includes(gone), `AuthModal must not call authService.${gone}`);
   }
   const legAuthP = Buffer.from('c3VwYWJhc2U=', 'base64').toString();
@@ -5487,6 +5515,22 @@ test('AuthModal still leaves through authService and has no legacy-auth back doo
   assert(/dismissible=\{false\}/.test(authSource.text), 'the sign-in screen is not dismissible');
   assert(/dismissible = true/.test(uiSource.text) && /\{dismissible && \(/.test(uiSource.text),
     'every other dialog keeps its close button');
+});
+
+test('a password sign-in in this tab still loads that person’s books', () => {
+  // OAuth used to end in a page load, which re-ran the boot session read.
+  // Password sign-in resolves in the same tab, and the Neon adapter's
+  // onAuthStateChange ignores its own tab's broadcasts — so waiting for an
+  // event here would leave the screen authenticated with nothing behind it.
+  const app = withoutComments(srcFiles.find((f) => f.rel.endsWith('src/App.tsx')).text);
+  const handler = app.slice(app.indexOf('const handleSignedIn'),
+    app.indexOf('const handleOnboardingComplete'));
+  assert(/setAuthEvent\(/.test(handler),
+    'the sign-in screen must start the guarded load chain itself');
+  assert(/action: 'reload-books'/.test(handler),
+    'and record it as the event that reloads the books');
+  assert(/sessionOwnerRef\.current !== authUser\.id/.test(app),
+    'a session that turns out to belong to somebody else is still emptied first');
 });
 
 /* ---------------------------------------------------------------------- */
@@ -6411,6 +6455,100 @@ test('no later migration quietly redefines the claim functions', () => {
     }
     assertEqual(last, CLAIM_SQL, `${fnName} is redefined after the fix`);
   }
+});
+
+/* ---------------------------------------------------------------------- */
+/* Stage 22: accounts the admin issues                                       */
+/*                                                                          */
+/* Sign-in is email + password with public sign-up disabled, so the only     */
+/* door a new account comes through is /king. What can go wrong here is a     */
+/* half-created person: a login with no app row, an app row with no login,    */
+/* or a plan the admin chose being overwritten the first time the customer    */
+/* signs in. These pin the order, the gate, and the report.                  */
+/* ---------------------------------------------------------------------- */
+
+const MANAGED_SQL = '024_managed_accounts.sql';
+
+test('an issued account is admin-gated, validated, and keyed on its own login', () => {
+  const sql = readProjectFile(`migration/neon/${MANAGED_SQL}`);
+  const start = sql.search(/create function public\.create_managed_user\s*\(/i);
+  const body = sql.slice(start, sql.search(/revoke all on function public\.create_managed_user/i));
+  assert(start > 0, 'create_managed_user() is gone — /king cannot record a plan');
+  assert(/language plpgsql security definer set search_path = ''/i.test(body),
+    'the insert needs owner privileges, so it must be definer with a pinned path');
+  assert(/if not \(select public\.is_app_admin\(\)\) then/i.test(body), 'admin-only');
+  assert(/p_role not in \('user', 'plus', 'premium', 'admin'\)/i.test(body),
+    'an unknown plan must not reach profiles');
+  assert(/from neon_auth\."user" u where u\.id = p_auth_id/i.test(body),
+    'there has to be a login to attach an account to');
+  assert(/where p\.id = p_auth_id/i.test(body) && /lower\(p\.email\) = v_email/i.test(body),
+    'one person with two profiles is what claim_profile() relinks by email');
+  assert(/insert into public\.profiles \(id, email, full_name, role\)/i.test(body),
+    'the row carries the plan from the start');
+  assert(/values \(p_auth_id, v_email/i.test(body),
+    'profiles.id is the auth id, so the first sign-in claims this row instead of relinking');
+});
+
+test('a managed account keeps the plan the admin chose when it first signs in', () => {
+  const claim = readProjectFile(`migration/neon/${CLAIM_SQL}`);
+  const body = claim.slice(claim.search(/create or replace function public\.claim_profile/i));
+  const earlyReturn = body.search(/return v_uid;\s*end if;/i);
+  const insert = body.search(/insert into public\.profiles/i);
+  assert(earlyReturn > 0 && earlyReturn < insert,
+    'claim_profile must leave an existing profile alone, or it overwrites the issued plan');
+});
+
+test('the privilege safety net lists the new function and nothing more', () => {
+  const sql = readProjectFile(`migration/neon/${MANAGED_SQL}`);
+  assert(/revoke all on function public\.create_managed_user/i.test(sql),
+    'no grant survives without the revocation first');
+  const net = sql.slice(sql.indexOf('has_function_privilege'));
+  assert(/'create_managed_user'/.test(net), 'the net must know this function by name');
+  assert(/raise exception 'Unexpected EXECUTE privilege on: %'/i.test(net),
+    'and it must still fail the migration when something else is executable');
+});
+
+test('an account is created through the admin API, never through public sign-up', () => {
+  const lib = withoutComments(readProjectFile('src/lib/neon.ts'));
+  const create = lib.slice(lib.indexOf('async function createAuthUser'));
+  assert(/\/admin\/create-user/.test(create), 'the admin endpoint is the only creator');
+  assert(/credentials: 'include'/.test(create),
+    'the admin session cookie is the whole authorisation of this call');
+  assert(/cache: 'no-store'/.test(create), 'a created account must not come from the HTTP cache');
+  assert(/\.neonauth\./.test(lib.slice(lib.indexOf('function authBaseUrl'), lib.indexOf('createAuthUser'))),
+    'the auth host is derived from the database URL the SDK already uses');
+  assert(!/VITE_NEON_AUTH_URL/.test(lib),
+    'a second auth URL could point the admin call at a different endpoint than the session');
+  // Nothing in the client may reach the public sign-up path.
+  for (const file of srcFiles) {
+    const text = withoutComments(file.text);
+    assert(!/sign-up\/email|auth\.signUp\(|signUp\.email\(/.test(text),
+      `${file.rel} reaches public sign-up`);
+  }
+});
+
+test('the panel creates the login before the app row, and says so when only one half works', () => {
+  const king = withoutComments(readProjectFile('src/components/KingPanel.tsx'));
+  const created = king.indexOf('createAuthUser(');
+  const rpc = king.indexOf("'create_managed_user'");
+  assert(created > 0 && rpc > created, 'the profile is keyed on the id the login service returns');
+  assert(/p_auth_id: created\.id/.test(king), 'and not on anything the admin typed');
+  assert(/if \(!created\.id\)/.test(king), 'a failed login creation stops before the app row');
+  assert(/The sign-in works, but the app account was not created/.test(king),
+    'a half-created account is reported as half-created, not as a generic failure');
+});
+
+test('a handed-over password comes from the browser CSPRNG and stays readable', () => {
+  const king = withoutComments(readProjectFile('src/components/KingPanel.tsx'));
+  const alphabet = king.match(/PASSWORD_ALPHABET = '([^']+)'/);
+  assert(alphabet, 'the password alphabet is missing');
+  for (const ch of ['I', 'O', '0', '1', 'l']) {
+    assert(!alphabet[1].includes(ch), `${ch} is confusable in a password read over the phone`);
+  }
+  assert(alphabet[1].length >= 30, 'a small alphabet makes 12 generated characters guessable');
+  assert(/crypto\.getRandomValues/.test(king), 'passwords must not come from Math.random');
+  assert(!/Math\.random/.test(king), 'no Math.random anywhere near a password');
+  assert(/newPassword\.length < 8/.test(king), 'a too-short password is refused before the API call');
 });
 
 

@@ -248,7 +248,7 @@ export default function App() {
   /**
    * The user id the on-screen books belong to.
    *
-   * Choosing another Google account is a switch, not a sign-out: no SIGNED_OUT
+   * Signing in as another account can be a switch, not a sign-out: no SIGNED_OUT
    * event arrives, so the epoch never moves and the previous person's rows are
    * still in state. Comparing ids is what makes that switch visible to the app.
    */
@@ -510,7 +510,7 @@ export default function App() {
 
       const authUser = session.user;
       /**
-       * Picking another Google account is a switch, not a sign-out: no
+       * Signing in as another account can be a switch, not a sign-out: no
        * SIGNED_OUT event arrives first, so the previous person's books are
        * still in state and any load they started is still in flight. Emptying
        * the session here — which also moves the epoch, dropping those loads —
@@ -625,9 +625,17 @@ export default function App() {
   }, []);
 
   const handleSignedIn = useCallback((signedInUser: UserProfile) => {
-    // The SIGNED_IN event does the loading; this keeps the modal responsive.
+    // Password sign-in resolves inside this tab, and the adapter's
+    // onAuthStateChange only relays events from *other* tabs — so nothing would
+    // ever load this person's books if the screen just waited for an event.
+    // Recording the event runs the same guarded chain the boot read uses.
     applyUser(signedInUser);
     setSessionPhase('authenticated');
+    setAuthEvent({
+      action: 'reload-books',
+      session: { user: { id: signedInUser.id, email: signedInUser.email } },
+      key: Date.now(),
+    });
   }, [applyUser]);
 
   const handleOnboardingComplete = useCallback(async (name: string, owner: string) => {
