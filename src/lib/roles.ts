@@ -14,9 +14,6 @@
  *
  * Permissions are NOT additive (a premium does not also inherit `plus`); they
  * are intentionally distinct so a tier change is meaningful and visible.
- *
- * CURRENTLY DORMANT: `ROLE_GATING_ENABLED` below is false, so every signed-in
- * account has all of it. Read that constant before acting on this table.
  */
 
 export type AppRole = 'user' | 'plus' | 'premium' | 'admin';
@@ -64,23 +61,19 @@ export const FEATURE_FOR_ROLE: Record<AppRole, ReadonlyArray<Feature>> = {
 };
 
 /**
- * Plan gating, switched off.
+ * Plan gating, switched on.
  *
- * While this is false every signed-in account reaches every bookkeeping
- * section — the dashboard, sales, purchases, expenses, payments, reports,
- * health, inventory and settings — regardless of `profiles.role`. The sidebar
- * shows no locks, the plan-lock screen never renders, and the "New" action is
- * available everywhere, because all three derive from `roleHasFeature`.
- *
- * `profiles.role` is still read, stored and displayed; nothing about a
- * person's plan is lost by flipping this. Set it back to true to restore the
- * matrix above exactly as it was.
+ * While this is true, `FEATURE_FOR_ROLE` decides what each account reaches.
+ * Set it to false to open every bookkeeping section to every signed-in
+ * account regardless of `profiles.role` — the sidebar locks, the plan-lock
+ * screen and the "New" action all derive from `roleHasFeature`, so one flip
+ * turns them off together and nothing about a person's plan is lost.
  *
  * The `/king` admin panel is deliberately NOT covered by this. It is guarded
- * by `isAppAdmin`, which still requires role='admin' — it can change other
- * people's plans and erase their books, so it is not a section of the app.
+ * by `isAppAdmin`, which requires role='admin' at either setting — it can
+ * change other people's plans and erase their books.
  */
-export const ROLE_GATING_ENABLED = false;
+export const ROLE_GATING_ENABLED = true;
 
 export function roleHasFeature(role: AppRole | undefined, feature: Feature): boolean {
   if (!role) return false;

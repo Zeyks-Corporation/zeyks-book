@@ -724,10 +724,8 @@ export default function App() {
    * Which sidebar sections this role has not paid for — the list that drives
    * the drawer locks, the plan-lock screen and whether "New" appears.
    *
-   * It is empty right now: `ROLE_GATING_ENABLED` in lib/roles is off, so every
-   * signed-in account reaches every section regardless of its plan. The
-   * derivation stays here so switching the gate back on restores the locks
-   * without touching this file.
+   * Derived entirely from `roleHasFeature`, so `ROLE_GATING_ENABLED` in
+   * lib/roles is the only place the locks are decided.
    */
   const lockedTabs: ViewTab[] = (Object.keys(TITLES) as ViewTab[]).filter(
     (tab) => !roleHasFeature(userRole, tab) && !(tab === 'dashboard' && !dashboardAccess),
@@ -840,7 +838,7 @@ export default function App() {
    * until a plan is bought. /pricing, /about and the other public pages stay
    * reachable as marketing.
    *
-   * This wall is gated by the same switch as the section locks, so with
+   * This wall is gated by the same switch as the section locks: with
    * `ROLE_GATING_ENABLED` off every signed-in account walks straight into the
    * app instead of meeting the plan page here.
    */

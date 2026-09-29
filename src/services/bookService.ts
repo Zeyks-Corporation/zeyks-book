@@ -40,14 +40,31 @@ import type { CloudPurchaseItemInput, CloudPurchaseRequest } from '../lib/purcha
 /* Reads                                                                       */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * The chart of accounts is the one set of rows a business can never have zero
+ * of: `seed_default_chart_of_accounts` runs in the same transaction that
+ * creates the business. So an empty answer means the read failed, not that the
+ * books are empty — and the Data API has been observed replying `200 []` to a
+ * valid request. An empty chart renders as NPR 0.00 balances, a P&L built from
+ * "unlinked" accounts, and health errors blaming correct entries. Retry once,
+ * then say so out loud instead of showing a wrong ledger.
+ */
 export async function fetchAccounts(businessId: string): Promise<Account[]> {
-  const { data, error } = await supabase
-    .from('accounts')
-    .select('*')
-    .eq('business_id', businessId)
-    .order('code');
-  if (error) throw new Error(`Failed to load accounts: ${error.message}`);
-  return (data ?? []).map((r) => toAccount(r as Record<string, unknown>));
+  const load = async (): Promise<Account[]> => {
+    const { data, error } = await supabase
+      .from('accounts')
+      .select('*')
+      .eq('business_id', businessId)
+      .order('code');
+    if (error) throw new Error(`Failed to load accounts: ${error.message}`);
+    return (data ?? []).map((r) => toAccount(r as Record<string, unknown>));
+  };
+
+  const accounts = await load();
+  if (accounts.length > 0) return accounts;
+  const retry = await load();
+  if (retry.length > 0) return retry;
+  throw new Error('Your chart of accounts did not load. Please reload the page.');
 }
 
 export async function fetchCustomers(businessId: string): Promise<Customer[]> {

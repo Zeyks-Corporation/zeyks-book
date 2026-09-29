@@ -41,22 +41,36 @@ if (!envUrl) {
 const url = envUrl.replace(/\/rest\/v1\/?$/, '');
 
 /**
- * Never let a book row be served from the HTTP cache.
+ * One Data API request in flight at a time, and never from the HTTP cache.
  *
- * Every Data API answer is private to the JWT that asked for it — row-level
- * security decides which rows come back, and two accounts asking for the same
- * URL must not get the same bytes. The Data API replies without
+ * No-store: every Data API answer is private to the JWT that asked for it —
+ * row-level security decides which rows come back, and two accounts asking for
+ * the same URL must not get the same bytes. The Data API replies without
  * `Cache-Control` and without `Vary: Authorization`, so a cache keyed only on
- * the URL is free to reuse one person's rows for the next. `no-store` closes
- * that at the single place all data requests are made.
+ * the URL is free to reuse one person's rows for the next.
+ *
+ * Serialised: the Data API answers overlapping requests from the same session
+ * inconsistently. Measured on production with one valid token and one URL that
+ * must return 21 rows: 22 of 40 parallel requests came back `200 []`, while 40
+ * sequential requests were correct every time. Row-level security filters
+ * rather than rejects, so the bad answer looks exactly like an empty book —
+ * a ledger that loads with its chart of accounts missing shows zero balances,
+ * a wrong profit and loss, and phantom "unknown account" health errors. A
+ * ledger must never be presented half-loaded, so requests are queued here, at
+ * the one place every table read and RPC is issued. A failed request must not
+ * stall the queue, hence the caught tail.
  */
-function noStoreFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  return fetch(input, { ...init, cache: 'no-store' });
+let queueTail: Promise<unknown> = Promise.resolve();
+
+function dataApiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const request = queueTail.then(() => fetch(input, { ...init, cache: 'no-store' }));
+  queueTail = request.then(() => undefined, () => undefined);
+  return request;
 }
 
 const baseClient = createClient(url, {
   auth: { adapter: SupabaseAuthAdapter() as unknown as never },
-  dataApi: { options: { global: { fetch: noStoreFetch } } },
+  dataApi: { options: { global: { fetch: dataApiFetch } } },
 });
 
 /** Combined client surface used by the rest of the app. */

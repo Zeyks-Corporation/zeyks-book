@@ -3755,23 +3755,64 @@ test('the profile read is scoped to the signed-in id', () => {
 });
 
 /*
- * Plan gating is switched off on purpose: a signed-in account reaches every
- * section. These pin what "off" means so it cannot quietly become "half off" —
- * and so that flipping ROLE_GATING_ENABLED back restores the paid matrix
- * exactly rather than a drifted version of it.
+ * Measured on production with one valid token: 22 of 40 parallel requests for
+ * the same table answered `200 []`, and 40 sequential requests were correct
+ * every time. Row-level security filters instead of rejecting, so that answer
+ * is indistinguishable from an empty book — which is why the client queues its
+ * own reads and refuses to believe an empty chart of accounts.
+ */
+test('every data-api request goes through one queue and never the http cache', () => {
+  const neon = srcFiles.find((f) => f.rel.endsWith('src/lib/neon.ts'));
+  assert(neon, 'neon.ts not found');
+  assert(/dataApi: \{ options: \{ global: \{ fetch: dataApiFetch \} \} \}/.test(neon.text),
+    'the client must route all data traffic through the shared fetch');
+  assert(/queueTail\.then\(\(\) => fetch\(input, \{ \.\.\.init, cache: 'no-store' \}\)\)/.test(neon.text),
+    'one request at a time, never cached');
+  assert(/queueTail = request\.then\(\(\) => undefined, \(\) => undefined\)/.test(neon.text),
+    'a failed request must release the queue rather than stall every later read');
+  assert(!/Promise\.all\(\[fetch\(/.test(neon.text), 'no side-channel that bypasses the queue');
+});
+
+test('an empty chart of accounts is reported as a failed load, not as empty books', () => {
+  const service = srcFiles.find((f) => f.rel.endsWith('src/services/bookService.ts'));
+  const fn = service.text.match(/export async function fetchAccounts[\s\S]*?\n}\n/);
+  assert(fn, 'fetchAccounts not found');
+  const body = fn[0];
+  assert(/const accounts = await load\(\);/.test(body) && /const retry = await load\(\);/.test(body),
+    'an empty first answer must be re-read before anything is concluded');
+  assert(/throw new Error\(/.test(body), 'and a second empty answer must reach the user as an error');
+  assert(!/return \[\]/.test(body), 'never silently hand the app an empty chart');
+});
+
+/*
+ * Plan gating is on: what each of the three paying states reaches is decided by
+ * FEATURE_FOR_ROLE. These pin the matrix as behaviour, so a tier can only be
+ * changed by editing the matrix deliberately — and so the switch cannot end up
+ * half-applied, with one section reading it and another ignoring it.
  */
 const GATED_FEATURES = ['dashboard', 'sales', 'purchases', 'expenses', 'payments', 'reports', 'health', 'inventory', 'settings'];
 
-test('every signed-in role reaches every section while plan gating is off', () => {
-  assertEqual(ROLE_GATING_ENABLED, false, 'the switch is what this test is about');
+test('plan gating is on and each role reaches exactly its paid sections', () => {
+  assertEqual(ROLE_GATING_ENABLED, true, 'the switch is what this test is about');
   for (const role of ALL_ROLES) {
     for (const feature of GATED_FEATURES) {
-      assert(roleHasFeature(role, feature), `${role} is locked out of ${feature}`);
+      assertEqual(roleHasFeature(role, feature), FEATURE_FOR_ROLE[role].includes(feature),
+        `${role}/${feature} does not follow the matrix`);
     }
+  }
+  // Spelled out per tier, so widening a plan is a written-down decision.
+  for (const feature of GATED_FEATURES) {
+    assert(!roleHasFeature('user', feature), `a free account reaches ${feature}`);
+  }
+  for (const feature of ['payments', 'reports', 'health', 'inventory']) {
+    assert(!roleHasFeature('plus', feature), `Starter reaches ${feature}, which is a Premium benefit`);
+  }
+  for (const feature of ['dashboard', 'sales', 'purchases', 'expenses', 'settings']) {
+    assert(roleHasFeature('plus', feature), `Starter lost ${feature} it sells`);
   }
 });
 
-test('disabling the gate still requires a session, and still excludes the admin panel', () => {
+test('a section is only reachable with a session, and the admin panel stays staff-only', () => {
   for (const feature of GATED_FEATURES) {
     assert(!roleHasFeature(undefined, feature), 'a signed-out visitor gets nothing');
     assert(!roleHasFeature(null, feature));
@@ -3781,8 +3822,8 @@ test('disabling the gate still requires a session, and still excludes the admin 
   assert(roleHasFeature('admin', 'admin'), 'and staff still do');
 });
 
-test('the paid matrix is intact behind the switch', () => {
-  assertEqual(FEATURE_FOR_ROLE.user.length, 0, 'a free account unlocks nothing when gating returns');
+test('the paid matrix is complete and never hands out staff access', () => {
+  assertEqual(FEATURE_FOR_ROLE.user.length, 0, 'a free account unlocks nothing');
   for (const feature of FEATURE_FOR_ROLE.plus) {
     assert(FEATURE_FOR_ROLE.premium.includes(feature), `premium lost ${feature} that plus has`);
   }
@@ -3798,12 +3839,13 @@ test('the paid matrix is intact behind the switch', () => {
 /*
  * The subscription wall is a second, coarser gate than the section locks: it
  * replaces the whole app shell, so a signed-in free account that never gets
- * past it sees the plan page no matter how the section matrix is set. Turning
- * the switch off has to open that door too.
+ * past it sees the plan page no matter how the section matrix is set. Both
+ * gates read the same switch, so they can never disagree about who is inside
+ * the app.
  */
 test('the subscription wall obeys the same switch as the section locks', () => {
-  assertEqual(paywallHoldsAccount('user'), false,
-    'a signed-in free account is walled out of the app while the gate is off');
+  assertEqual(paywallHoldsAccount('user'), true,
+    'a signed-in free account must be held at the plan page while the gate is on');
   for (const role of ALL_ROLES) {
     const tiered = isPayingTier(role) || isAppAdmin(role);
     assertEqual(paywallHoldsAccount(role), ROLE_GATING_ENABLED && !tiered,
