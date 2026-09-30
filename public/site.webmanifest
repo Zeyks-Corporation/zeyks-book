@@ -1,0 +1,34 @@
+{
+  "name": "Zeyks Book — Accounting software for Nepal",
+  "short_name": "Zeyks Book",
+  "description": "Double-entry bookkeeping for businesses in Nepal, with Bikram Sambat and AD dates, NPR amounts, and printable A4 financial reports.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F2F2F7",
+  "theme_color": "#F2F2F7",
+  "lang": "en",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    {
+      "src": "/logo.jpg",
+      "sizes": "1024x1024",
+      "type": "image/jpeg",
+      "purpose": "any"
+    },
+    {
+      "src": "/zeyks-mark.png",
+      "sizes": "345x430",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

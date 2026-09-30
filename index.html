@@ -8,7 +8,7 @@
       name="description"
       content="Zeyks Book is accounting software for small businesses in Nepal, with double-entry bookkeeping, Bikram Sambat and AD dates, NPR amounts, invoices, bills, and printable A4 financial reports."
     />
-    <link rel="canonical" href="https://zeyksbook.app/" />
+    <link rel="canonical" href="https://www.zeyksbook.app/" />
     <meta name="robots" content="index,follow" />
     <meta name="theme-color" content="#F2F2F7" />
     <meta name="color-scheme" content="light" />
@@ -20,20 +20,24 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&amp;family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&amp;display=swap" />
 
     <!-- Icons. `/favicon.ico` is a real file in the build (public/), because
-         browsers still request it directly when no icon link is present. -->
+         browsers still request it directly when no icon link is present. The
+         PNG's declared size is its actual pixel size, read from the file. -->
     <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="icon" type="image/png" href="/zeyks-mark.png" sizes="512x512" />
+    <link rel="icon" type="image/png" href="/zeyks-mark.png" sizes="345x430" />
+    <link rel="apple-touch-icon" href="/logo.jpg" />
+    <link rel="manifest" href="/site.webmanifest" />
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Zeyks Book" />
+    <meta property="og:locale" content="en_US" />
     <meta property="og:title" content="Accounting Software for Nepal | BS Calendar &amp; NPR — Zeyks Book" />
     <meta
       property="og:description"
       content="Nepal business accounting with double-entry bookkeeping, Bikram Sambat and AD dates, NPR amounts, and printable A4 financial reports."
     />
-    <meta property="og:url" content="https://zeyksbook.app/" />
-    <meta property="og:image" content="https://zeyksbook.app/logo.jpg" />
+    <meta property="og:url" content="https://www.zeyksbook.app/" />
+    <meta property="og:image" content="https://www.zeyksbook.app/logo.jpg" />
     <meta property="og:image:width" content="1024" />
     <meta property="og:image:height" content="1024" />
     <meta property="og:image:alt" content="Zeyks Book" />
@@ -43,7 +47,7 @@
       name="twitter:description"
       content="Nepal business accounting with double-entry bookkeeping, Bikram Sambat and AD dates, NPR amounts, and printable A4 financial reports."
     />
-    <meta name="twitter:image" content="https://zeyksbook.app/logo.jpg" />
+    <meta name="twitter:image" content="https://www.zeyksbook.app/logo.jpg" />
     <meta name="twitter:image:alt" content="Zeyks Book" />
   </head>
   <body>
@@ -52,7 +56,7 @@
         <h1>Accounting software for Nepal, built around the Bikram Sambat calendar</h1>
         <p>Zeyks Book is web-based double-entry bookkeeping for Nepali businesses. Record sales, purchases, expenses and settlements in NPR, work with Bikram Sambat and Gregorian dates, and print A4 financial reports.</p>
         <h2>Explore the features before you sign in</h2>
-        <p>Try sample books in the <a href="/demo">interactive demo</a>. Zeyks Book costs NPR 999 per month. Business records are stored in a managed cloud database, and a downloadable JSON backup is available from Settings. Backup restore is not available yet.</p>
+        <p>Try sample books in the <a href="/demo">interactive demo</a>. Zeyks Book has two monthly plans — Starter at NPR 399 and Premium at NPR 599, with no per-seat charges. Business records are stored in a managed Neon Postgres database, and a downloadable JSON snapshot is available from Settings. Backup restore is not available yet.</p>
         <p>Review <a href="/pricing">pricing and common questions</a>, <a href="/privacy">data storage and privacy</a>, or <a href="/contact">contact Zeyks Book</a> before moving real records.</p>
       </main>
     </div>
@@ -63,7 +67,7 @@
       .seo-fallback a{color:#075ec5;text-underline-offset:3px}
     </style>
     <script type="application/ld+json">
-      {"@context":"https://schema.org","@type":"SoftwareApplication","name":"Zeyks Book","url":"https://zeyksbook.app/","applicationCategory":"BusinessApplication","operatingSystem":"Web browser","description":"Double-entry accounting for Nepali businesses with Bikram Sambat and AD dates, NPR amounts, and printable A4 reports.","offers":{"@type":"Offer","price":"999","priceCurrency":"NPR","description":"Single monthly plan"}}
+      {"@context":"https://schema.org","@graph":[{"@type":"Organization","@id":"https://www.zeyksbook.app/#organization","name":"Zeyks Book","url":"https://www.zeyksbook.app/","logo":{"@type":"ImageObject","url":"https://www.zeyksbook.app/logo.jpg","width":1024,"height":1024},"email":"contact@zeyksbook.app","areaServed":{"@type":"Country","name":"Nepal"},"contactPoint":[{"@type":"ContactPoint","contactType":"customer support","email":"contact@zeyksbook.app","availableLanguage":"en"}]},{"@type":"WebSite","@id":"https://www.zeyksbook.app/#website","url":"https://www.zeyksbook.app/","name":"Zeyks Book","inLanguage":"en","publisher":{"@id":"https://www.zeyksbook.app/#organization"}},{"@type":"SoftwareApplication","@id":"https://www.zeyksbook.app/#software","name":"Zeyks Book","url":"https://www.zeyksbook.app/","applicationCategory":"BusinessApplication","operatingSystem":"Web browser","publisher":{"@id":"https://www.zeyksbook.app/#organization"},"description":"Double-entry accounting software for businesses in Nepal: Bikram Sambat and AD dates, NPR amounts, sales, purchases, expenses, settlements, inventory and printable A4 reports.","featureList":["Double-entry bookkeeping","Bikram Sambat (BS) and AD calendar support","Sales invoicing with credit terms","Purchase bills with credit terms","Expense tracking with category mapping","Inventory items, stock adjustments and valuation","Aged receivables and payables","A4 print-ready financial statements and VAT reports","Ledger and document data health checks","JSON data export"],"offers":{"@type":"AggregateOffer","priceCurrency":"NPR","lowPrice":"399","highPrice":"599","offerCount":"2","url":"https://www.zeyksbook.app/pricing","description":"Starter NPR 399 per month, Premium NPR 599 per month. Billed monthly, no per-seat charges."}}]}
     </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>

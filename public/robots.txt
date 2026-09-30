@@ -21,4 +21,8 @@ Disallow: /health
 Disallow: /settings
 Disallow: /inventory
 
-Sitemap: https://zeyksbook.app/sitemap.xml
+# The admin panel (no nav link, admin-only) and the server endpoints.
+Disallow: /king
+Disallow: /api/
+
+Sitemap: https://www.zeyksbook.app/sitemap.xml

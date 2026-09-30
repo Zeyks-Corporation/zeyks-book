@@ -1,0 +1,89 @@
+# Zeyks Book
+
+Zeyks Book is web-based double-entry accounting software for small businesses in
+Nepal — kirana and pasal shops, service businesses, and small agencies. It records
+sales, purchases, expenses and settlements in NPR on a real double-entry ledger,
+works in both Bikram Sambat (BS) and Gregorian (AD) dates, and prints A4 financial
+reports. It runs in the browser at https://www.zeyksbook.app with no desktop
+install and no per-seat charges.
+
+> Double-entry bookkeeping for Nepali businesses: BS and AD dates, NPR amounts,
+> VAT-aware reports, inventory, and printable A4 statements. Two monthly plans —
+> Starter NPR 399 and Premium NPR 599.
+
+## What it does
+
+- Double-entry journal behind every document, so a sale, purchase, expense or
+  payment posts balanced debit and credit lines automatically.
+- Chart of accounts seeded per business, with sales, purchases and expenses
+  mapped to it.
+- Sales invoices and purchase bills with document numbers and credit terms, and
+  partial or full settlements against either.
+- Expense tracking with categories, and VAT handling on sales and purchases.
+- Inventory on the Premium plan: items, stock adjustments, valuation, low-stock
+  alerts.
+- Reports: trial balance, profit and loss, balance sheet, aged receivables and
+  payables (30/60/90 days), VAT summary, all printable on A4.
+- Data health checks that flag unbalanced or orphaned ledger entries.
+- Fiscal-year and currency settings, business branding for printed documents.
+- Read-only offline view of the last synced books; the server stays the authority.
+
+## Plans and pricing
+
+| Plan | Price | Role value | Unlocks |
+| --- | --- | --- | --- |
+| Free account | NPR 0 | `user` | Sign-in only. Every bookkeeping section is locked; nothing can be added or edited. |
+| Starter | NPR 399 / month | `plus` | Dashboard, sales, purchases, expenses, settings, JSON backup. |
+| Premium | NPR 599 / month | `premium` | Everything in Starter plus payments and settlements, reports, data health, and inventory. |
+
+Billed monthly. No per-seat charges, no usage-based pricing. Changing plans takes
+effect on the next page load.
+
+## Access and accounts
+
+- Accounts are created by the Zeyks Book team. There is no self-service sign-up
+  form, and no Google or other social sign-in.
+- Sign-in is email and password. Ask the team to create an account for your
+  business; a demo account is not required to browse the public pages.
+- There is no password-recovery flow yet — a forgotten password means contacting
+  the team.
+- The interactive demo at /demo needs no account at all and never leaves the
+  browser.
+
+## Data and privacy
+
+- Business records live in a managed Neon Postgres database, not in the
+  customer's own cloud account.
+- Sign-in is handled by Neon Auth.
+- Every account sees only the businesses it owns or is a member of; access is
+  enforced in the database, not just in the app.
+- You can download a full JSON snapshot of your books from Settings.
+- Restoring a backup is not available yet, and automatic backup/recovery
+  commitments are not published.
+
+## What Zeyks Book does not claim
+
+- It is not published as IRD-approved or IRD-verified software. VAT reports and
+  A4 statements are product features, not proof of government approval. Confirm
+  compliance requirements with the IRD or your accountant.
+- Trial terms and a refund policy are not currently published. Confirm the
+  current subscription terms before paying.
+- Online checkout is not wired up. Plan purchases and upgrades are arranged by
+  contacting the team.
+
+## Pages
+
+- [Home](https://www.zeyksbook.app/): what the product is and what it does not do.
+- [Pricing](https://www.zeyksbook.app/pricing): both plans, what each unlocks, and common questions.
+- [Demo](https://www.zeyksbook.app/demo): sample books in the browser, no account needed.
+- [About](https://www.zeyksbook.app/about): the design goals, and the limitations stated on the page.
+- [Contact](https://www.zeyksbook.app/contact): message form, and the published support details.
+- [Privacy](https://www.zeyksbook.app/privacy): where records are stored and which providers are involved.
+- [Terms](https://www.zeyksbook.app/terms): the terms the service is provided under.
+
+## Contact
+
+- Email: contact@zeyksbook.app
+- Contact form: https://www.zeyksbook.app/contact
+- Support phone and the WhatsApp number used for plan purchases are published on
+  the site; check /contact for the current details.

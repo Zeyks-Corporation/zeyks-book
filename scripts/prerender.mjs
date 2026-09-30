@@ -13,82 +13,241 @@
  * This module is build tooling, so it is plain Node ESM: `vite.config.ts`
  * imports it as a plugin, and `tests/run.mjs` imports `PRERENDER_PAGES` and
  * `renderPageHtml` to check that the build-time copy of the metadata agrees with
- * the app's own copy in `src/lib/pageMeta.ts`. A document that disagrees with
- * the page it serves is the bug this whole mechanism exists to prevent, so a
- * drift is a failing test rather than a stale `<title>`.
+ * the app's own copy in `src/lib/pageMetadata.ts` and with the tags in
+ * `index.html`. A document that disagrees with the page it serves is the bug
+ * this whole mechanism exists to prevent, so a drift is a failing test rather
+ * than a stale `<title>`.
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-export const CANONICAL_ORIGIN = 'https://zeyksbook.app';
+/** Must equal `SITE_ORIGIN` in `src/lib/pageMetadata.ts` — see the note there. */
+export const CANONICAL_ORIGIN = 'https://www.zeyksbook.app';
 
 /**
  * The public pages that need a document of their own.
  *
- * The landing page is `index.html` itself, so it is not listed here. Keep in
- * step with `PUBLIC_PAGE_META` in `src/lib/pageMeta.ts`.
+ * The landing page is `index.html` itself, so it is not listed here. Title and
+ * description are duplicated from `PUBLIC_PAGES` in `src/lib/pageMetadata.ts`
+ * because Node cannot import the TypeScript app module; the drift test in
+ * `tests/run.mjs` compares the two lists verbatim.
  */
 export const PRERENDER_PAGES = [
   {
     slug: 'pricing',
     path: '/pricing',
-    title: 'Pricing — Zeyks Book',
+    title: 'Pricing — Starter NPR 399, Premium NPR 599 | Zeyks Book',
     description:
-      'Zeyks Book costs NPR 999 per month for Nepali businesses. See the included bookkeeping features, managed cloud storage, backup limits, and answers about trials and refunds.',
+      'Zeyks Book has two monthly plans for businesses in Nepal: Starter at NPR 399 for daily sales, purchases and expenses, and Premium at NPR 599 adding inventory, aged receivables and payables, printable reports and data health. No per-seat charges.',
   },
   {
     slug: 'about',
     path: '/about',
     title: 'About — Zeyks Book',
-    description: 'Web-based double-entry accounting for businesses in Nepal with Bikram Sambat and AD dates, NPR records, and printable A4 reports.',
+    description: 'Zeyks Book is web-based double-entry accounting for businesses in Nepal, built around Bikram Sambat and AD dates, NPR amounts, and printable A4 reports.',
   },
   {
     slug: 'contact',
     path: '/contact',
     title: 'Contact — Zeyks Book',
-    description: 'Contact Zeyks Book in Kathmandu about the accounting demo, NPR 999 monthly plan, data storage, or moving your business books.',
+    description: 'Contact Zeyks Book about the interactive demo, the Starter and Premium monthly plans, where business records are stored, or moving your books to Zeyks Book.',
   },
   {
     slug: 'privacy',
     path: '/privacy',
     title: 'Privacy — Zeyks Book',
-    description: 'Learn how Zeyks Book stores accounting records in a managed Supabase database, uses Firebase sign-in, and handles demo data, downloadable backups, and service providers.',
+    description: 'How Zeyks Book stores accounting records in a managed Neon Postgres database, signs you in with Neon Auth email and password, and handles demo data, downloadable JSON backups, and service providers.',
   },
   {
     slug: 'terms',
     path: '/terms',
     title: 'Terms — Zeyks Book',
     description:
-      'The terms Zeyks Book is provided under, including the accounting guarantees and the limits of the service.',
+      'The terms that govern your use of Zeyks Book, including the accounting guarantees and the limits of the service.',
   },
   {
     slug: 'signin',
     path: '/signin',
     title: 'Sign in — Zeyks Book',
-    description: 'Sign in to Zeyks Book with a one-time code sent to your email address.',
+    description: 'Sign in to Zeyks Book with the email address and password issued to your business by the Zeyks Book team.',
   },
   {
     slug: 'demo',
     path: '/demo',
     title: 'Interactive Accounting Software Demo for Nepal — Zeyks Book',
     description:
-      'Walk through Zeyks Book with sample books that live only in your browser. No account, and no data '
-      + 'leaves the device.',
+      'Try Zeyks Book with sample books in your browser: sales, purchases, settlements, printable A4 reports and Bikram Sambat dates. No sign-in, and demo changes never leave the device.',
   },
 ];
 
 /** Small, route-specific copy visible before JavaScript runs. */
 const SEO_CONTENT = {
-  '/pricing': '<main class="seo-fallback"><p>Pricing for Nepal</p><h1>Simple pricing for Nepali business accounting</h1><p>Zeyks Book has one plan at NPR 999 per month. The plan includes double-entry bookkeeping, Bikram Sambat and AD dates, NPR records, and A4 reports.</p><h2>Know what is included</h2><p>Business records are held in a managed Supabase database and Firebase handles sign-in. Download a JSON backup from Settings; restore is not available yet. Trial terms, refund policy, and IRD approval status are not currently published.</p><p><a href="/demo">Explore sample books in the interactive demo</a> or <a href="/contact">contact Zeyks Book</a> before subscribing.</p></main>',
+  '/pricing': '<main class="seo-fallback"><p>Pricing for Nepal</p><h1>Simple pricing for Nepali business accounting</h1><p>Zeyks Book has two monthly plans: Starter at NPR 399 and Premium at NPR 599. Starter covers daily books, sales, purchases and expenses. Premium adds inventory, aged receivables and payables, print-ready reports, data health and settlements. There are no per-seat charges.</p><h2>Know what is included</h2><p>Business records are held in a managed Neon Postgres database, and Neon Auth handles email and password sign-in. Download a JSON snapshot from Settings; restore is not available yet. Trial terms, refund policy, and IRD approval status are not currently published.</p><p><a href="/demo">Explore sample books in the interactive demo</a> or <a href="/contact">contact Zeyks Book</a> before subscribing.</p></main>',
   '/about': '<main class="seo-fallback"><p>About Zeyks Book</p><h1>Double-entry bookkeeping for businesses in Nepal</h1><p>Zeyks Book is a web-based accounting app for Nepali businesses. It supports Bikram Sambat and Gregorian dates, NPR amounts, sales, purchases, expenses, settlements, and printable A4 reports.</p><h2>Designed around local bookkeeping needs</h2><p>Explore sample books in the interactive demo. The public site currently lists Kathmandu, Nepal and contact details; registered company details and uptime commitments are not published.</p><p><a href="/demo">Try the demo</a> · <a href="/pricing">See pricing</a> · <a href="/contact">Contact</a></p></main>',
-  '/contact': '<main class="seo-fallback"><p>Contact Zeyks Book</p><h1>Questions about accounting software in Nepal?</h1><p>Contact the Zeyks Book team about the interactive demo, NPR 999 monthly plan, data storage, or moving your books.</p><p>Location: Kathmandu, Nepal. Email: contact@zeyksbook.app. Phone: +977 9767784817.</p><p><a href="/demo">Try the interactive demo</a> · <a href="/pricing">Read pricing and terms</a></p></main>',
-  '/privacy': '<main class="seo-fallback"><p>Privacy and data storage</p><h1>Where Zeyks Book stores accounting data</h1><p>Zeyks Book uses a managed Supabase database for business records and Firebase for sign-in. This is managed cloud storage, not a database in the customer’s own cloud account. The interactive demo uses sample books stored in the browser.</p><h2>Backups and recovery</h2><p>Users can download a JSON backup from Settings. Restoring a backup is not available yet, and automatic backup and recovery commitments are not published.</p><p><a href="/pricing">See pricing</a> · <a href="/contact">Ask a question</a></p></main>',
+  '/contact': '<main class="seo-fallback"><p>Contact Zeyks Book</p><h1>Questions about accounting software in Nepal?</h1><p>Contact the Zeyks Book team about the interactive demo, the Starter and Premium monthly plans, data storage, or moving your books.</p><p>Location: Kathmandu, Nepal. Email: contact@zeyksbook.app. Phone: +977 9767784817.</p><p><a href="/demo">Try the interactive demo</a> · <a href="/pricing">Read pricing and terms</a></p></main>',
+  '/privacy': '<main class="seo-fallback"><p>Privacy and data storage</p><h1>Where Zeyks Book stores accounting data</h1><p>Zeyks Book uses a managed Neon Postgres database for business records and Neon Auth for email and password sign-in. This is managed cloud storage, not a database in the customer’s own cloud account. The interactive demo uses sample books stored in the browser.</p><h2>Backups and recovery</h2><p>Users can download a JSON backup from Settings. Restoring a backup is not available yet, and automatic backup and recovery commitments are not published.</p><p><a href="/pricing">See pricing</a> · <a href="/contact">Ask a question</a></p></main>',
   '/terms': '<main class="seo-fallback"><p>Terms of use</p><h1>Using Zeyks Book for business accounts</h1><p>Zeyks Book provides web-based bookkeeping, Bikram Sambat and AD dates, NPR records, and printable reports. Review your accounting outputs with a qualified professional before statutory filing. The public site does not claim IRD certification or approval.</p><p><a href="/pricing">Pricing and subscription questions</a> · <a href="/privacy">Data and backup details</a> · <a href="/contact">Contact</a></p></main>',
-  '/signin': '<main class="seo-fallback"><p>Zeyks Book sign in</p><h1>Sign in to your business books</h1><p>Sign in to Zeyks Book with a one-time code sent to your email address.</p><p>Want to explore first? <a href="/demo">Open the interactive demo with sample books</a>.</p></main>',
-  '/demo': '<main class="seo-fallback"><p>Interactive product demo</p><h1>Explore Nepali accounting software with sample books</h1><p>Walk through Zeyks Book’s double-entry ledger, invoices, purchases, settlements, reports, and Bikram Sambat dates using sample books. Demo changes stay in this browser.</p><p><a href="/pricing">See the NPR 999 monthly plan</a> · <a href="/privacy">Read about data storage</a></p></main>',
+  '/signin': '<main class="seo-fallback"><p>Zeyks Book sign in</p><h1>Sign in to your business books</h1><p>Sign in to Zeyks Book with the email address and password issued to your business by the Zeyks Book team.</p><p>Want to explore first? <a href="/demo">Open the interactive demo with sample books</a>.</p></main>',
+  '/demo': '<main class="seo-fallback"><p>Interactive product demo</p><h1>Explore Nepali accounting software with sample books</h1><p>Walk through Zeyks Book’s double-entry ledger, invoices, purchases, settlements, reports, and Bikram Sambat dates using sample books. Demo changes stay in this browser.</p><p><a href="/pricing">See the Starter and Premium plans</a> · <a href="/privacy">Read about data storage</a></p></main>',
 };
+
+/**
+ * The questions the pricing page answers, verbatim as `FAQS` in
+ * `src/components/PricingPage.tsx`.
+ *
+ * FAQ markup that does not match the visible page is a spam signal, so this list
+ * is the same copy, and `tests/run.mjs` compares it against the component's own
+ * array to keep the two from drifting apart.
+ */
+export const PRICING_FAQS = [
+  {
+    q: 'How does pricing work?',
+    a: 'Two plans, billed monthly. Starter (NPR 399) is sized for kirana counters — daily books, sales, purchases and expenses. Premium (NPR 599) unlocks inventory, aged receivables & payables, print-ready reports, data health and settlements. There are no per-seat charges.',
+  },
+  {
+    q: 'Can I upgrade from Starter to Premium later?',
+    a: 'Yes. Switching plans takes effect on the next page load — the role is read from your profile each time.',
+  },
+  {
+    q: 'Where are my financial records stored?',
+    a: 'Records live in a managed Neon Postgres database; sign-in is by email and password through Neon Auth, and each account only ever sees the books it owns. You can download a JSON snapshot from Settings.',
+  },
+  {
+    q: 'Is there a free trial or refund policy?',
+    a: 'Trial terms and a refund policy are not currently published. Please contact us to confirm the current subscription terms before paying.',
+  },
+  {
+    q: 'Is Zeyks Book approved by Nepal’s IRD?',
+    a: 'The site does not publish an IRD approval or verification status. VAT reports and A4 statements are product features, not proof of government approval. Confirm your compliance requirements with the IRD or your accountant.',
+  },
+];
+
+/** Short labels for the breadcrumb trail; the page titles are too long for it. */
+const CRUMB = {
+  '/pricing': 'Pricing',
+  '/about': 'About',
+  '/contact': 'Contact',
+  '/privacy': 'Privacy',
+  '/terms': 'Terms',
+  '/signin': 'Sign in',
+  '/demo': 'Demo',
+};
+
+const ORG = `${CANONICAL_ORIGIN}/#organization`;
+const SITE = `${CANONICAL_ORIGIN}/#website`;
+const SOFTWARE = `${CANONICAL_ORIGIN}/#software`;
+
+const ORGANIZATION = {
+  '@type': 'Organization',
+  '@id': ORG,
+  name: 'Zeyks Book',
+  url: `${CANONICAL_ORIGIN}/`,
+  logo: { '@type': 'ImageObject', url: `${CANONICAL_ORIGIN}/logo.jpg`, width: 1024, height: 1024 },
+  email: 'contact@zeyksbook.app',
+  // No locality and no telephone: the public pages disagree about both, and
+  // structured data is the place a wrong answer gets believed.
+  areaServed: { '@type': 'Country', name: 'Nepal' },
+  contactPoint: [{
+    '@type': 'ContactPoint',
+    contactType: 'customer support',
+    email: 'contact@zeyksbook.app',
+    availableLanguage: 'en',
+  }],
+};
+
+const FEATURES = [
+  'Double-entry bookkeeping',
+  'Bikram Sambat (BS) and AD calendar support',
+  'Sales invoicing with credit terms',
+  'Purchase bills with credit terms',
+  'Expense tracking with category mapping',
+  'Inventory items, stock adjustments and valuation',
+  'Aged receivables and payables',
+  'A4 print-ready financial statements and VAT reports',
+  'Ledger and document data health checks',
+  'JSON data export',
+];
+
+const SOFTWARE_APPLICATION = {
+  '@type': 'SoftwareApplication',
+  '@id': SOFTWARE,
+  name: 'Zeyks Book',
+  url: `${CANONICAL_ORIGIN}/`,
+  applicationCategory: 'BusinessApplication',
+  operatingSystem: 'Web browser',
+  publisher: { '@id': ORG },
+  description:
+    'Double-entry accounting software for businesses in Nepal: Bikram Sambat and AD dates, '
+    + 'NPR amounts, sales, purchases, expenses, settlements, inventory and printable A4 reports.',
+  featureList: FEATURES,
+  offers: {
+    '@type': 'AggregateOffer',
+    priceCurrency: 'NPR',
+    lowPrice: '399',
+    highPrice: '599',
+    offerCount: '2',
+    url: `${CANONICAL_ORIGIN}/pricing`,
+    description: 'Starter NPR 399 per month, Premium NPR 599 per month. Billed monthly, no per-seat charges.',
+  },
+};
+
+/** One page's graph: who publishes it, where it sits, and what it is about. */
+function jsonLdFor(page) {
+  const url = `${CANONICAL_ORIGIN}${page.path}`;
+  const graph = [
+    ORGANIZATION,
+    {
+      '@type': 'WebSite',
+      '@id': SITE,
+      url: `${CANONICAL_ORIGIN}/`,
+      name: 'Zeyks Book',
+      inLanguage: 'en',
+      publisher: { '@id': ORG },
+    },
+    {
+      '@type': page.path === '/about' ? 'AboutPage' : page.path === '/contact' ? 'ContactPage' : 'WebPage',
+      '@id': `${url}#webpage`,
+      url,
+      name: page.title,
+      description: page.description,
+      isPartOf: { '@id': SITE },
+      about: { '@id': page.path === '/signin' ? SITE : SOFTWARE },
+      primaryImageOfPage: { '@type': 'ImageObject', url: `${CANONICAL_ORIGIN}/logo.jpg` },
+      breadcrumb: {
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'Home', item: `${CANONICAL_ORIGIN}/` },
+          { '@type': 'ListItem', position: 2, name: CRUMB[page.path], item: url },
+        ],
+      },
+    },
+  ];
+
+  // The product node only travels with the pages that describe the product.
+  if (page.path === '/pricing' || page.path === '/demo' || page.path === '/about') {
+    graph.push(page.path === '/demo'
+      ? { ...SOFTWARE_APPLICATION, isAccessibleForFree: true, offers: undefined }
+      : SOFTWARE_APPLICATION);
+  }
+
+  if (page.path === '/pricing') {
+    graph.push({
+      '@type': 'FAQPage',
+      '@id': `${url}#faq`,
+      mainEntity: PRICING_FAQS.map((entry) => ({
+        '@type': 'Question',
+        name: entry.q,
+        acceptedAnswer: { '@type': 'Answer', text: entry.a },
+      })),
+    });
+  }
+
+  // `<` inside a JSON string would be read as markup by an HTML parser.
+  return JSON.stringify({ '@context': 'https://schema.org', '@graph': graph })
+    .replace(/</g, '\\u003c');
+}
 
 /** Escape a value for an HTML attribute, since every string here is copy. */
 function escapeHtml(value) {
@@ -165,6 +324,14 @@ export function renderPageHtml(shellHtml, page) {
   if (page.path === '/signin') {
     html = replaceOnce(html, /<meta\s+name="robots"[^>]*\/>/, '<meta name="robots" content="noindex, nofollow" />', 'robots directive');
   }
+
+  // The shell's graph describes the landing page; each document carries its own.
+  html = replaceOnce(
+    html,
+    /<script type="application\/ld\+json">[\s\S]*?<\/script>/,
+    `<script type="application/ld+json">${jsonLdFor(page)}</script>`,
+    'JSON-LD block',
+  );
 
   const content = SEO_CONTENT[page.path];
   if (content) {

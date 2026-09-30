@@ -18,8 +18,16 @@ import { normalizePath, parseRoute } from './routes';
  * is what a non-executing fetcher sees.
  */
 
-/** The canonical production origin. Must match robots.txt and sitemap.xml. */
-export const SITE_ORIGIN = 'https://zeyksbook.app';
+/**
+ * The canonical production origin.
+ *
+ * This is the host that actually answers `200`. The apex `zeyksbook.app`
+ * answers `308` and points here, so every canonical URL, `og:url`, robots
+ * `Sitemap:` line and sitemap `<loc>` has to name this one — publishing a
+ * canonical URL that redirects means the crawler drops the signal and keeps the
+ * redirecting URL in the index instead. Must match robots.txt and sitemap.xml.
+ */
+export const SITE_ORIGIN = 'https://www.zeyksbook.app';
 
 /** The shared social preview image, shipped in `public/`. */
 export const SOCIAL_IMAGE = `${SITE_ORIGIN}/logo.jpg`;
@@ -54,7 +62,14 @@ export interface PageMetadata {
 const PRODUCT_DESCRIPTION =
   'Zeyks Book is accounting software for small businesses in Nepal, with double-entry bookkeeping, Bikram Sambat and AD dates, NPR amounts, invoices, bills, and printable A4 financial reports.';
 
-const PUBLIC_PAGES: Record<string, PageMetadata> = {
+/**
+ * Every public page, by path.
+ *
+ * Exported so `tests/run.mjs` can compare it against `PRERENDER_PAGES` in
+ * `scripts/prerender.mjs`: the build-time documents and this live table are the
+ * same copy in two places, and a drift between them is the bug.
+ */
+export const PUBLIC_PAGES: Record<string, PageMetadata> = {
   '/': {
     title: 'Accounting Software for Nepal | BS Calendar & NPR — Zeyks Book',
     description: PRODUCT_DESCRIPTION,
@@ -63,43 +78,43 @@ const PUBLIC_PAGES: Record<string, PageMetadata> = {
   },
   '/signin': {
     title: 'Sign in — Zeyks Book',
-    description: 'Sign in to Zeyks Book with a one-time code sent to your email address.',
+    description: 'Sign in to Zeyks Book with the email address and password issued to your business by the Zeyks Book team.',
     path: '/signin',
     indexable: false,
   },
   '/demo': {
     title: 'Interactive Accounting Software Demo for Nepal — Zeyks Book',
-    description: 'Walk through Zeyks Book with sample books: sales, purchases, settlements, reports, and Bikram Sambat dates. Demo changes stay in this browser.',
+    description: 'Try Zeyks Book with sample books in your browser: sales, purchases, settlements, printable A4 reports and Bikram Sambat dates. No sign-in, and demo changes never leave the device.',
     path: '/demo',
     indexable: true,
   },
   '/pricing': {
-    title: 'Pricing — Zeyks Book',
-    description: 'Zeyks Book costs NPR 999 per month for Nepali businesses. See the included bookkeeping features, managed cloud storage, backup limits, and answers about trials and refunds.',
+    title: 'Pricing — Starter NPR 399, Premium NPR 599 | Zeyks Book',
+    description: 'Zeyks Book has two monthly plans for businesses in Nepal: Starter at NPR 399 for daily sales, purchases and expenses, and Premium at NPR 599 adding inventory, aged receivables and payables, printable reports and data health. No per-seat charges.',
     path: '/pricing',
     indexable: true,
   },
   '/about': {
     title: 'About — Zeyks Book',
-    description: 'Web-based double-entry accounting for businesses in Nepal with Bikram Sambat and AD dates, NPR records, and printable A4 reports.',
+    description: 'Zeyks Book is web-based double-entry accounting for businesses in Nepal, built around Bikram Sambat and AD dates, NPR amounts, and printable A4 reports.',
     path: '/about',
     indexable: true,
   },
   '/contact': {
     title: 'Contact — Zeyks Book',
-    description: 'Contact Zeyks Book in Kathmandu about the accounting demo, NPR 999 monthly plan, data storage, or moving your business books.',
+    description: 'Contact Zeyks Book about the interactive demo, the Starter and Premium monthly plans, where business records are stored, or moving your books to Zeyks Book.',
     path: '/contact',
     indexable: true,
   },
   '/privacy': {
     title: 'Privacy — Zeyks Book',
-    description: 'Learn how Zeyks Book stores accounting records in a managed Neon Postgres database, uses Neon Auth sign-in, and handles demo data, downloadable backups, and service providers.',
+    description: 'How Zeyks Book stores accounting records in a managed Neon Postgres database, signs you in with Neon Auth email and password, and handles demo data, downloadable JSON backups, and service providers.',
     path: '/privacy',
     indexable: true,
   },
   '/terms': {
     title: 'Terms — Zeyks Book',
-    description: 'The terms that govern your use of Zeyks Book.',
+    description: 'The terms that govern your use of Zeyks Book, including the accounting guarantees and the limits of the service.',
     path: '/terms',
     indexable: true,
   },

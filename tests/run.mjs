@@ -22,6 +22,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
+import { CANONICAL_ORIGIN, PRERENDER_PAGES, PRICING_FAQS, renderPageHtml } from '../scripts/prerender.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -129,7 +130,7 @@ const files = [
   'lib/capabilities.ts', 'lib/appPhases.ts', 'lib/saleState.ts', 'lib/purchaseState.ts',
   'lib/expenseState.ts', 'lib/voidState.ts', 'lib/paymentState.ts', 'lib/gatewayState.ts',
   'lib/session.ts', 'lib/routes.ts', 'lib/preferences.ts', 'lib/roles.ts',
-  'lib/paymentApiConfig.ts',
+  'lib/paymentApiConfig.ts', 'lib/pageMetadata.ts',
   'services/accountingEngine.ts', 'services/posting.ts', 'services/referenceGenerator.ts',
   'services/reportData.ts',
 ];
@@ -155,8 +156,10 @@ const routesMod = await import(pathToFileURL(path.join(tmp, 'lib/routes.mjs')).h
 const preferencesMod = await import(pathToFileURL(path.join(tmp, 'lib/preferences.mjs')).href);
 const paymentApiConfigMod = await import(pathToFileURL(path.join(tmp, 'lib/paymentApiConfig.mjs')).href);
 const rolesMod = await import(pathToFileURL(path.join(tmp, 'lib/roles.mjs')).href);
+const pageMetadataMod = await import(pathToFileURL(path.join(tmp, 'lib/pageMetadata.mjs')).href);
+const { PUBLIC_PAGES, SITE_ORIGIN, metadataForPath } = pageMetadataMod;
 const {
-  ALL_ROLES, FEATURE_FOR_ROLE, ROLE_GATING_ENABLED, roleHasFeature,
+  ALL_ROLES, FEATURE_FOR_ROLE, ROLE_GATING_ENABLED, ROLE_PRICE_NPR, roleHasFeature,
   paywallHoldsAccount, isPayingTier, isAppAdmin,
 } = rolesMod;
 const {
@@ -5708,7 +5711,8 @@ test('the favicon is a real icon file, and the build ships it', () => {
   const html = readFileSync(path.join(root, 'index.html'), 'utf8');
   assert(/rel="icon" href="\/favicon.ico"/.test(html), 'the document asks for the icon');
   assert(/type="image\/svg\+xml" href="\/favicon.svg"/.test(html));
-  assert(/rel="canonical" href="https:\/\/(zeyks-book\.vercel\.app|zeyksbook\.app)\/"/.test(html));
+  assert(/rel="canonical" href="https:\/\/www\.zeyksbook\.app\/"/.test(html),
+    'the shell canonicalises on the host that answers 200, not the apex that 308s');
   assert(/name="description"/.test(html), 'and states what the product is');
 });
 
@@ -5719,8 +5723,11 @@ test('the sitemap lists the public surface only, and robots agrees', () => {
   const locs = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
   assert(locs.length > 0, 'it lists something');
   for (const loc of locs) {
-    const pathname = new URL(loc).pathname;
-    const route = parseRoute(pathname);
+    const url = new URL(loc);
+    assertEqual(url.origin, 'https://www.zeyksbook.app',
+      `${loc} must be on the canonical host — a sitemap that lists the apex `
+      + 'publishes a redirect, and a redirect is not a canonical URL');
+    const route = parseRoute(url.pathname);
     const publicKinds = ['landing', 'signin', 'demo', 'pricing', 'about', 'contact', 'privacy', 'terms'];
     assert(publicKinds.includes(route.kind), `${loc} is not a public page`);
   }
@@ -5732,8 +5739,201 @@ test('the sitemap lists the public surface only, and robots agrees', () => {
   for (const tab of APP_TABS) {
     assert(robots.includes(`Disallow: ${pathForTab(tab)}`), `robots must disallow ${tab}`);
   }
-  assert(/Sitemap: https:\/\/zeyksbook\.app\/sitemap\.xml/.test(robots),
+  assert(robots.includes('Disallow: /king'), 'and the admin panel is off-limits too');
+  assert(/Sitemap: https:\/\/www\.zeyksbook\.app\/sitemap\.xml/.test(robots),
     'robots points at the canonical production sitemap');
+});
+
+console.log('\n=== Public-page metadata: one copy, three crawler surfaces ===');
+
+/*
+ * The same page is described in three places: `PUBLIC_PAGES` (what the running
+ * app writes into the live document), `PRERENDER_PAGES` (the static document a
+ * crawler fetches first), and the copy inside those documents. None of them can
+ * import the others — one is TypeScript, one is build-time Node — so they are
+ * compared instead. Every test below exists because a mismatch here is invisible
+ * to a user and obvious to a search engine.
+ */
+
+test('the prerendered documents and the live app metadata say the same thing', () => {
+  assertEqual(CANONICAL_ORIGIN, SITE_ORIGIN,
+    'the build and the app must canonicalise on the same host');
+
+  for (const page of PRERENDER_PAGES) {
+    const live = PUBLIC_PAGES[page.path];
+    assert(live, `${page.path} gets a document but the app has no metadata for it`);
+    assertEqual(page.title, live.title, `${page.path} title drifts between build and app`);
+    assertEqual(page.description, live.description,
+      `${page.path} description drifts between build and app`);
+    assertEqual(page.slug, `${page.path.replace(/^\//, '')}`, 'the slug is the path');
+  }
+
+  // The landing page is `index.html`, so it has no document of its own.
+  const documented = PRERENDER_PAGES.map((p) => p.path).sort();
+  const declared = Object.keys(PUBLIC_PAGES).filter((p) => p !== '/').sort();
+  assertEqual(JSON.stringify(documented), JSON.stringify(declared),
+    'every public page the app describes needs its own document, and vice versa');
+});
+
+test('the shell itself carries the landing page metadata, unescaped', () => {
+  const html = readFileSync(path.join(root, 'index.html'), 'utf8');
+  const landing = PUBLIC_PAGES['/'];
+  const title = /<title>([\s\S]*?)<\/title>/u.exec(html)[1].replace(/&amp;/g, '&');
+  assertEqual(title, landing.title, 'the shell title is the landing title');
+  const description = /<meta[^>]*name="description"[^>]*content="([^"]*)"/su.exec(html)[1];
+  assertEqual(description, landing.description, 'the shell description is the landing description');
+  for (const attribute of ['og:title', 'twitter:title']) {
+    const value = new RegExp(`<meta[^>]*name="${attribute}"[^>]*content="([^"]*)"|<meta[^>]*property="${attribute}"[^>]*content="([^"]*)"`, 'u')
+      .exec(html);
+    assertEqual((value[1] ?? value[2]).replace(/&amp;/g, '&'), landing.title, `${attribute} agrees`);
+  }
+});
+
+test('each document canonicalises itself and publishes one parseable graph', () => {
+  const shell = readFileSync(path.join(root, 'index.html'), 'utf8');
+  for (const page of PRERENDER_PAGES) {
+    const doc = renderPageHtml(shell, page);
+    const url = `${CANONICAL_ORIGIN}${page.path}`;
+    assert(doc.includes(`<link rel="canonical" href="${url}" />`),
+      `${page.path} must canonicalise on its own URL`);
+    assert(doc.includes(`<meta property="og:url" content="${url}" />`),
+      `${page.path} og:url must match its canonical`);
+    assert(doc.includes(`<title>${page.title.replace(/&/g, '&amp;')}</title>`)
+      || doc.includes(`<title>${page.title}</title>`), `${page.path} title is in the document`);
+
+    const blocks = [...doc.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)];
+    assertEqual(blocks.length, 1, `${page.path} publishes exactly one structured-data block`);
+    const graph = JSON.parse(blocks[0][1].replace(/\\u003c/g, '<'));
+    assertEqual(graph['@context'], 'https://schema.org');
+    const types = graph['@graph'].map((node) => node['@type']);
+    assert(types.includes('Organization'), `${page.path} says who publishes it`);
+    assert(types.includes('WebSite'), `${page.path} says what site it belongs to`);
+    const webPage = graph['@graph'].find((node) => /Page/u.test(node['@type']));
+    assertEqual(webPage.url, url, `${page.path} describes itself, not the home page`);
+    const crumbs = webPage.breadcrumb.itemListElement;
+    assertEqual(crumbs.length, 2, `${page.path} has a home crumb and its own`);
+    assertEqual(crumbs[1].item, url, `and the trail ends on itself`);
+    for (const node of graph['@graph']) {
+      const json = JSON.stringify(node);
+      assert(!/https:\/\/zeyksbook\.app/u.test(json),
+        `${page.path} structured data must not point at the apex, which only redirects`);
+    }
+  }
+});
+
+test('the pricing FAQ markup answers exactly the questions the page asks', () => {
+  const source = fileText('src/components/PricingPage.tsx');
+  const start = source.indexOf('const FAQS = [');
+  assert(start >= 0, 'the pricing page still keeps its FAQ array');
+  const block = source.slice(start, source.indexOf('];', start));
+  const parsed = [...block.matchAll(/\{\s*q: '([^']*)',\s*a: '([^']*)',\s*\}/gu)]
+    .map((m) => ({ q: m[1], a: m[2] }));
+  assert(parsed.length > 0, 'the FAQ array must parse — a new quoting style needs the parser updated');
+  assertEqual((block.match(/\bq:/gu) || []).length, parsed.length,
+    'every FAQ entry was parsed, none silently skipped');
+  assertEqual(JSON.stringify(parsed), JSON.stringify(PRICING_FAQS),
+    'FAQ structured data that does not match the visible page is a spam signal');
+
+  const doc = renderPageHtml(readFileSync(path.join(root, 'index.html'), 'utf8'),
+    PRERENDER_PAGES.find((p) => p.path === '/pricing'));
+  const graph = JSON.parse(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/u
+    .exec(doc)[1].replace(/\\u003c/g, '<'));
+  const faq = graph['@graph'].find((node) => node['@type'] === 'FAQPage');
+  assert(faq, 'the pricing document must carry the FAQ graph');
+  assertEqual(faq.mainEntity.length, PRICING_FAQS.length);
+  faq.mainEntity.forEach((entry, i) => {
+    assertEqual(entry.name, PRICING_FAQS[i].q, `FAQ ${i} question`);
+    assertEqual(entry.acceptedAnswer.text, PRICING_FAQS[i].a, `FAQ ${i} answer`);
+  });
+});
+
+test('the published plans are the plans the app actually enforces', () => {
+  const crawlerCopy = [
+    ['index.html', readFileSync(path.join(root, 'index.html'), 'utf8')],
+    ['scripts/prerender.mjs', readFileSync(path.join(root, 'scripts/prerender.mjs'), 'utf8')],
+    ['src/lib/pageMetadata.ts', stripComments(fileText('src/lib/pageMetadata.ts'))],
+    ['public/llms.txt', readFileSync(path.join(root, 'public/llms.txt'), 'utf8')],
+    ['PricingPage.tsx', stripComments(fileText('src/components/PricingPage.tsx'))],
+  ];
+  for (const [name, text] of crawlerCopy) {
+    assert(!/NPR 999|999 per month|one plan/iu.test(text),
+      `${name} still advertises a single NPR 999 plan`);
+    assert(!/Supabase|Firebase/iu.test(text),
+      `${name} still names the retired providers; records are on Neon`);
+    assert(!/https:\/\/zeyksbook\.app/u.test(text),
+      `${name} canonicalises on the apex, which answers 308`);
+  }
+  assert(/Sign in to Zeyks Book with the email address and password/u
+    .test(readFileSync(path.join(root, 'scripts/prerender.mjs'), 'utf8')),
+  'sign-in is admin-issued email and password, not a magic code');
+
+  // Prices come from one table, so the page cannot advertise a tier that
+  // `FEATURE_FOR_ROLE` does not unlock.
+  assertEqual(ROLE_PRICE_NPR.plus, 399);
+  assertEqual(ROLE_PRICE_NPR.premium, 599);
+  for (const price of ['399', '599']) {
+    assert(readFileSync(path.join(root, 'index.html'), 'utf8').includes(price),
+      `the shell must publish the ${price} plan`);
+  }
+  const pricingDoc = renderPageHtml(readFileSync(path.join(root, 'index.html'), 'utf8'),
+    PRERENDER_PAGES.find((p) => p.path === '/pricing'));
+  const graph = JSON.parse(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/u
+    .exec(pricingDoc)[1].replace(/\\u003c/g, '<'));
+  const offers = graph['@graph'].find((node) => node['@type'] === 'SoftwareApplication').offers;
+  assertEqual(offers['@type'], 'AggregateOffer', 'two plans, so an aggregate, not a single Offer');
+  assertEqual(offers.lowPrice, '399');
+  assertEqual(offers.highPrice, '599');
+  assertEqual(offers.priceCurrency, 'NPR');
+});
+
+test('the manifest and the answer-engine file ship facts that hold up', () => {
+  const html = readFileSync(path.join(root, 'index.html'), 'utf8');
+  assert(/<link rel="manifest" href="\/site\.webmanifest" \/>/u.test(html),
+    'the document asks for the manifest');
+  assert(/property="og:locale"/u.test(html), 'and states the page language');
+
+  const manifest = JSON.parse(readFileSync(path.join(root, 'public/site.webmanifest'), 'utf8'));
+  assertEqual(manifest.start_url, '/');
+  assertEqual(manifest.display, 'standalone');
+  assert(manifest.icons.length >= 1, 'it offers icons');
+  for (const icon of manifest.icons) {
+    const file = path.join(root, 'public', icon.src.replace(/^\//u, ''));
+    assert(existsSync(file), `${icon.src} is a real file in public/`);
+    if (icon.sizes !== 'any') {
+      // A manifest that lies about pixel sizes is worse than no manifest entry.
+      const buffer = readFileSync(file);
+      const dims = icon.src.endsWith('.png')
+        ? { w: buffer.readUInt32BE(16), h: buffer.readUInt32BE(20) }
+        : (() => {
+          let offset = 2;
+          while (offset < buffer.length) {
+            if (buffer[offset] !== 0xff) { offset += 1; continue; }
+            const marker = buffer[offset + 1];
+            if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4
+              && marker !== 0xc8 && marker !== 0xcc) {
+              return { h: buffer.readUInt16BE(offset + 5), w: buffer.readUInt16BE(offset + 7) };
+            }
+            offset += 2 + buffer.readUInt16BE(offset + 2);
+          }
+          throw new Error(`${icon.src} has no JPEG frame`);
+        })();
+      assertEqual(icon.sizes, `${dims.w}x${dims.h}`, `${icon.src} size claim`);
+    }
+  }
+
+  const llms = readFileSync(path.join(root, 'public/llms.txt'), 'utf8');
+  assert(/^# Zeyks Book$/mu.test(llms), 'answer engines key off the first heading');
+  assert(/NPR 399/u.test(llms) && /NPR 599/u.test(llms), 'both plans, at their real prices');
+  assert(/no self-service sign-up/iu.test(llms),
+    'accounts are created by the team; an engine must not tell people to sign up');
+  assert(/not (?:currently )?published/iu.test(llms), 'and it repeats what is not promised');
+  for (const link of [...llms.matchAll(/\]\((https:\/\/[^)]+)\)/gu)].map((m) => m[1])) {
+    const url = new URL(link);
+    assertEqual(url.origin, 'https://www.zeyksbook.app', `${link} must be on the canonical host`);
+    const route = parseRoute(url.pathname);
+    assert(['landing', 'demo', 'pricing', 'about', 'contact', 'privacy', 'terms'].includes(route.kind),
+      `${link} is not an indexable public page`);
+  }
 });
 
 test('the landing page is public, restrained and only claims what exists', () => {

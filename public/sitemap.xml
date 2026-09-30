@@ -2,45 +2,56 @@
 <!--
   The public surface only.
 
-  /dashboard, /sales, /purchases, /expenses, /payments, /reports, /health and
-  /settings are deliberately absent: they are the signed-in application, they
-  render nothing without a session, and one business's books must never be
-  indexed. See robots.txt, which disallows them too.
+  /dashboard, /sales, /purchases, /expenses, /payments, /reports, /health,
+  /settings and /inventory are deliberately absent: they are the signed-in
+  application, they render nothing without a session, and one business's books
+  must never be indexed. See robots.txt, which disallows them too.
+
+  Every URL is on https://www.zeyksbook.app — the host that answers 200. The
+  apex 308-redirects here, so listing it would publish a redirect into the
+  sitemap. Bump <lastmod> when a page's published copy actually changes.
 -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://zeyksbook.app/</loc>
+    <loc>https://www.zeyksbook.app/</loc>
+    <lastmod>2026-09-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://zeyksbook.app/pricing</loc>
+    <loc>https://www.zeyksbook.app/demo</loc>
+    <lastmod>2026-09-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://www.zeyksbook.app/pricing</loc>
+    <lastmod>2026-09-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://zeyksbook.app/about</loc>
+    <loc>https://www.zeyksbook.app/about</loc>
+    <lastmod>2026-09-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://zeyksbook.app/contact</loc>
+    <loc>https://www.zeyksbook.app/contact</loc>
+    <lastmod>2026-09-30</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://zeyksbook.app/privacy</loc>
+    <loc>https://www.zeyksbook.app/privacy</loc>
+    <lastmod>2026-09-30</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://zeyksbook.app/terms</loc>
+    <loc>https://www.zeyksbook.app/terms</loc>
+    <lastmod>2026-09-30</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.5</priority>
-  </url>
-  <url>
-    <loc>https://zeyksbook.app/demo</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
   </url>
 </urlset>
