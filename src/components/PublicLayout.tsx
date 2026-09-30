@@ -206,9 +206,10 @@ export const PublicLayout: React.FC<{
 
           {/* Bottom copyright bar */}
           <div className="mt-10 border-t border-[var(--separator)] pt-6 flex flex-col gap-2 sm:flex-row sm:items-center text-[12px] text-[var(--label-tertiary)]">
-            <p>© {new Date().getFullYear()} · Kathmandu, Nepal</p>
+            <p>© {new Date().getFullYear()} · Janakpur and Biratnagar, Nepal</p>
             <p className="sm:ml-auto">
-              Prepared for Inland Revenue Department (IRD) compliance and standard A4 paper presentation.
+              A4-formatted reports and VAT statements are working documents — review them
+              with your accountant. IRD approval is not claimed.
             </p>
           </div>
         </div>

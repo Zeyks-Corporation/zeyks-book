@@ -5886,6 +5886,37 @@ test('the published plans are the plans the app actually enforces', () => {
   assertEqual(offers.priceCurrency, 'NPR');
 });
 
+test('the public site names the real offices and the one confirmed number', () => {
+  const publicCopy = {
+    'ContactPage.tsx': stripComments(fileText('src/components/ContactPage.tsx')),
+    'AboutPage.tsx': stripComments(fileText('src/components/AboutPage.tsx')),
+    'PrivacyPage.tsx': stripComments(fileText('src/components/PrivacyPage.tsx')),
+    'PublicLayout.tsx': stripComments(fileText('src/components/PublicLayout.tsx')),
+    'index.html': readFileSync(path.join(root, 'index.html'), 'utf8'),
+    'scripts/prerender.mjs': readFileSync(path.join(root, 'scripts/prerender.mjs'), 'utf8'),
+    'public/llms.txt': readFileSync(path.join(root, 'public/llms.txt'), 'utf8'),
+  };
+  for (const [name, text] of Object.entries(publicCopy)) {
+    // `Asia/Kathmandu` is Nepal's timezone and stays; a Kathmandu *office* is not true.
+    assert(!/Kathmandu, Nepal|lists Kathmandu|Location: Kathmandu/u.test(text),
+      `${name} still places the business in Kathmandu`);
+    assert(!/9767784817/u.test(text),
+      `${name} still publishes the number the owner did not confirm`);
+  }
+  assert(/Janakpur/u.test(publicCopy['ContactPage.tsx'])
+    && /Biratnagar/u.test(publicCopy['ContactPage.tsx']),
+  'the contact page must show both offices');
+  assert(/9701066114/u.test(publicCopy['index.html'])
+    && /9701066114/u.test(publicCopy['ContactPage.tsx']),
+  'the confirmed line is the one published, in the copy and in the structured data');
+  assert(/addressLocality":"Janakpur"/u.test(publicCopy['index.html']),
+    'and the organisation address matches it');
+  // The footer used to promise "Prepared for IRD compliance" while the pricing FAQ
+  // said no approval is claimed. One of them had to go, and it is the claim.
+  assert(!/Prepared for Inland Revenue Department/u.test(publicCopy['PublicLayout.tsx']),
+    'the footer must not imply IRD compliance the site elsewhere denies');
+});
+
 test('the manifest and the answer-engine file ship facts that hold up', () => {
   const html = readFileSync(path.join(root, 'index.html'), 'utf8');
   assert(/<link rel="manifest" href="\/site\.webmanifest" \/>/u.test(html),

@@ -76,7 +76,7 @@ export const PrivacyPage: React.FC<{
                 5. Company, trial, and service commitments
               </h2>
               <p className="mt-2">
-                The public site lists Kathmandu, Nepal and contact details, but does not currently publish a registered company identity, uptime guarantee, trial terms, or refund policy. Contact us before subscribing if these details affect your decision.
+                The team works from Janakpur, with a branch in Biratnagar, but no registered company identity, uptime guarantee, trial terms, or refund policy is published yet. Contact us before subscribing if these details affect your decision.
               </p>
             </div>
           </div>

@@ -102,7 +102,7 @@ export const PUBLIC_PAGES: Record<string, PageMetadata> = {
   },
   '/contact': {
     title: 'Contact — Zeyks Book',
-    description: 'Contact Zeyks Book about the interactive demo, the Starter and Premium monthly plans, where business records are stored, or moving your books to Zeyks Book.',
+    description: 'Contact the Zeyks Book team in Janakpur and Biratnagar, Nepal about the interactive demo, the Starter and Premium monthly plans, where business records are stored, or moving your books.',
     path: '/contact',
     indexable: true,
   },

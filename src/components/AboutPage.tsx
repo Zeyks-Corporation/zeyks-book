@@ -76,7 +76,7 @@ export const AboutPage: React.FC<{
           <div>
             <h2 className="text-[18px] font-bold text-[var(--label)]">Company and service details</h2>
             <p className="mt-2 text-[14px] leading-[22px] text-[var(--label-secondary)]">
-              The site lists Kathmandu, Nepal and contact details. It does not currently publish a registered company identity, uptime guarantee, or recovery-time commitment.
+              Zeyks Book is built and supported from Janakpur, with a branch in Biratnagar. It does not currently publish a registered company identity, uptime guarantee, or recovery-time commitment.
             </p>
           </div>
           <div>

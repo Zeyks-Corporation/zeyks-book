@@ -53,7 +53,8 @@ export const ContactPage: React.FC<{
             We’d love to hear from you
           </h1>
           <p className="mt-4 text-[17px] leading-[22px] text-[var(--label-secondary)]">
-            Have questions about deploying Zeyks Book or setting up your double-entry ledger? Send us a message via Resend.
+            Have questions about setting up Zeyks Book for your shop, agency or books?
+            Send us a message and we will reply by email.
           </p>
         </div>
 
@@ -156,20 +157,27 @@ export const ContactPage: React.FC<{
                   <Mail size={18} strokeWidth={1.8} />
                 </div>
                 <div>
-                  <h3 className="text-[15px] font-semibold text-[var(--label)]">Email Service</h3>
+                  <h3 className="text-[15px] font-semibold text-[var(--label)]">Email</h3>
                   <p className="text-[13px] text-[var(--label-secondary)]">Contact@zeyksbook.app</p>
                 </div>
               </div>
             </div>
 
             <div className="bg-[var(--bg)] border border-[var(--separator)] rounded-[14px] p-6">
-              <div className="flex items-center gap-3">
+              <div className="flex items-start gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--fill-secondary)] text-[var(--accent)]">
                   <MapPin size={18} strokeWidth={1.8} />
                 </div>
                 <div>
-                  <h3 className="text-[15px] font-semibold text-[var(--label)]">Location</h3>
-                  <p className="text-[13px] text-[var(--label-secondary)]">Kathmandu, Nepal</p>
+                  <h3 className="text-[15px] font-semibold text-[var(--label)]">Where we work</h3>
+                  <p className="text-[13px] text-[var(--label-secondary)]">
+                    Head office: Janakpur, Nepal<br />
+                    Branch: Biratnagar, Nepal
+                  </p>
+                  <p className="mt-2 text-[12px] leading-[17px] text-[var(--label-tertiary)]">
+                    Books are kept online, so shops in both cities — and anywhere else in
+                    Nepal — are served the same way.
+                  </p>
                 </div>
               </div>
             </div>
@@ -180,8 +188,15 @@ export const ContactPage: React.FC<{
                   <MessageSquare size={18} strokeWidth={1.8} />
                 </div>
                 <div>
-                  <h3 className="text-[15px] font-semibold text-[var(--label)]">Community Support</h3>
-                  <p className="text-[13px] text-[var(--label-secondary)]">+977 9767784817</p>
+                  <h3 className="text-[15px] font-semibold text-[var(--label)]">Support and plans</h3>
+                  <a
+                    href="https://wa.me/9779701066114"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[13px] text-[var(--accent)] underline underline-offset-2"
+                  >
+                    +977 9701066114 (Biratnagar branch, WhatsApp)
+                  </a>
                 </div>
               </div>
             </div>

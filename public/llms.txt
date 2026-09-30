@@ -83,7 +83,11 @@ effect on the next page load.
 
 ## Contact
 
+- Built and supported from **Janakpur, Nepal**, with a branch in **Biratnagar, Nepal**.
+  The app is hosted, so shops in either city — and anywhere else in Nepal — are served
+  the same way.
 - Email: contact@zeyksbook.app
+- Phone and WhatsApp (Biratnagar branch): +977 9701066114
 - Contact form: https://www.zeyksbook.app/contact
-- Support phone and the WhatsApp number used for plan purchases are published on
-  the site; check /contact for the current details.
+- Plan purchases and upgrades go through the same WhatsApp number while online
+  checkout is unwired.

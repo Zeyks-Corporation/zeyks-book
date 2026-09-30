@@ -52,7 +52,7 @@ export const PRERENDER_PAGES = [
     slug: 'contact',
     path: '/contact',
     title: 'Contact — Zeyks Book',
-    description: 'Contact Zeyks Book about the interactive demo, the Starter and Premium monthly plans, where business records are stored, or moving your books to Zeyks Book.',
+    description: 'Contact the Zeyks Book team in Janakpur and Biratnagar, Nepal about the interactive demo, the Starter and Premium monthly plans, where business records are stored, or moving your books.',
   },
   {
     slug: 'privacy',
@@ -85,8 +85,8 @@ export const PRERENDER_PAGES = [
 /** Small, route-specific copy visible before JavaScript runs. */
 const SEO_CONTENT = {
   '/pricing': '<main class="seo-fallback"><p>Pricing for Nepal</p><h1>Simple pricing for Nepali business accounting</h1><p>Zeyks Book has two monthly plans: Starter at NPR 399 and Premium at NPR 599. Starter covers daily books, sales, purchases and expenses. Premium adds inventory, aged receivables and payables, print-ready reports, data health and settlements. There are no per-seat charges.</p><h2>Know what is included</h2><p>Business records are held in a managed Neon Postgres database, and Neon Auth handles email and password sign-in. Download a JSON snapshot from Settings; restore is not available yet. Trial terms, refund policy, and IRD approval status are not currently published.</p><p><a href="/demo">Explore sample books in the interactive demo</a> or <a href="/contact">contact Zeyks Book</a> before subscribing.</p></main>',
-  '/about': '<main class="seo-fallback"><p>About Zeyks Book</p><h1>Double-entry bookkeeping for businesses in Nepal</h1><p>Zeyks Book is a web-based accounting app for Nepali businesses. It supports Bikram Sambat and Gregorian dates, NPR amounts, sales, purchases, expenses, settlements, and printable A4 reports.</p><h2>Designed around local bookkeeping needs</h2><p>Explore sample books in the interactive demo. The public site currently lists Kathmandu, Nepal and contact details; registered company details and uptime commitments are not published.</p><p><a href="/demo">Try the demo</a> · <a href="/pricing">See pricing</a> · <a href="/contact">Contact</a></p></main>',
-  '/contact': '<main class="seo-fallback"><p>Contact Zeyks Book</p><h1>Questions about accounting software in Nepal?</h1><p>Contact the Zeyks Book team about the interactive demo, the Starter and Premium monthly plans, data storage, or moving your books.</p><p>Location: Kathmandu, Nepal. Email: contact@zeyksbook.app. Phone: +977 9767784817.</p><p><a href="/demo">Try the interactive demo</a> · <a href="/pricing">Read pricing and terms</a></p></main>',
+  '/about': '<main class="seo-fallback"><p>About Zeyks Book</p><h1>Double-entry bookkeeping for businesses in Nepal</h1><p>Zeyks Book is a web-based accounting app for Nepali businesses. It supports Bikram Sambat and Gregorian dates, NPR amounts, sales, purchases, expenses, settlements, and printable A4 reports.</p><h2>Designed around local bookkeeping needs</h2><p>Explore sample books in the interactive demo. The team builds and supports Zeyks Book from Janakpur, with a branch in Biratnagar; registered company details and uptime commitments are not published.</p><p><a href="/demo">Try the demo</a> · <a href="/pricing">See pricing</a> · <a href="/contact">Contact</a></p></main>',
+  '/contact': '<main class="seo-fallback"><p>Contact Zeyks Book</p><h1>Accounting software support from Janakpur and Biratnagar</h1><p>Contact the Zeyks Book team about the interactive demo, the Starter and Premium monthly plans, data storage, or moving your books.</p><p>Head office: Janakpur, Nepal. Branch: Biratnagar, Nepal. Email: contact@zeyksbook.app. Phone and WhatsApp: +977 9701066114.</p><p><a href="/demo">Try the interactive demo</a> · <a href="/pricing">Read pricing and terms</a></p></main>',
   '/privacy': '<main class="seo-fallback"><p>Privacy and data storage</p><h1>Where Zeyks Book stores accounting data</h1><p>Zeyks Book uses a managed Neon Postgres database for business records and Neon Auth for email and password sign-in. This is managed cloud storage, not a database in the customer’s own cloud account. The interactive demo uses sample books stored in the browser.</p><h2>Backups and recovery</h2><p>Users can download a JSON backup from Settings. Restoring a backup is not available yet, and automatic backup and recovery commitments are not published.</p><p><a href="/pricing">See pricing</a> · <a href="/contact">Ask a question</a></p></main>',
   '/terms': '<main class="seo-fallback"><p>Terms of use</p><h1>Using Zeyks Book for business accounts</h1><p>Zeyks Book provides web-based bookkeeping, Bikram Sambat and AD dates, NPR records, and printable reports. Review your accounting outputs with a qualified professional before statutory filing. The public site does not claim IRD certification or approval.</p><p><a href="/pricing">Pricing and subscription questions</a> · <a href="/privacy">Data and backup details</a> · <a href="/contact">Contact</a></p></main>',
   '/signin': '<main class="seo-fallback"><p>Zeyks Book sign in</p><h1>Sign in to your business books</h1><p>Sign in to Zeyks Book with the email address and password issued to your business by the Zeyks Book team.</p><p>Want to explore first? <a href="/demo">Open the interactive demo with sample books</a>.</p></main>',
@@ -146,13 +146,29 @@ const ORGANIZATION = {
   url: `${CANONICAL_ORIGIN}/`,
   logo: { '@type': 'ImageObject', url: `${CANONICAL_ORIGIN}/logo.jpg`, width: 1024, height: 1024 },
   email: 'contact@zeyksbook.app',
-  // No locality and no telephone: the public pages disagree about both, and
-  // structured data is the place a wrong answer gets believed.
+  telephone: '+977 9701066114',
+  // Confirmed by the owner 2026-09-30: run from Janakpur, branch in Biratnagar.
+  address: { '@type': 'PostalAddress', addressLocality: 'Janakpur', addressCountry: 'NP' },
+  location: [
+    {
+      '@type': 'Place',
+      name: 'Janakpur (head office)',
+      address: { '@type': 'PostalAddress', addressLocality: 'Janakpur', addressCountry: 'NP' },
+    },
+    {
+      '@type': 'Place',
+      name: 'Biratnagar (branch)',
+      telephone: '+977 9701066114',
+      address: { '@type': 'PostalAddress', addressLocality: 'Biratnagar', addressCountry: 'NP' },
+    },
+  ],
   areaServed: { '@type': 'Country', name: 'Nepal' },
   contactPoint: [{
     '@type': 'ContactPoint',
     contactType: 'customer support',
     email: 'contact@zeyksbook.app',
+    telephone: '+977 9701066114',
+    areaServed: 'NP',
     availableLanguage: 'en',
   }],
 };
