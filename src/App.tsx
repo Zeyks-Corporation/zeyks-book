@@ -14,6 +14,7 @@ import { ContactPage } from './components/ContactPage';
 import { PrivacyPage } from './components/PrivacyPage';
 import { TermsPage } from './components/TermsPage';
 import { NotFoundView } from './components/NotFoundView';
+import { IntentPageView } from './components/IntentPage';
 import { SubscribeView } from './components/SubscribeView';
 import { KingPanel } from './components/KingPanel';
 import { isPayingTier, isAppAdmin, roleHasFeature, paywallHoldsAccount, type AppRole } from './lib/roles';
@@ -21,6 +22,7 @@ import { PlanLockedView } from './components/UpgradeViews';
 import { gateway, GatewayConfig, takePending } from './services/paymentGateway';
 import { useRoute } from './lib/useRoute';
 import { parseRoute, pathForTab, redirectFor } from './lib/routes';
+import { intentPageForPath } from './lib/intentPages';
 import { TITLES, applyPageMetadata, metadataForPath } from './lib/pageMetadata';
 import { readCalendarPreference, writeCalendarPreference } from './lib/preferences';
 import type { CalendarPreference } from './lib/preferences';
@@ -825,6 +827,25 @@ export default function App() {
         currentPath={path}
         navigate={navigate}
         onSignOut={() => exitSession('this-device')}
+      />
+    );
+  }
+
+  /**
+   * An intent page is rendered for whoever asks for it, signed in or not, and
+   * without waiting for a book to load. It shows no data, so a customer reading
+   * about hallbooks or VAT is never shown someone's ledger — and bouncing them
+   * to the dashboard for clicking a footer link would make the page unreadable
+   * to the people who already pay for the product.
+   */
+  const guide = route.kind === 'guide' ? intentPageForPath(route.path) : null;
+  if (guide) {
+    return (
+      <IntentPageView
+        page={guide}
+        currentPath={guide.path}
+        navigate={navigate}
+        onSignIn={() => navigate('/signin')}
       />
     );
   }

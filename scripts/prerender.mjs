@@ -80,6 +80,40 @@ export const PRERENDER_PAGES = [
     description:
       'Try Zeyks Book with sample books in your browser: sales, purchases, settlements, printable A4 reports and Bikram Sambat dates. No sign-in, and demo changes never leave the device.',
   },
+  /*
+   * The intent pages. Title, description, breadcrumb label and FAQ text are the
+   * same strings as `INTENT_PAGES` in `src/lib/intentPages.ts`; the drift test
+   * compares every one of them, because a document that disagrees with the page
+   * it serves is the failure this whole mechanism exists to catch.
+   */
+  {
+    slug: 'hallbook-software',
+    path: '/hallbook-software',
+    title: 'Hallbook Software for Kirana Pasals in Nepal — Zeyks Book',
+    description:
+      'A digital hallbook for Nepali shops: daily sales, customer udhar with due dates, supplier bills and expenses in NPR, with Bikram Sambat dates and printable A4 statements. From NPR 399 per month.',
+  },
+  {
+    slug: 'agency-accounting',
+    path: '/agency-accounting',
+    title: 'Accounting Software for Agencies and Freelancers in Nepal — Zeyks Book',
+    description:
+      'Service businesses bill clients in NPR with PAN and due dates, record expenses under their own heads, and see profit, unpaid invoices and VAT on printable A4 reports. For agencies, studios and freelancers in Nepal.',
+  },
+  {
+    slug: 'bikram-sambat-accounting',
+    path: '/bikram-sambat-accounting',
+    title: 'Accounting Software with Bikram Sambat Dates — Zeyks Book',
+    description:
+      'Enter dates in the Bikram Sambat calendar and keep the Gregorian date beside them. Zeyks Book converts both ways, caps each BS month to its real length, and prints reports in BS or AD for businesses in Nepal.',
+  },
+  {
+    slug: 'vat-reporting-nepal',
+    path: '/vat-reporting-nepal',
+    title: 'VAT Reporting Software for Businesses in Nepal — Zeyks Book',
+    description:
+      'Record VAT on sales, purchases and expenses, then run a VAT summary for any date range: taxable sales and purchases, output VAT, input VAT, and the net payable or credit carried forward, on printable A4.',
+  },
 ];
 
 /** Small, route-specific copy visible before JavaScript runs. */
@@ -91,6 +125,10 @@ const SEO_CONTENT = {
   '/terms': '<main class="seo-fallback"><p>Terms of use</p><h1>Using Zeyks Book for business accounts</h1><p>Zeyks Book provides web-based bookkeeping, Bikram Sambat and AD dates, NPR records, and printable reports. Review your accounting outputs with a qualified professional before statutory filing. The public site does not claim IRD certification or approval.</p><p><a href="/pricing">Pricing and subscription questions</a> · <a href="/privacy">Data and backup details</a> · <a href="/contact">Contact</a></p></main>',
   '/signin': '<main class="seo-fallback"><p>Zeyks Book sign in</p><h1>Sign in to your business books</h1><p>Sign in to Zeyks Book with the email address and password issued to your business by the Zeyks Book team.</p><p>Want to explore first? <a href="/demo">Open the interactive demo with sample books</a>.</p></main>',
   '/demo': '<main class="seo-fallback"><p>Interactive product demo</p><h1>Explore Nepali accounting software with sample books</h1><p>Walk through Zeyks Book’s double-entry ledger, invoices, purchases, settlements, reports, and Bikram Sambat dates using sample books. Demo changes stay in this browser.</p><p><a href="/pricing">See the Starter and Premium plans</a> · <a href="/privacy">Read about data storage</a></p></main>',
+  '/hallbook-software': '<main class="seo-fallback"><p>Hallbook software for shops</p><h1>Hallbook software for kirana pasals</h1><p>A digital hallbook keeps the four pages a shop already writes: sales, customer udhar with due dates, supplier bills and shop expenses — in NPR, on Bikram Sambat dates, with party balances that add themselves and A4 statements to print. Starter is NPR 399 per month; Premium at NPR 599 adds settlements, reports, inventory and data health.</p><p>It is not a till: there is no barcode checkout, no payment collection and no payroll. <a href="/demo">Try it with sample books</a> or <a href="/pricing">see the plans</a>.</p></main>',
+  '/agency-accounting': '<main class="seo-fallback"><p>Accounting for agencies and freelancers</p><h1>Accounting for agencies, studios and freelancers</h1><p>Invoice clients in NPR with PAN, discount and VAT, record expenses under your own heads, settle payments against open invoices, and print profit and loss, trial balance and aged receivables on A4.</p><p>There is no project or job costing, no time tracking, no payroll and no recurring invoices — the books are one ledger for the whole business. <a href="/demo">Try the demo</a> · <a href="/pricing">See pricing</a></p></main>',
+  '/bikram-sambat-accounting': '<main class="seo-fallback"><p>Bikram Sambat dates</p><h1>Accounting software that reads Bikram Sambat</h1><p>Dates are entered in the BS calendar with year, month and day, each month capped to its real published length, and the Gregorian date is kept beside it as the stored, sortable key. Reports print in either calendar and today is computed for Asia/Kathmandu.</p><p>The published day-count table covers BS 2000 to BS 2090; a date outside it is shown as stored rather than guessed. <a href="/demo">Try it</a> · <a href="/contact">Ask a question</a></p></main>',
+  '/vat-reporting-nepal': '<main class="seo-fallback"><p>VAT reporting</p><h1>VAT reporting for Nepali businesses</h1><p>Tax posts only when the business is marked VAT-registered, at a rate that defaults to 13% and is editable. Output VAT collects in a VAT payable account, input VAT in a VAT receivable account, and the VAT summary reads those postings for any date range: taxable sales, taxable purchases, output VAT, input VAT, and the net payable or credit carried forward, on A4.</p><p>Zeyks Book is not IRD-approved, files nothing, and has no e-billing integration. <a href="/pricing">Plans</a> · <a href="/contact">Contact</a></p></main>',
 };
 
 /**
@@ -124,6 +162,105 @@ export const PRICING_FAQS = [
   },
 ];
 
+/**
+ * The questions each intent page answers, verbatim from `INTENT_PAGES` in
+ * `src/lib/intentPages.ts`.
+ *
+ * Same rule as `PRICING_FAQS`: FAQ markup that does not match the visible page
+ * is a spam signal, so the static document carries the same answers the page
+ * renders, and the drift test compares them string for string.
+ */
+export const GUIDE_FAQS = {
+  '/hallbook-software': [
+    {
+      q: 'Is a hallbook the same thing as an accounting ledger?',
+      a: 'It is the hand-written version of the same record: daily sales, credit given to customers, purchases from suppliers, shop expenses. Zeyks Book keeps those as posted entries, so the totals, the party balances and the reports all come out of the numbers you wrote down rather than a second set of figures.',
+    },
+    {
+      q: 'Can I track customer udhar (credit) in Zeyks Book?',
+      a: 'Yes. Enter the sale as a credit sale with a due date and it stays open. Record a payment against that customer when money comes in, and the balance shows what remains owed. The aged receivables report groups what is still outstanding into time bands on the Premium plan.',
+    },
+    {
+      q: 'Do I need an accountant to start?',
+      a: 'No. The interactive demo walks through sample books, and a new account opens with a chart of accounts already seeded for a Nepali trading business. Most shops only need their own expense heads, their regular customers and their suppliers before the first entry.',
+    },
+    {
+      q: 'What happens to my old paper hallbook?',
+      a: 'You keep it. Most shops start Zeyks Book from the current date rather than re-typing years of pages. Past balances can be entered — an opening stock figure, what each customer owed on the day you switched — but there is no migration service and no way to read the old book in.',
+    },
+    {
+      q: 'Does it work on a phone, and without internet?',
+      a: 'It runs in the browser on a phone or a computer, and the layout adapts to a small screen. Saving needs a connection. Without one, the app shows the last books it had saved on that device, read-only, until you are back online.',
+    },
+  ],
+  '/agency-accounting': [
+    {
+      q: 'Is this sized for a two-person agency?',
+      a: 'Yes. Small is the target: one account, one set of books, and pricing per business rather than per seat. Nothing scales down to a price that only makes sense for a large firm.',
+    },
+    {
+      q: 'Can I show VAT on a service invoice?',
+      a: 'When the business is marked VAT-registered in Settings, tax lines post automatically. The rate defaults to 13% and is editable, and a line can be entered as VAT-inclusive or VAT-exclusive. The VAT summary reads what was posted, not what the invoice says.',
+    },
+    {
+      q: 'Do you handle retainers and monthly billing?',
+      a: 'You issue each month’s invoice yourself. There is no recurring-invoice scheduler, so a retainer stays a habit rather than an automation.',
+    },
+    {
+      q: 'Can I see profit per client or per project?',
+      a: 'Not today. There is no project or job dimension on a journal line, so profit is reported for the business as a whole. You can filter the sales register by party to see what one client was billed and what they still owe, but that is not the same figure as project margin.',
+    },
+    {
+      q: 'What does an agency pay?',
+      a: 'NPR 599 per month on Premium if you want the reports, settlements and data health. NPR 399 on Starter covers invoicing, expenses and settings. There is no per-seat charge and no setup fee published; confirm current terms before paying.',
+    },
+  ],
+  '/bikram-sambat-accounting': [
+    {
+      q: 'Which calendar does Zeyks Book store?',
+      a: 'The Gregorian date is the stored, sortable key, and the Bikram Sambat date is what you enter and what most screens show. Both come from the same day, so a record has one date with two readings rather than two fields that can disagree.',
+    },
+    {
+      q: 'Can I run a report for a Nepali calendar period?',
+      a: 'Yes. Reports take a start and an end date, and the period can be chosen in BS. The printed report labels the range in the calendar you are reading and shows the other calendar beside it.',
+    },
+    {
+      q: 'Do BS months have fixed lengths?',
+      a: 'No. A BS month can be 29, 30, 31 or 32 days, and which one it is depends on the year. Zeyks Book reads the lengths from a published table, which is why the day list changes when you change the month.',
+    },
+    {
+      q: 'What date range is supported?',
+      a: 'BS 2000 to BS 2090, roughly AD 1943 to 2034. Beyond that the converter has no published month lengths to work from, so the app shows the date as stored instead of inventing a conversion.',
+    },
+    {
+      q: 'Does the time zone matter?',
+      a: 'It does. "Today" is calculated for Asia/Kathmandu rather than the browser’s zone, so a shop owner entering an invoice at 11 pm Nepal time does not get the next day’s date because their laptop is set somewhere else.',
+    },
+  ],
+  '/vat-reporting-nepal': [
+    {
+      q: 'Is the VAT rate fixed at 13%?',
+      a: '13% is the default, and each business sets its own rate in Settings. There is a single rate per business, so a shop that mixes exempt and taxable supplies has to separate them before entering the taxable ones.',
+    },
+    {
+      q: 'Does Zeyks Book file my VAT return?',
+      a: 'No. It produces a VAT summary for a date range from your posted journal entries. The return itself is prepared and filed by you or your accountant with the IRD.',
+    },
+    {
+      q: 'Where does the input VAT figure come from?',
+      a: 'From the VAT receivable account. Purchase entries post tax there when the business is registered, and expense entries post tax there when the expense carries it. Anything that did not reach that account is not in the summary.',
+    },
+    {
+      q: 'Why is my input VAT larger than 13% of the taxable purchases?',
+      a: 'Because the two totals read different parts of the ledger. Taxable purchases are the cost-of-goods side; input VAT is everything posted to the VAT receivable account, which also takes tax from expenses. They are not expected to be a clean ratio.',
+    },
+    {
+      q: 'Is the VAT report ready to hand to the IRD?',
+      a: 'It carries the figures a return asks for, printed on A4 with your PAN and the period. It is a working document produced by software with no IRD approval status — review it with your accountant before relying on it.',
+    },
+  ],
+};
+
 /** Short labels for the breadcrumb trail; the page titles are too long for it. */
 const CRUMB = {
   '/pricing': 'Pricing',
@@ -133,6 +270,10 @@ const CRUMB = {
   '/terms': 'Terms',
   '/signin': 'Sign in',
   '/demo': 'Demo',
+  '/hallbook-software': 'Hallbook',
+  '/agency-accounting': 'Agencies',
+  '/bikram-sambat-accounting': 'BS dates',
+  '/vat-reporting-nepal': 'VAT reporting',
 };
 
 const ORG = `${CANONICAL_ORIGIN}/#organization`;
@@ -241,18 +382,20 @@ function jsonLdFor(page) {
     },
   ];
 
-  // The product node only travels with the pages that describe the product.
-  if (page.path === '/pricing' || page.path === '/demo' || page.path === '/about') {
+  // The product node travels with the pages that describe the product: the
+  // marketing set and the intent pages, which each answer one question about it.
+  if (page.path === '/pricing' || page.path === '/demo' || page.path === '/about' || GUIDE_FAQS[page.path]) {
     graph.push(page.path === '/demo'
       ? { ...SOFTWARE_APPLICATION, isAccessibleForFree: true, offers: undefined }
       : SOFTWARE_APPLICATION);
   }
 
-  if (page.path === '/pricing') {
+  const faqs = page.path === '/pricing' ? PRICING_FAQS : GUIDE_FAQS[page.path];
+  if (faqs) {
     graph.push({
       '@type': 'FAQPage',
       '@id': `${url}#faq`,
-      mainEntity: PRICING_FAQS.map((entry) => ({
+      mainEntity: faqs.map((entry) => ({
         '@type': 'Question',
         name: entry.q,
         acceptedAnswer: { '@type': 'Answer', text: entry.a },

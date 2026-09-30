@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Menu, X } from 'lucide-react';
 import { Button } from './ui';
+import { INTENT_PAGES } from '../lib/intentPages';
 
 const NAV_LINKS = [
   { path: '/demo', label: 'Demo' },
@@ -154,6 +155,26 @@ export const PublicLayout: React.FC<{
                         className="text-[13px] text-[var(--label-secondary)] hover:text-[var(--label)] transition-colors"
                       >
                         {label}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              {/* One link per intent page, so the guides are reachable from
+                  every public surface and carry PageRank from all of them. */}
+              <div>
+                <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--label-tertiary)]">
+                  Guides
+                </h3>
+                <ul className="mt-3.5 space-y-2">
+                  {INTENT_PAGES.map(({ path, navLabel }) => (
+                    <li key={path}>
+                      <button
+                        type="button"
+                        onClick={() => navigate(path)}
+                        className="text-[13px] text-[var(--label-secondary)] hover:text-[var(--label)] transition-colors"
+                      >
+                        {navLabel}
                       </button>
                     </li>
                   ))}

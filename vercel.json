@@ -11,6 +11,10 @@
     { "src": "/contact", "dest": "/contact.html" },
     { "src": "/privacy", "dest": "/privacy.html" },
     { "src": "/terms", "dest": "/terms.html" },
+    { "src": "/hallbook-software", "dest": "/hallbook-software.html" },
+    { "src": "/agency-accounting", "dest": "/agency-accounting.html" },
+    { "src": "/bikram-sambat-accounting", "dest": "/bikram-sambat-accounting.html" },
+    { "src": "/vat-reporting-nepal", "dest": "/vat-reporting-nepal.html" },
     { "src": "/(.*)", "dest": "/index.html" }
   ],
   "headers": [

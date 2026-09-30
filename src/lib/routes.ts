@@ -9,10 +9,13 @@
  * inverse, so refresh, back/forward, a pasted link and the sidebar all agree.
  *
  * Pure and dependency-free on purpose: this is the part worth testing, and it
- * is tested without a browser.
+ * is tested without a browser. Its one import is `intentPages`, which is itself
+ * plain data — the router has to know the intent pages exist, and a list kept
+ * twice is a list that drifts.
  */
 
 import type { ViewTab } from '../types';
+import { intentPageForPath } from './intentPages';
 
 /** Where each signed-in screen lives. The inverse of `parseRoute`. */
 const TAB_PATHS: Record<ViewTab, string> = {
@@ -44,6 +47,11 @@ export type Route =
   | { kind: 'contact' }
   | { kind: 'privacy' }
   | { kind: 'terms' }
+  /**
+   * An intent page — hallbook, agencies, BS dates, VAT. `path` is the
+   * normalised path the page is served at, which is also its canonical URL.
+   */
+  | { kind: 'guide'; path: string }
   /** A signed-in screen. */
   | { kind: 'app'; tab: ViewTab }
   /** The hidden admin panel; reachable only at `/king` and only for admins. */
@@ -94,6 +102,11 @@ export function parseRoute(pathname: string): Route {
     if (TAB_PATHS[tab] === path) return { kind: 'app', tab };
   }
 
+  // The intent pages are data, not code: adding a page in `lib/intentPages.ts`
+  // makes it a route, a document and a sitemap entry from the same table.
+  const guide = intentPageForPath(path);
+  if (guide) return { kind: 'guide', path: guide.path };
+
   // The admin panel has no nav button — a staff member types `/king` and only
   // an admin role may render it; everyone else sees 404.
   if (path === '/king') return { kind: 'king' };
@@ -117,6 +130,10 @@ export function parseRoute(pathname: string): Route {
  * `null` means "render the route as it is".
  */
 export function redirectFor(route: Route, authenticated: boolean): string | null {
+  // An intent page is deliberately not in this list. A paying customer who
+  // opens the hallbook or VAT page from the footer is reading reference
+  // material about their own books, not being shown a surface they have outgrown
+  // — and the page renders no data, so nothing private is at stake.
   if (authenticated && (route.kind === 'landing' || route.kind === 'signin' || route.kind === 'demo' || route.kind === 'pricing' || route.kind === 'about' || route.kind === 'contact' || route.kind === 'privacy' || route.kind === 'terms')) {
     return pathForTab('dashboard');
   }

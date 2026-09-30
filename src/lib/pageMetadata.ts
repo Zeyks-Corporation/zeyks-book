@@ -1,4 +1,5 @@
 import type { ViewTab } from '../types';
+import { INTENT_PAGES } from './intentPages';
 import { normalizePath, parseRoute } from './routes';
 
 /**
@@ -63,6 +64,24 @@ const PRODUCT_DESCRIPTION =
   'Zeyks Book is accounting software for small businesses in Nepal, with double-entry bookkeeping, Bikram Sambat and AD dates, NPR amounts, invoices, bills, and printable A4 financial reports.';
 
 /**
+ * The intent pages, in the same table as the rest of the public site.
+ *
+ * Their titles and descriptions live with their content in `lib/intentPages.ts`
+ * so the page a person reads and the metadata a crawler is told about it are
+ * written once. `scripts/prerender.mjs` carries the same strings for the static
+ * documents and the drift test compares the two.
+ */
+const INTENT_METADATA: Record<string, PageMetadata> = {};
+for (const page of INTENT_PAGES) {
+  INTENT_METADATA[page.path] = {
+    title: page.title,
+    description: page.description,
+    path: page.path,
+    indexable: true,
+  };
+}
+
+/**
  * Every public page, by path.
  *
  * Exported so `tests/run.mjs` can compare it against `PRERENDER_PAGES` in
@@ -118,6 +137,7 @@ export const PUBLIC_PAGES: Record<string, PageMetadata> = {
     path: '/terms',
     indexable: true,
   },
+  ...INTENT_METADATA,
 };
 
 const NOT_FOUND: PageMetadata = {
@@ -137,6 +157,7 @@ const NOT_FOUND: PageMetadata = {
 export function metadataForPath(pathname: string): PageMetadata {
   const route = parseRoute(pathname);
   if (route.kind === 'not-found') return { ...NOT_FOUND, path: normalizePath(pathname) };
+  if (route.kind === 'guide') return PUBLIC_PAGES[route.path] ?? { ...NOT_FOUND, path: route.path };
   if (route.kind === 'app') {
     return {
       title: `${TITLES[route.tab]} — Zeyks Book`,

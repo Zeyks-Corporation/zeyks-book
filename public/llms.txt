@@ -76,6 +76,17 @@ effect on the next page load.
 - [Home](https://www.zeyksbook.app/): what the product is and what it does not do.
 - [Pricing](https://www.zeyksbook.app/pricing): both plans, what each unlocks, and common questions.
 - [Demo](https://www.zeyksbook.app/demo): sample books in the browser, no account needed.
+- [Hallbook software](https://www.zeyksbook.app/hallbook-software): the paper hallbook
+  (sales, udhar, supplier bills, shop expenses) as one book that adds up — and what a
+  shop will not get from it.
+- [Agency accounting](https://www.zeyksbook.app/agency-accounting): client invoicing,
+  expenses by head, and settlements, stated for a service business. No project or job
+  costing, no time tracking, no payroll.
+- [Bikram Sambat dates](https://www.zeyksbook.app/bikram-sambat-accounting): BS entry
+  with the Gregorian date kept beside it, real month lengths, and the supported range
+  BS 2000–2090.
+- [VAT reporting](https://www.zeyksbook.app/vat-reporting-nepal): output and input VAT
+  accounts, the VAT summary figures, and what the app does not do for filing.
 - [About](https://www.zeyksbook.app/about): the design goals, and the limitations stated on the page.
 - [Contact](https://www.zeyksbook.app/contact): message form, and the published support details.
 - [Privacy](https://www.zeyksbook.app/privacy): where records are stored and which providers are involved.

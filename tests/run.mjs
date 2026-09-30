@@ -22,7 +22,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
-import { CANONICAL_ORIGIN, PRERENDER_PAGES, PRICING_FAQS, renderPageHtml } from '../scripts/prerender.mjs';
+import { CANONICAL_ORIGIN, PRERENDER_PAGES, PRICING_FAQS, GUIDE_FAQS, renderPageHtml } from '../scripts/prerender.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -130,7 +130,7 @@ const files = [
   'lib/capabilities.ts', 'lib/appPhases.ts', 'lib/saleState.ts', 'lib/purchaseState.ts',
   'lib/expenseState.ts', 'lib/voidState.ts', 'lib/paymentState.ts', 'lib/gatewayState.ts',
   'lib/session.ts', 'lib/routes.ts', 'lib/preferences.ts', 'lib/roles.ts',
-  'lib/paymentApiConfig.ts', 'lib/pageMetadata.ts',
+  'lib/paymentApiConfig.ts', 'lib/pageMetadata.ts', 'lib/intentPages.ts',
   'services/accountingEngine.ts', 'services/posting.ts', 'services/referenceGenerator.ts',
   'services/reportData.ts',
 ];
@@ -157,7 +157,9 @@ const preferencesMod = await import(pathToFileURL(path.join(tmp, 'lib/preference
 const paymentApiConfigMod = await import(pathToFileURL(path.join(tmp, 'lib/paymentApiConfig.mjs')).href);
 const rolesMod = await import(pathToFileURL(path.join(tmp, 'lib/roles.mjs')).href);
 const pageMetadataMod = await import(pathToFileURL(path.join(tmp, 'lib/pageMetadata.mjs')).href);
+const intentPagesMod = await import(pathToFileURL(path.join(tmp, 'lib/intentPages.mjs')).href);
 const { PUBLIC_PAGES, SITE_ORIGIN, metadataForPath } = pageMetadataMod;
+const { INTENT_PAGES, intentPageForPath } = intentPagesMod;
 const {
   ALL_ROLES, FEATURE_FOR_ROLE, ROLE_GATING_ENABLED, ROLE_PRICE_NPR, roleHasFeature,
   paywallHoldsAccount, isPayingTier, isAppAdmin,
@@ -5728,7 +5730,7 @@ test('the sitemap lists the public surface only, and robots agrees', () => {
       `${loc} must be on the canonical host — a sitemap that lists the apex `
       + 'publishes a redirect, and a redirect is not a canonical URL');
     const route = parseRoute(url.pathname);
-    const publicKinds = ['landing', 'signin', 'demo', 'pricing', 'about', 'contact', 'privacy', 'terms'];
+    const publicKinds = ['landing', 'signin', 'demo', 'pricing', 'about', 'contact', 'privacy', 'terms', 'guide'];
     assert(publicKinds.includes(route.kind), `${loc} is not a public page`);
   }
   for (const tab of APP_TABS) {
@@ -5852,6 +5854,7 @@ test('the published plans are the plans the app actually enforces', () => {
     ['index.html', readFileSync(path.join(root, 'index.html'), 'utf8')],
     ['scripts/prerender.mjs', readFileSync(path.join(root, 'scripts/prerender.mjs'), 'utf8')],
     ['src/lib/pageMetadata.ts', stripComments(fileText('src/lib/pageMetadata.ts'))],
+    ['src/lib/intentPages.ts', stripComments(fileText('src/lib/intentPages.ts'))],
     ['public/llms.txt', readFileSync(path.join(root, 'public/llms.txt'), 'utf8')],
     ['PricingPage.tsx', stripComments(fileText('src/components/PricingPage.tsx'))],
   ];
@@ -5962,7 +5965,7 @@ test('the manifest and the answer-engine file ship facts that hold up', () => {
     const url = new URL(link);
     assertEqual(url.origin, 'https://www.zeyksbook.app', `${link} must be on the canonical host`);
     const route = parseRoute(url.pathname);
-    assert(['landing', 'demo', 'pricing', 'about', 'contact', 'privacy', 'terms'].includes(route.kind),
+    assert(['landing', 'demo', 'pricing', 'about', 'contact', 'privacy', 'terms', 'guide'].includes(route.kind),
       `${link} is not an indexable public page`);
   }
 });
@@ -5992,6 +5995,181 @@ test('the landing page is public, restrained and only claims what exists', () =>
   assert(/404/.test(notFound) && /could not find that page/i.test(notFound));
   assert(/embedded\?: boolean/.test(notFound), 'one 404 component, two layouts');
   assert(!/useBooks/.test(notFound), 'and it renders no data either');
+});
+
+console.log('\n=== Intent pages: one page per question a business asks ===');
+
+/*
+ * `src/lib/intentPages.ts` is the only place these pages are written; the
+ * router, the document metadata, the page component and the static documents all
+ * read it or must agree with it. The tests below are that agreement, plus the
+ * one rule the copy was written under: a page may promise only what the app
+ * does, and has to say what it does not.
+ */
+
+test('every intent page is a route, and a document, and a metadata entry', () => {
+  assert(INTENT_PAGES.length >= 4, 'there are intent pages to check');
+  const paths = INTENT_PAGES.map((page) => page.path);
+  assertEqual(new Set(paths).size, paths.length, 'no two intent pages share a path');
+
+  for (const page of INTENT_PAGES) {
+    assertEqual(page.slug, page.path.replace(/^\//u, ''), `${page.path}: the slug is the path`);
+    assertEqual(parseRoute(page.path).kind, 'guide', `${page.path} resolves as an intent page`);
+    assertEqual(parseRoute(`${page.path}/`).kind, 'guide', `${page.path} survives a trailing slash`);
+    assert(!isAppPath(page.path), `${page.path} is public, not a book screen`);
+    assertEqual(intentPageForPath(page.path).h1, page.h1, `${page.path} is findable by path`);
+
+    const meta = metadataForPath(page.path);
+    assertEqual(meta.title, page.title, `${page.path} titles itself, not the home page`);
+    assertEqual(meta.description, page.description, `${page.path} describes itself`);
+    assertEqual(meta.path, page.path, `${page.path} canonicalises on itself`);
+    assertEqual(meta.indexable, true, `${page.path} is meant to be found`);
+
+    // A customer who is signed in still reads it. `redirectFor` bounces
+    // authenticated readers off the marketing pages; an intent page renders no
+    // data, so bouncing a paying customer off the hallbook guide would make the
+    // guide unreadable by the people it is written for.
+    assertEqual(redirectFor(parseRoute(page.path), true), null, `${page.path} stays open when signed in`);
+    assertEqual(redirectFor(parseRoute(page.path), false), null, `${page.path} is open when signed out`);
+  }
+
+  // A near miss is a 404, never a guide reached by accident.
+  for (const almost of ['/hallbook', '/hall-books', '/vat', '/agencies', '/bikram']) {
+    assertEqual(parseRoute(almost).kind, 'not-found', `${almost} is not a page that exists`);
+  }
+});
+
+test('the static documents and the intent pages carry the same words', () => {
+  const shell = readFileSync(path.join(root, 'index.html'), 'utf8');
+  for (const page of INTENT_PAGES) {
+    const faqs = GUIDE_FAQS[page.path];
+    assert(faqs, `${page.path} needs FAQ copy for its document`);
+    assertEqual(JSON.stringify(faqs), JSON.stringify(page.faqs),
+      `${page.path}: FAQ markup that does not match the visible page is a spam signal`);
+
+    const entry = PRERENDER_PAGES.find((p) => p.path === page.path);
+    assert(entry, `${page.path} gets a prerendered document`);
+    const doc = renderPageHtml(shell, entry);
+    assert(doc.includes(`<main class="seo-fallback">`),
+      `${page.path} says something before JavaScript runs`);
+    assert(doc.includes(page.h1), `${page.path}'s document heading is the page's heading`);
+
+    const graph = JSON.parse(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/u
+      .exec(doc)[1].replace(/\\u003c/g, '<'));
+    const faqNode = graph['@graph'].find((node) => node['@type'] === 'FAQPage');
+    assert(faqNode, `${page.path} publishes its FAQ block`);
+    assertEqual(faqNode.mainEntity.length, page.faqs.length, `${page.path} asks every question`);
+    faqNode.mainEntity.forEach((item, i) => {
+      assertEqual(item.name, page.faqs[i].q, `${page.path} FAQ ${i} question`);
+      assertEqual(item.acceptedAnswer.text, page.faqs[i].a, `${page.path} FAQ ${i} answer`);
+    });
+    const webPage = graph['@graph'].find((node) => /Page$/u.test(node['@type']));
+    assertEqual(webPage.breadcrumb.itemListElement[1].name, page.crumb,
+      `${page.path}'s breadcrumb uses the page's own short label`);
+    assert(graph['@graph'].some((node) => node['@type'] === 'SoftwareApplication'),
+      `${page.path} names the product it describes`);
+  }
+});
+
+test('a page promises only what the product does, and denies what it does not', () => {
+  // These are the features the app genuinely has no notion of. They may appear
+  // in a limitations block or a FAQ answer — both of which say the thing is
+  // missing — but never in the affirmative copy: the title, the description, the
+  // heading, the lead, or a section's paragraphs and bullets.
+  const notOffered = [
+    /job costing/i, /project costing/i, /per[- ]project (?:profit|margin)/i, /time tracking/i,
+    /timesheet/i, /payroll/i, /barcode/i, /point of sale/i, /\bPOS\b/, /purchase order/i,
+    /recurring invoice/i, /multi[- ]?currency/i, /bank feed/i, /bank import/i, /white[- ]?label/i,
+    /mobile app/i, /e-?billing/i, /CBMS/i, /\bapis?\b/i, /webhook/i, /integrat/i,
+  ];
+  for (const page of INTENT_PAGES) {
+    const affirmative = [
+      page.title, page.description, page.h1, page.lead, page.eyebrow, page.crumb,
+      ...page.sections.map((section) => section.heading),
+      ...page.sections.flatMap((section) => [...section.paragraphs, ...(section.bullets ?? [])]),
+    ].join(' \u00b7 ');
+    for (const phrase of notOffered) {
+      assert(!phrase.test(affirmative),
+        `${page.path} advertises ${phrase} in its promise copy; it belongs in the limits block`);
+    }
+    assert(page.notFor.length >= 4, `${page.path} states its limits, it is not a brochure`);
+    assert(page.faqs.length >= 4, `${page.path} answers real questions`);
+  }
+
+  // The denials each reader needs most are named on purpose, per page.
+  const mustDeny = {
+    '/hallbook-software': ['till', 'payment collection', 'payroll', 'one set of books', 'restor'],
+    '/agency-accounting': ['job costing', 'time tracking', 'payroll', 'recurring invoice'],
+    '/bikram-sambat-accounting': ['2091', 'fiscal year', 'devanagari'],
+    '/vat-reporting-nepal': ['ird-approved', 'e-billing', 'one vat rate', 'working document'],
+  };
+  for (const [pathName, phrases] of Object.entries(mustDeny)) {
+    const page = INTENT_PAGES.find((p) => p.path === pathName);
+    const limits = page.notFor.join(' \u00b7 ').toLowerCase();
+    for (const phrase of phrases) {
+      assert(limits.includes(phrase), `${pathName} must tell readers it does not do "${phrase}"`);
+    }
+  }
+
+  // Two copy rules the owner set: the ledger is not marketed as a certified
+  // double-entry system, and no Nepali month name or fiscal-year story appears.
+  const source = stripComments(fileText('src/lib/intentPages.ts'));
+  assert(!/double[- ]entry/iu.test(source), 'the intent pages do not claim a double-entry guarantee');
+  const bsMonths = ['Baisakh', 'Jestha', 'Ashadh', 'Ashar', 'Shrawan', 'Bhadra', 'Ashoj', 'Kartik',
+    'Mangsir', 'Poush', 'Magh', 'Falgun', 'Chaitra'];
+  for (const month of bsMonths) {
+    assert(!new RegExp(month, 'iu').test(source), `the intent pages must not use the month name ${month}`);
+  }
+
+  // And the money is the money the app enforces.
+  const quoted = [...source.matchAll(/NPR (\d{3,4})\b/gu)].map((m) => Number(m[1]));
+  assert(quoted.length > 0, 'the pages do quote prices');
+  for (const amount of quoted) {
+    assert(amount === ROLE_PRICE_NPR.plus || amount === ROLE_PRICE_NPR.premium,
+      `NPR ${amount} is not a plan price the app enforces`);
+  }
+  for (const feature of ['reports', 'payments', 'inventory', 'health']) {
+    assert(!roleHasFeature('plus', feature), `Starter must not be described as having ${feature}`);
+    assert(roleHasFeature('premium', feature), `Premium must actually have ${feature}`);
+  }
+});
+
+test('the intent pages are reachable, listed, and allowed', () => {
+  const layout = stripComments(fileText('src/components/PublicLayout.tsx'));
+  assert(/INTENT_PAGES\.map/u.test(layout), 'the footer links every intent page from data');
+  assert(/Guides/u.test(layout), 'under its own heading, so it reads as content');
+
+  const view = stripComments(fileText('src/components/IntentPage.tsx'));
+  assert(/export const IntentPageView/.test(view));
+  assert(/page\.sections\.map/u.test(view) && /page\.notFor\.map/u.test(view)
+    && /page\.faqs\.map/u.test(view),
+  'the component renders the page data — a section added to the data appears on the page');
+  for (const target of ['/demo', '/pricing', '/contact']) {
+    assert(view.includes(`navigate('${target}')`), `and links to ${target}`);
+  }
+
+  const app = fileText('src/App.tsx');
+  assert(/route\.kind === 'guide'/u.test(app), 'App renders intent pages');
+  assert(/<IntentPageView/u.test(app), 'through the intent page component');
+
+  const vercel = JSON.parse(readFileSync(path.join(root, 'vercel.json'), 'utf8'));
+  const sitemap = readFileSync(path.join(root, 'public/sitemap.xml'), 'utf8');
+  const llms = readFileSync(path.join(root, 'public/llms.txt'), 'utf8');
+  const robots = readFileSync(path.join(root, 'public/robots.txt'), 'utf8');
+  const disallowed = (robots.match(/^Disallow:\s*(\S+)/gmu) ?? [])
+    .map((line) => line.replace(/^Disallow:\s*/u, ''));
+
+  for (const page of INTENT_PAGES) {
+    const rule = vercel.routes.find((r) => r.src === page.path);
+    assert(rule, `${page.path} is routed by the deployment`);
+    assertEqual(rule.dest, `/${page.slug}.html`, `${page.path} serves its own document`);
+    assert(sitemap.includes(`<loc>${SITE_ORIGIN}${page.path}</loc>`), `${page.path} is in the sitemap`);
+    assert(llms.includes(`${SITE_ORIGIN}${page.path}`), `${page.path} is in the answer-engine file`);
+    assert(!disallowed.some((prefix) => page.path.startsWith(prefix)),
+      `${page.path} must not be disallowed by robots.txt`);
+  }
+  const last = vercel.routes[vercel.routes.length - 1];
+  assertEqual(last.dest, '/index.html', 'and the shell still answers everything else');
 });
 
 console.log('\n=== The payment API boundary in a deployment that has none ===');
