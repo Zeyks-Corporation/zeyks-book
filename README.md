@@ -9,7 +9,7 @@ Nepal's Shrawan–Ashadh year by default.
    
 This is a rewrite, not a patch. The previous build had no way to filter a
 report to a period (every statement silently covered *all* transactions),     
-no way to edit or void a mistake, a "balanced" indicator that could never      
+no way to edit or void a mistake, a "balanced" indicator that could never         
 show unbalanced, and no VAT, inventory, or fiscal year support. All of that  
 is addressed here — see `CHANGES` in git history / the original code review
 for the full list if you still have it.
