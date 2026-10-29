@@ -14,6 +14,7 @@ export interface UserProfile {
    *   admin   — staff at zeyksbook, hidden /king panel.
    */
   appRole?: 'user' | 'plus' | 'premium' | 'admin';
+  isStaff?: boolean;
   createdAt: string;
 }
 

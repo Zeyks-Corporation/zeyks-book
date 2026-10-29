@@ -125,6 +125,7 @@ export function planForFeature(feature: Feature): 'plus' | 'premium' {
 export const WHATSAPP_PLAN_URL = 'https://wa.me/9779701066114?text=I%20want%20to%20buy%20a%20plan%20of%20Zeyks%20Book';
 
 export function isAppAdmin(role: AppRole | undefined): boolean {
+  // Legacy compatibility only; staff authorization is profiles.is_staff.
   return role === 'admin';
 }
 

@@ -431,7 +431,7 @@ export const SettingsView: React.FC<{
       >
         <p className="text-xs text-zinc-600">
           Every device signed in to this account — including your phone — will be signed out and will need the
-          password again. Nothing in your books is changed.
+          to sign in with Google again. Nothing in your books is changed.
         </p>
       </Modal>
 

@@ -69,7 +69,9 @@ function dataApiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Res
 }
 
 const baseClient = createClient(url, {
-  auth: { adapter: SupabaseAuthAdapter() as unknown as never },
+  // Neon Auth is on a different origin. OAuth's session challenge is a cookie,
+  // so both sign-in/social and the callback get-session must include cookies.
+  auth: { adapter: SupabaseAuthAdapter({ fetchOptions: { credentials: 'include' } }) as unknown as never },
   dataApi: { options: { global: { fetch: dataApiFetch } } },
 });
 
@@ -171,13 +173,13 @@ export async function claimProfile(): Promise<string | null> {
  */
 export async function fetchMyProfile(
   userId: string,
-): Promise<{ id: string; email: string; full_name: string; role: string } | null> {
+): Promise<{ id: string; email: string; full_name: string; role: string; is_staff: boolean } | null> {
   if (!userId) return null;
   const { data, error } = await baseClient
     .from('profiles')
-    .select('id, email, full_name, role')
+    .select('id, email, full_name, role, is_staff')
     .eq('id', userId)
     .single();
   if (error || !data) return null;
-  return data as { id: string; email: string; full_name: string; role: string };
+  return data as { id: string; email: string; full_name: string; role: string; is_staff: boolean };
 }

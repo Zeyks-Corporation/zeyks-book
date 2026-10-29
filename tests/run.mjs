@@ -2656,7 +2656,8 @@ test('the settlement form opens on the document it was opened from', () => {
   assert(modal, 'TransactionModal.tsx not found');
   assert(/preselectDocumentId\?: string;/.test(modal.text), 'the form must accept a preselected document');
   assert(/preselectDirection\?: 'INCOMING' \| 'OUTGOING';/.test(modal.text));
-  const reset = modal.text.slice(modal.text.indexOf("useEffect(() => {\n    if (!isOpen) return;"));
+  const normalizedModal = modal.text.replace(/\r\n/g, '\n');
+  const reset = normalizedModal.slice(normalizedModal.indexOf("useEffect(() => {\n    if (!isOpen) return;"));
   assert(/setDirection\(preselectDirection \?\? 'INCOMING'\)/.test(reset),
     'the direction is pre-filled, defaulting to money in');
   assert(/setLinkedDocId\(preselectDocumentId \?\? ''\)/.test(reset),
@@ -2665,7 +2666,7 @@ test('the settlement form opens on the document it was opened from', () => {
     'opening a different bill must re-run the reset');
   assert(/setPaymentAmount\(preselected \? String\(outstandingOn\(preselected\)\)/.test(modal.text),
     'and the outstanding balance is filled in through the one formula that reads the persisted rows');
-  assert(/const preselected = preselectDocumentId\n\s*\? \(preselectDirection === 'OUTGOING' \? openBills : openInvoices\)/.test(modal.text),
+  assert(/const preselected = preselectDocumentId\n\s*\? \(preselectDirection === 'OUTGOING' \? openBills : openInvoices\)/.test(normalizedModal),
     'the figure comes from the same list the dropdown shows');
 });
 
@@ -3780,7 +3781,7 @@ test('every data-api request goes through one queue and never the http cache', (
 
 test('an empty chart of accounts is reported as a failed load, not as empty books', () => {
   const service = srcFiles.find((f) => f.rel.endsWith('src/services/bookService.ts'));
-  const fn = service.text.match(/export async function fetchAccounts[\s\S]*?\n}\n/);
+  const fn = service.text.match(/export async function fetchAccounts[\s\S]*?\r?\n}\r?\n/);
   assert(fn, 'fetchAccounts not found');
   const body = fn[0];
   assert(/const accounts = await load\(\);/.test(body) && /const retry = await load\(\);/.test(body),
@@ -3955,7 +3956,7 @@ test('asynchronous tests are awaited by the harness', async () => {
 const readProjectFile = (rel) => readFileSync(path.join(root, rel), 'utf8');
 
 /** Tracked config values: the Neon client config is public by design. */
-const PUBLIC_CONFIG_KEYS = ['VITE_NEON_URL', 'VITE_NEON_AUTH_URL'];
+const PUBLIC_CONFIG_KEYS = ['VITE_NEON_URL'];
 
 test('the client config template lists only public identifiers', () => {
   const template = readProjectFile('.env.example');
@@ -4084,14 +4085,11 @@ if (!existsSync(distDir) || serverSecrets.length === 0) {
 test('.env.example is a template: placeholders only, no live value', () => {
   const text = readProjectFile('.env.example');
   assert(/VITE_NEON_URL/.test(text), 'the browser Neon URL must be documented');
-  assert(/NEON_AUTH_JWKS_URL/.test(text), 'the server JWKS endpoint must be documented');
-  assert(/PUBLIC \/ CLIENT SAFE/.test(text) && /SERVER SECRETS/.test(text), 'the file must say which values may reach the browser');
-  assert(/LOCAL/.test(text) && /STAGING/.test(text) && /PRODUCTION/.test(text),
-    'and must describe the three environments');
-  // A template may only hold commented-out assignments, so a real value cannot
-  // be committed by filling one in.
-  const live = text.split('\n').filter((l) => l.trim() && !l.trim().startsWith('#'));
-  assertEqual(live.length, 0, `every assignment must be commented out: ${live.join(' | ')}`);
+  assert(/Vercel/.test(text) && /Production/.test(text), 'the template must describe deployment use');
+  assert(/RESEND_API_KEY/.test(text), 'optional server secret is documented');
+  const active = text.split(/\r?\n/).filter((l) => l.trim() && !l.trim().startsWith('#'));
+  assertEqual(active.length, 1, 'only the public Neon URL may be filled in');
+  assert(/^VITE_NEON_URL=https:\/\//.test(active[0]), 'the active value must be a public HTTPS URL');
 });
 
 test('.gitignore keeps the environment, the dependencies and the build out', () => {
@@ -5493,17 +5491,10 @@ const uiSource = srcFiles.find((f) => f.rel.endsWith('src/components/ui.tsx'));
 
 test('the sign-in screen offers exactly one primary action', () => {
   const primaryButtons = authSource.text.match(/<Button[^>]*variant="primary"/g) ?? [];
-  assertEqual(primaryButtons.length, 1, 'the credentials form has exactly one primary action');
-  assert(/type="submit"/.test(authSource.text), 'and it is the form submit');
-  assertEqual((authSource.text.match(/<button\b/g) ?? []).length, 1,
-    'the only raw button is the password reveal');
-  // A control inside a form defaults to type="submit": clicking the eye would
-  // sign the person in with a half-typed password.
-  const reveal = authSource.text.slice(authSource.text.indexOf('<button'),
-    authSource.text.indexOf('aria-label'));
-  assert(/type="button"/.test(reveal), 'the reveal control must never submit the form');
-  assert(!/Continue with Google|signInWithOAuth|GoogleMark/.test(authSource.text),
-    'no OAuth affordance is left on the screen');
+  assertEqual(primaryButtons.length, 1, 'Google sign-in has exactly one primary action');
+  assert(/Continue with Google/.test(authSource.text), 'the action is Google sign-in');
+  assertEqual((authSource.text.match(/<button\b/g) ?? []).length, 0,
+    'there are no extra raw controls');
   assert(/size\?: 'sm' \| 'md' \| 'lg'/.test(uiSource.text), 'Button must carry the size scale');
   assert(/size = 'sm'/.test(uiSource.text), 'and keep every existing caller at the old density');
 });
@@ -5517,19 +5508,12 @@ test('the sign-in screen keeps the palette it was built with', () => {
   assert(/tracking-\[0\.22em\]/.test(authSource.text), 'the wordmark carries the product name');
 });
 
-test('the credentials form asks for exactly the two fields an issued account has', () => {
-  assert(/type="email"/.test(authSource.text) && /autoComplete="username"/.test(authSource.text),
-    'the email field must be autofillable for the browser to help');
-  assert(/type=\{showPassword \? 'text' : 'password'\}/.test(authSource.text)
-    && /autoComplete="current-password"/.test(authSource.text),
-    'the password field is a password field, revealed only on request');
-  assert(!/autoComplete="new-password"/.test(authSource.text),
-    'this is a sign-in screen, not a password change');
-  assert(/<form onSubmit=\{handleSubmit\}/.test(authSource.text) && /noValidate/.test(authSource.text),
-    'Enter submits, and the app — not the browser — decides what a valid entry is');
-  // A disabled-while-busy lock still belongs on the only action.
+test('the sign-in screen offers Google without a credentials form', () => {
+  assert(!/type="email"|type="password"|current-password|<form\b/.test(authSource.text),
+    'email and password inputs must not appear');
+  assert(/signInWithGoogle\(/.test(authSource.text), 'the Google action must call authService');
   const locks = authSource.text.match(/disabled=\{busy\}/g) ?? [];
-  assertEqual(locks.length, 1, 'the lock must be on that single action, not duplicated');
+  assertEqual(locks.length, 1, 'the action is disabled while sign-in starts');
 });
 
 test('no route to creating or recovering an account is offered', () => {
@@ -5543,10 +5527,8 @@ test('no route to creating or recovering an account is offered', () => {
 });
 
 test('AuthModal still leaves through authService and has no legacy-auth back door', () => {
-  // The screen leaves the session through signInWithEmail only; every other
-  // auth entry point stays unreachable from here.
-  assert(authSource.text.includes('signInWithEmail('), 'AuthModal must sign in via authService');
-  for (const gone of ['signIn(', 'signUp(', 'signInWithPassword(', 'signInWithOtp(',
+  assert(authSource.text.includes('signInWithGoogle('), 'AuthModal must sign in via authService');
+  for (const gone of ['signInWithEmail(', 'signIn(', 'signUp(', 'signInWithPassword(', 'signInWithOtp(',
     'verifyOtp(', 'requestOtp(', 'signInWithOAuth(']) {
     assert(!authSource.text.includes(gone), `AuthModal must not call authService.${gone}`);
   }
@@ -5866,9 +5848,9 @@ test('the published plans are the plans the app actually enforces', () => {
     assert(!/https:\/\/zeyksbook\.app/u.test(text),
       `${name} canonicalises on the apex, which answers 308`);
   }
-  assert(/Sign in to Zeyks Book with the email address and password/u
+  assert(/Sign in to Zeyks Book with Google/u
     .test(readFileSync(path.join(root, 'scripts/prerender.mjs'), 'utf8')),
-  'sign-in is admin-issued email and password, not a magic code');
+  'the public sign-in copy must describe Google authentication');
 
   // Prices come from one table, so the page cannot advertise a tier that
   // `FEATURE_FOR_ROLE` does not unlock.
@@ -5958,8 +5940,8 @@ test('the manifest and the answer-engine file ship facts that hold up', () => {
   const llms = readFileSync(path.join(root, 'public/llms.txt'), 'utf8');
   assert(/^# Zeyks Book$/mu.test(llms), 'answer engines key off the first heading');
   assert(/NPR 399/u.test(llms) && /NPR 599/u.test(llms), 'both plans, at their real prices');
-  assert(/no self-service sign-up/iu.test(llms),
-    'accounts are created by the team; an engine must not tell people to sign up');
+  assert(/Sign in with Google/iu.test(llms) && /begin locked/iu.test(llms),
+    'answer engines must describe Google sign-in and database-assigned access');
   assert(/not (?:currently )?published/iu.test(llms), 'and it repeats what is not promised');
   for (const link of [...llms.matchAll(/\]\((https:\/\/[^)]+)\)/gu)].map((m) => m[1])) {
     const url = new URL(link);
@@ -6904,7 +6886,7 @@ test('no later migration quietly redefines the claim functions', () => {
       if (new RegExp(`create (or replace )?function public\\.${fnName}\\b`, 'i')
         .test(readProjectFile(`migration/neon/${file}`))) last = file;
     }
-    assertEqual(last, CLAIM_SQL, `${fnName} is redefined after the fix`);
+    assertEqual(last, '025_database_access.sql', `${fnName} has an unexpected later definition`);
   }
 });
 
@@ -6978,28 +6960,17 @@ test('an account is created through the admin API, never through public sign-up'
   }
 });
 
-test('the panel creates the login before the app row, and says so when only one half works', () => {
+test('the staff panel cannot assign plans or create password accounts', () => {
   const king = withoutComments(readProjectFile('src/components/KingPanel.tsx'));
-  const created = king.indexOf('createAuthUser(');
-  const rpc = king.indexOf("'create_managed_user'");
-  assert(created > 0 && rpc > created, 'the profile is keyed on the id the login service returns');
-  assert(/p_auth_id: created\.id/.test(king), 'and not on anything the admin typed');
-  assert(/if \(!created\.id\)/.test(king), 'a failed login creation stops before the app row');
-  assert(/The sign-in works, but the app account was not created/.test(king),
-    'a half-created account is reported as half-created, not as a generic failure');
+  assert(!/createAuthUser\(|create_managed_user|PASSWORD_ALPHABET|crypto\.getRandomValues/.test(king),
+    'Google accounts and database assignments need no password creation controls');
+  assert(!/setRole\(|p_role:|updateProfileRole/.test(king), 'staff cannot assign plans in the panel');
 });
 
-test('a handed-over password comes from the browser CSPRNG and stays readable', () => {
+test('the staff panel only shows existing accounts', () => {
   const king = withoutComments(readProjectFile('src/components/KingPanel.tsx'));
-  const alphabet = king.match(/PASSWORD_ALPHABET = '([^']+)'/);
-  assert(alphabet, 'the password alphabet is missing');
-  for (const ch of ['I', 'O', '0', '1', 'l']) {
-    assert(!alphabet[1].includes(ch), `${ch} is confusable in a password read over the phone`);
-  }
-  assert(alphabet[1].length >= 30, 'a small alphabet makes 12 generated characters guessable');
-  assert(/crypto\.getRandomValues/.test(king), 'passwords must not come from Math.random');
-  assert(!/Math\.random/.test(king), 'no Math.random anywhere near a password');
-  assert(/newPassword\.length < 8/.test(king), 'a too-short password is refused before the API call');
+  assert(/listProfiles|\.from\('profiles'\)/.test(king), 'staff can inspect the account directory');
+  assert(!/type="password"|type="email"/.test(king), 'there is no credential form');
 });
 
 

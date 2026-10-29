@@ -17,7 +17,7 @@ import { NotFoundView } from './components/NotFoundView';
 import { IntentPageView } from './components/IntentPage';
 import { SubscribeView } from './components/SubscribeView';
 import { KingPanel } from './components/KingPanel';
-import { isPayingTier, isAppAdmin, roleHasFeature, paywallHoldsAccount, type AppRole } from './lib/roles';
+import { isPayingTier, roleHasFeature, paywallHoldsAccount, type AppRole } from './lib/roles';
 import { PlanLockedView } from './components/UpgradeViews';
 import { gateway, GatewayConfig, takePending } from './services/paymentGateway';
 import { useRoute } from './lib/useRoute';
@@ -215,6 +215,7 @@ export default function App() {
    * not revoke the other devices. Cleared as soon as a new session starts.
    */
   const [sessionNotice, setSessionNotice] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
   /**
    * Monotonic session epoch.
@@ -432,6 +433,7 @@ export default function App() {
     setMembership({ kind: 'pending' });
     setDataState({ kind: 'idle' });
     applyUser(null);
+    setProfileError(null);
     setResolving(false);
     // No open modal, draft or toast survives into the next session.
     setTxnModal(null);
@@ -450,13 +452,21 @@ export default function App() {
   //    it only records the event so network work never runs inside the lock.
   useEffect(() => {
     let mounted = true;
+    let unsubscribe: (() => void) | null = null;
     // Boot snapshot of the URL: the app restoration below must not re-run the
     // session check on in-app navigation, so only the primitive is captured.
     const bootOnAppRoute = route.kind === 'app';
 
     void (async () => {
-      const { session } = await authService.getSession();
+      const { session, error: sessionError } = await authService.getSession();
       if (!mounted) return;
+      if (sessionError) setSessionNotice(sessionError);
+      // Subscribe after the one-use Google callback verifier has been exchanged.
+      unsubscribe = authService.onAuthStateChange((event: string, nextSession) => {
+        if (!mounted || event === 'INITIAL_SESSION') return;
+        const action = resolveAuthEvent(event);
+        if (action !== 'ignore') setAuthEvent({ action, session: nextSession, key: Date.now() });
+      });
       if (!session?.user) {
         // The session check cannot outlive a missing network: the auth server
         // is unreachable too. Before showing the sign-in screen, reopen the
@@ -471,17 +481,9 @@ export default function App() {
       setAuthEvent({ action: 'bootstrap', session, key: Date.now() });
     })();
 
-    const unsubscribe = authService.onAuthStateChange((event: string, session) => {
-      if (!mounted) return;
-      if (event === 'INITIAL_SESSION') return; // covered by the getSession() above
-      const action = resolveAuthEvent(event);
-      if (action === 'ignore') return;
-      setAuthEvent({ action, session, key: Date.now() });
-    });
-
     return () => {
       mounted = false;
-      unsubscribe();
+      unsubscribe?.();
     };
   }, [applyUser, restoreOfflineSession, route.kind]);
 
@@ -527,8 +529,15 @@ export default function App() {
       // A new session starts: any notice from the previous sign-out is spent.
       setSessionNotice(null);
       try {
-        const { profile } = await authService.getProfile(authUser.id);
+        const { profile, error } = await authService.getProfile(authUser.id);
         if (cancelled || sessionOwnerRef.current !== authUser.id) return;
+        if (error || !profile) {
+          setProfileError(error || 'Could not load your account profile.');
+          applyUser(profileFromAuthUser(authUser));
+          setSessionPhase('authenticated');
+          return;
+        }
+        setProfileError(null);
         applyUser(profile ?? profileFromAuthUser(authUser));
         setSessionPhase('authenticated');
         if (action === 'refresh-profile') return;
@@ -540,6 +549,32 @@ export default function App() {
 
     return () => { cancelled = true; };
   }, [applyUser, authEvent, clearLocalSession, loadUserBusinessAndData]);
+
+  // Plans are assigned in the database while a customer may already be signed
+  // in. Refresh the profile when they return to the tab so a newly granted
+  // Starter/Premium plan is reflected without requiring a fresh login.
+  useEffect(() => {
+    if (!user?.id) return;
+    let inFlight = false;
+    const refreshAccess = async () => {
+      if (inFlight || document.visibilityState === 'hidden') return;
+      inFlight = true;
+      try {
+        const { profile } = await authService.getProfile(user.id);
+        if (profile && sessionOwnerRef.current === user.id) {
+          applyUser(profile);
+        }
+      } finally {
+        inFlight = false;
+      }
+    };
+    window.addEventListener('focus', refreshAccess);
+    document.addEventListener('visibilitychange', refreshAccess);
+    return () => {
+      window.removeEventListener('focus', refreshAccess);
+      document.removeEventListener('visibilitychange', refreshAccess);
+    };
+  }, [user?.id, applyUser]);
 
   // Once the person changes the period, stop silently resetting it to
   // "current fiscal year to date" every time the fiscal year setting loads.
@@ -720,7 +755,7 @@ export default function App() {
   };
 
   const userRole: AppRole | undefined = user?.appRole;
-  const dashboardAccess = isPayingTier(userRole) || isAppAdmin(userRole);
+  const dashboardAccess = isPayingTier(userRole) || user?.isStaff === true;
 
   /**
    * Which sidebar sections this role has not paid for — the list that drives
@@ -814,7 +849,7 @@ export default function App() {
    * exists.
    */
   if (route.kind === 'king') {
-    if (!isAppAdmin(userRole)) {
+    if (!user?.isStaff) {
       return (
         <NotFoundView
           path="/king" authenticated={authenticated}
@@ -848,6 +883,12 @@ export default function App() {
         onSignIn={() => navigate('/signin')}
       />
     );
+  }
+
+  if (authenticated && profileError && route.kind === 'app') {
+    return <ErrorScreen title="Unable to load your account" message={profileError}
+      onRetry={() => { if (user) setAuthEvent({ action: 'bootstrap', session: { user: { id: user.id, email: user.email } }, key: Date.now() }); }}
+      onSignOut={signOutNow} />;
   }
 
   /**

@@ -1,6 +1,6 @@
       # Zeyks Book   
             
-Double-entry accounting for Nepali small businesses — sales, purchases, 
+Double-entry accounting for Nepali small businesses — sales, purchases,
 expenses, VAT, and online collection through eSewa and Khalti. Dates work in
 both Bikram Sambat and the Gregorian calendar, and the fiscal year follows
 Nepal's Shrawan–Ashadh year by default.           
@@ -558,16 +558,10 @@ document can be voided too.
 
 ### Signing in
 
-Sign up or sign in with email and password. "Forgot password?" emails a
-reset link, and if email confirmation is enabled you can resend the
-confirmation email from the sign-in screen.
-
-The screen carries the product mark, one full-width primary action, a reveal
-toggle inside the password field and `autocomplete` hints for password managers.
-It is built from the product's own neutral palette: `tests/run.mjs` fails the
-build if any other hue appears in `AuthModal.tsx`, so a future restyle cannot
-quietly introduce one, and it also pins that the screen still leaves through
-`authService` rather than reaching a database client of its own.
+Sign in with Google. A new account begins with the locked `user` role until a
+database operator assigns Starter (`plus`) or Premium (`premium`). The sign-in
+screen has one Google action and no email/password form. It uses the product's
+neutral palette and calls `authService` for the Neon Auth redirect.
 
 Sessions belong to a device, so the same account can be open on a PC and a phone
 at once. **Settings → Account** always shows who is signed in and offers two
@@ -939,3 +933,26 @@ server/           Express API: eSewa and Khalti integration, plus redact.js (cre
 tests/            offline test runner (node tests/run.mjs / npm test)
 ```
 
+
+### Database-managed customer access (migration 025)
+
+Apply `migration/neon/025_database_access.sql` after migration 024, before deploying the updated web app. Existing `admin` profiles become `premium` customers with `is_staff = true`; the hidden `/king` route reads `is_staff`. New Google accounts receive `role = 'user'` and cannot open books or create a business until an operator assigns a plan in the database. The admin panel only lists accounts; it no longer creates logins or changes plans or staff status.
+
+Assign Starter with `update public.profiles set role = 'plus' where id = '<profile UUID>';` or Premium with `update public.profiles set role = 'premium' where id = '<profile UUID>';`. Lock an account with `role = 'user'`. Staff access is separate: `update public.profiles set is_staff = true where id = '<profile UUID>';`. Run these statements using a trusted database operator connection, never from a customer session. The internal value `plus` is displayed as Starter. Changes apply to the next database request; reload the app to refresh its screen.
+
+In the Neon Console, open the production branch's SQL Editor. Find the account first:
+
+```sql
+select id, email, role, is_staff from public.profiles
+where lower(email) = lower('customer@example.com');
+```
+
+Then use the returned `id` to assign its customer plan:
+
+```sql
+update public.profiles set role = 'plus' where id = '<profile UUID>';    -- Starter
+update public.profiles set role = 'premium' where id = '<profile UUID>'; -- Premium
+update public.profiles set role = 'user' where id = '<profile UUID>';    -- Locked
+```
+
+Run only one of those three statements for a customer. Staff access is independent: `update public.profiles set is_staff = true where id = '<profile UUID>';`. Set it to `false` to remove staff access. Confirm the final row with the `select` query above. A Google user appears in `public.profiles` after their first completed sign-in. Apply migration 025 before using `is_staff`.

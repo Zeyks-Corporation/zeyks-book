@@ -36,7 +36,7 @@ export const PrivacyPage: React.FC<{
                 1. Data Ownership & Storage Isolation
               </h2>
               <p className="mt-2">
-                Business records are stored in a managed Neon Postgres database. The app uses PostgreSQL row level security (RLS) to limit access to records based on the signed-in user's business membership. This is cloud storage, not a database hosted in your own account. Sign-in is provided by Neon Auth: accounts are created for businesses by Zeyks Book, and the only information sent to it is your email address and a password, which it stores hashed. No social or third-party login is offered. These services are third parties that process information needed to operate the app.
+                Business records are stored in a managed Neon Postgres database. The app uses PostgreSQL row level security (RLS) to limit access to records based on the signed-in user's business membership. This is cloud storage, not a database hosted in your own account. Sign-in is provided by Neon Auth using Google. Google and Neon Auth process the identity information needed to sign you in. These services are third parties that process information needed to operate the app.
               </p>
             </div>
 

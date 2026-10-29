@@ -328,7 +328,7 @@ export const LandingPage: React.FC<{
               Ready for honest accounting in Nepal?
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-[17px] leading-[26px] text-[var(--label-secondary)]">
-              Sign in with the email and password we issue for your business, or connect your database. Your chart of accounts and 2083 fiscal year configure in one click.
+              Sign in with Google, then set up your business. Your chart of accounts and 2083 fiscal year configure in one click.
             </p>
             <div className="mt-9 flex justify-center">
               <Button

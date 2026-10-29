@@ -97,7 +97,7 @@ export const PUBLIC_PAGES: Record<string, PageMetadata> = {
   },
   '/signin': {
     title: 'Sign in — Zeyks Book',
-    description: 'Sign in to Zeyks Book with the email address and password issued to your business by the Zeyks Book team.',
+    description: 'Sign in to Zeyks Book with Google.',
     path: '/signin',
     indexable: false,
   },
@@ -127,7 +127,7 @@ export const PUBLIC_PAGES: Record<string, PageMetadata> = {
   },
   '/privacy': {
     title: 'Privacy — Zeyks Book',
-    description: 'How Zeyks Book stores accounting records in a managed Neon Postgres database, signs you in with Neon Auth email and password, and handles demo data, downloadable JSON backups, and service providers.',
+    description: 'How Zeyks Book stores accounting records in a managed Neon Postgres database, signs you in through Google and Neon Auth, and handles demo data, downloadable JSON backups, and service providers.',
     path: '/privacy',
     indexable: true,
   },

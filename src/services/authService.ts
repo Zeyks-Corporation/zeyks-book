@@ -116,6 +116,21 @@ export async function signInWithEmail(email: string, password: string): Promise<
   }
 }
 
+/** Start Google's Neon Auth redirect. Newly claimed profiles remain locked. */
+export async function signInWithGoogle(): Promise<string | null> {
+  const handoff = resolveSignInHandoff(await inspectStaleSession());
+  if (!handoff.proceed) return handoff.error;
+  try {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/dashboard` },
+    });
+    return error ? cleanAuthError(error.message) ?? GENERIC_SIGNIN : null;
+  } catch (e) {
+    return cleanAuthError(e instanceof Error ? e.message : null) ?? GENERIC_SIGNIN;
+  }
+}
+
 /**
  * Ask the server whether this browser is still signed in.
  *
@@ -170,9 +185,35 @@ export async function getSession(): Promise<{
   session: { user: NeonSession['user'] } | null;
   error: string | null;
 }> {
+  // Google's return URL carries a one-use verifier. React may mount twice in
+  // development, so both boot reads must share the same exchange.
+  if (typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).has('neon_auth_session_verifier')) {
+    oauthSessionRead ??= readSession();
+    return oauthSessionRead;
+  }
+  return readSession();
+}
+
+let oauthSessionRead: ReturnType<typeof readSession> | null = null;
+
+async function readSession(): Promise<{
+  session: { user: NeonSession['user'] } | null;
+  error: string | null;
+}> {
   try {
     const { data, error } = await supabase.auth.getSession({ forceFetch: true });
-    if (error) return { session: null, error: cleanAuthError(error.message) };
+    if (error) {
+      if (typeof window !== 'undefined') {
+        const callbackUrl = new URL(window.location.href);
+        if (callbackUrl.searchParams.has('neon_auth_session_verifier')) {
+          callbackUrl.searchParams.delete('neon_auth_session_verifier');
+          window.history.replaceState(window.history.state, '', callbackUrl.href);
+          return { session: null, error: 'Google sign-in could not finish. Please try Google again.' };
+        }
+      }
+      return { session: null, error: cleanAuthError(error.message) };
+    }
     if (!data.session?.user) return { session: null, error: null };
     return {
       session: {
@@ -230,6 +271,7 @@ export async function getProfile(userId: string): Promise<{
     email: string;
     fullName: string;
     appRole: 'user' | 'plus' | 'premium' | 'admin';
+    isStaff: boolean;
     createdAt: string;
   } | null;
   error: string | null;
@@ -240,7 +282,7 @@ export async function getProfile(userId: string): Promise<{
       const claimed = await claimProfile();
       if (claimed) row = ownProfileRow(await fetchMyProfile(userId), userId);
     }
-    if (!row) return { profile: null, error: null };
+    if (!row) return { profile: null, error: 'Could not load your account profile. Please retry.' };
     const { data: sess } = await supabase.auth.getSession();
     const sessionUser = sess.session?.user;
     return {
@@ -249,6 +291,7 @@ export async function getProfile(userId: string): Promise<{
         email: row.email || sessionUser?.email || '',
         fullName: row.full_name || (sessionUser as { name?: string | null } | undefined)?.name || row.email.split('@')[0] || '',
         appRole: (['user', 'plus', 'premium', 'admin'].includes(row.role) ? row.role : 'user') as 'user' | 'plus' | 'premium' | 'admin',
+        isStaff: row.is_staff === true,
         createdAt: sessionUser && (sessionUser as { created_at?: string }).created_at
           ? (sessionUser as { created_at?: string }).created_at!
           : new Date().toISOString(),
