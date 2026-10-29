@@ -1,6 +1,6 @@
       # Zeyks Book   
             
-Double-entry accounting for Nepali small businesses — sales, purchases,
+Double-entry accounting for Nepali small businesses — sales, purchases, 
 expenses, VAT, and online collection through eSewa and Khalti. Dates work in
 both Bikram Sambat and the Gregorian calendar, and the fiscal year follows
 Nepal's Shrawan–Ashadh year by default.           
