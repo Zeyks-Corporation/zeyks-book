@@ -7,9 +7,9 @@
  *
  *   user    — signed up, no subscription; the dashboard is reachable but
  *             every section, including adding or editing anything, is locked.
- *   plus    — Starter plan (399 NPR/mo): dashboard, sales, purchases,
+ *   plus    — Starter plan (299 NPR/mo): dashboard, sales, purchases,
  *             expenses and settings.
- *   premium — Premium plan (599 NPR/mo): every feature.
+ *   premium — Premium plan (499 NPR/mo): every feature.
  *   admin   — staff at zeyksbook, hidden /king panel.
  *
  * Permissions are NOT additive (a premium does not also inherit `plus`); they
@@ -29,8 +29,8 @@ export const ROLE_LABEL: Record<AppRole, string> = {
 };
 
 export const ROLE_PRICE_NPR: Partial<Record<AppRole, number>> = {
-  plus: 399,
-  premium: 599,
+  plus: 299,
+  premium: 499,
 };
 
 /** Every feature the app knows about; one row in the capability matrix. */

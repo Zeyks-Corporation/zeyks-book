@@ -7,10 +7,10 @@ import { PLAN_FEATURES, ROLE_LABEL, type AppRole } from '../lib/roles';
 /**
  * Two-tier pricing page.
  *
- *   Starter  — NPR 399 / month. Dashboard, sales, purchases, expenses and
+ *   Starter  — NPR 299 / month. Dashboard, sales, purchases, expenses and
  *              settings. Designed for kirana counters that just need daily
  *              books and a stock view.
- *   Premium  — NPR 599 / month. Every feature: inventory, aged receivables &
+ *   Premium  — NPR 499 / month. Every feature: inventory, aged receivables &
  *              payables, reports, data health and settlements.
  *
  * Both tiers route through the same payment flow once the eSewa / Khalti
@@ -25,7 +25,7 @@ import { PLAN_FEATURES, ROLE_LABEL, type AppRole } from '../lib/roles';
 const FAQS = [
   {
     q: 'How does pricing work?',
-    a: 'Two plans, billed monthly. Starter (NPR 399) is sized for kirana counters — daily books, sales, purchases and expenses. Premium (NPR 599) unlocks inventory, aged receivables & payables, print-ready reports, data health and settlements. There are no per-seat charges.',
+    a: 'Two plans, billed monthly. Starter (NPR 299) is sized for kirana counters — daily books, sales, purchases and expenses. Premium (NPR 499) unlocks inventory, aged receivables & payables, print-ready reports, data health and settlements. There are no per-seat charges.',
   },
   {
     q: 'Can I upgrade from Starter to Premium later?',
@@ -79,7 +79,7 @@ export const PricingPage: React.FC<{
         <div className="mt-12 grid gap-6 sm:grid-cols-2 max-w-3xl mx-auto">
           <PlanCard
             name={ROLE_LABEL.plus}
-            priceNPR={399}
+            priceNPR={299}
             highlight={false}
             features={PLAN_FEATURES.plus}
             ctaLabel={signedIn ? 'Choose Starter' : 'Sign in to start'}
@@ -90,7 +90,7 @@ export const PricingPage: React.FC<{
           />
           <PlanCard
             name={ROLE_LABEL.premium}
-            priceNPR={599}
+            priceNPR={499}
             highlight
             badge={<Sparkles size={12} strokeWidth={1.8} className="inline-block" />}
             features={PLAN_FEATURES.premium}

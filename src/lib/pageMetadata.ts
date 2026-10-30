@@ -108,8 +108,8 @@ export const PUBLIC_PAGES: Record<string, PageMetadata> = {
     indexable: true,
   },
   '/pricing': {
-    title: 'Pricing — Starter NPR 399, Premium NPR 599 | Zeyks Book',
-    description: 'Zeyks Book has two monthly plans for businesses in Nepal: Starter at NPR 399 for daily sales, purchases and expenses, and Premium at NPR 599 adding inventory, aged receivables and payables, printable reports and data health. No per-seat charges.',
+    title: 'Pricing — Starter NPR 299, Premium NPR 499 | Zeyks Book',
+    description: 'Zeyks Book has two monthly plans for businesses in Nepal: Starter at NPR 299 for daily sales, purchases and expenses, and Premium at NPR 499 adding inventory, aged receivables and payables, printable reports and data health. No per-seat charges.',
     path: '/pricing',
     indexable: true,
   },

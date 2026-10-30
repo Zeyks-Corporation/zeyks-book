@@ -69,7 +69,7 @@ export const INTENT_PAGES: IntentPage[] = [
     navLabel: 'Hallbook for shops',
     title: 'Hallbook Software for Kirana Pasals in Nepal — Zeyks Book',
     description:
-      'A digital hallbook for Nepali shops: daily sales, customer udhar with due dates, supplier bills and expenses in NPR, with Bikram Sambat dates and printable A4 statements. From NPR 399 per month.',
+      'A digital hallbook for Nepali shops: daily sales, customer udhar with due dates, supplier bills and expenses in NPR, with Bikram Sambat dates and printable A4 statements. From NPR 299 per month.',
     eyebrow: 'For shops and pasals',
     h1: 'Hallbook software for kirana pasals',
     lead: 'A hallbook is the diary a shop keeps by hand: what sold today, what a regular took on credit, what the supplier delivered, what the shop spent. Zeyks Book keeps those four things in one book that adds up — in NPR, on the dates you actually work, without a calculator at the end of the month.',
@@ -108,7 +108,7 @@ export const INTENT_PAGES: IntentPage[] = [
       {
         heading: 'What a shop pays',
         paragraphs: [
-          'Starter is NPR 399 per month and covers the daily hallbook work: the dashboard, sales, purchases, expenses and your business settings. Premium is NPR 599 and adds settlements, the report set — profit and loss, balance sheet, trial balance, aged receivables and payables, VAT summary — inventory, and the data health checks. Nothing is charged per person.',
+          'Starter is NPR 299 per month and covers the daily hallbook work: the dashboard, sales, purchases, expenses and your business settings. Premium is NPR 499 and adds settlements, the report set — profit and loss, balance sheet, trial balance, aged receivables and payables, VAT summary — inventory, and the data health checks. Nothing is charged per person.',
         ],
       },
     ],
@@ -200,7 +200,7 @@ export const INTENT_PAGES: IntentPage[] = [
       'No payroll. Salary and contractor costs are entered as expenses.',
       'No payment collection — no gateway, no payment link, no bank feed. You record the money when it arrives.',
       'No recurring invoice scheduling. A monthly retainer is issued again by hand.',
-      'Reports and settlements need the Premium plan (NPR 599 per month). Starter (NPR 399) covers invoicing, expenses and settings.',
+      'Reports and settlements need the Premium plan (NPR 499 per month). Starter (NPR 299) covers invoicing, expenses and settings.',
     ],
     faqs: [
       {
@@ -221,7 +221,7 @@ export const INTENT_PAGES: IntentPage[] = [
       },
       {
         q: 'What does an agency pay?',
-        a: 'NPR 599 per month on Premium if you want the reports, settlements and data health. NPR 399 on Starter covers invoicing, expenses and settings. There is no per-seat charge and no setup fee published; confirm current terms before paying.',
+        a: 'NPR 499 per month on Premium if you want the reports, settlements and data health. NPR 299 on Starter covers invoicing, expenses and settings. There is no per-seat charge and no setup fee published; confirm current terms before paying.',
       },
     ],
   },
@@ -342,7 +342,7 @@ export const INTENT_PAGES: IntentPage[] = [
       {
         heading: 'Who can run it',
         paragraphs: [
-          'The VAT summary is part of the report set, so it is on the Premium plan at NPR 599 per month. The records behind it — sales, purchases and expenses with their tax amounts — are entered on Starter at NPR 399, which means you can keep the books on Starter and move to Premium at the point you want the statements.',
+          'The VAT summary is part of the report set, so it is on the Premium plan at NPR 499 per month. The records behind it — sales, purchases and expenses with their tax amounts — are entered on Starter at NPR 299, which means you can keep the books on Starter and move to Premium at the point you want the statements.',
         ],
       },
     ],

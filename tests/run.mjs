@@ -5854,9 +5854,9 @@ test('the published plans are the plans the app actually enforces', () => {
 
   // Prices come from one table, so the page cannot advertise a tier that
   // `FEATURE_FOR_ROLE` does not unlock.
-  assertEqual(ROLE_PRICE_NPR.plus, 399);
-  assertEqual(ROLE_PRICE_NPR.premium, 599);
-  for (const price of ['399', '599']) {
+  assertEqual(ROLE_PRICE_NPR.plus, 299);
+  assertEqual(ROLE_PRICE_NPR.premium, 499);
+  for (const price of ['299', '499']) {
     assert(readFileSync(path.join(root, 'index.html'), 'utf8').includes(price),
       `the shell must publish the ${price} plan`);
   }
@@ -5866,8 +5866,8 @@ test('the published plans are the plans the app actually enforces', () => {
     .exec(pricingDoc)[1].replace(/\\u003c/g, '<'));
   const offers = graph['@graph'].find((node) => node['@type'] === 'SoftwareApplication').offers;
   assertEqual(offers['@type'], 'AggregateOffer', 'two plans, so an aggregate, not a single Offer');
-  assertEqual(offers.lowPrice, '399');
-  assertEqual(offers.highPrice, '599');
+  assertEqual(offers.lowPrice, '299');
+  assertEqual(offers.highPrice, '499');
   assertEqual(offers.priceCurrency, 'NPR');
 });
 
@@ -5939,7 +5939,7 @@ test('the manifest and the answer-engine file ship facts that hold up', () => {
 
   const llms = readFileSync(path.join(root, 'public/llms.txt'), 'utf8');
   assert(/^# Zeyks Book$/mu.test(llms), 'answer engines key off the first heading');
-  assert(/NPR 399/u.test(llms) && /NPR 599/u.test(llms), 'both plans, at their real prices');
+  assert(/NPR 299/u.test(llms) && /NPR 499/u.test(llms), 'both plans, at their real prices');
   assert(/Sign in with Google/iu.test(llms) && /begin locked/iu.test(llms),
     'answer engines must describe Google sign-in and database-assigned access');
   assert(/not (?:currently )?published/iu.test(llms), 'and it repeats what is not promised');

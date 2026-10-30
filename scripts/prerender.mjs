@@ -38,9 +38,9 @@ export const PRERENDER_PAGES = [
   {
     slug: 'pricing',
     path: '/pricing',
-    title: 'Pricing — Starter NPR 399, Premium NPR 599 | Zeyks Book',
+    title: 'Pricing — Starter NPR 299, Premium NPR 499 | Zeyks Book',
     description:
-      'Zeyks Book has two monthly plans for businesses in Nepal: Starter at NPR 399 for daily sales, purchases and expenses, and Premium at NPR 599 adding inventory, aged receivables and payables, printable reports and data health. No per-seat charges.',
+      'Zeyks Book has two monthly plans for businesses in Nepal: Starter at NPR 299 for daily sales, purchases and expenses, and Premium at NPR 499 adding inventory, aged receivables and payables, printable reports and data health. No per-seat charges.',
   },
   {
     slug: 'about',
@@ -91,7 +91,7 @@ export const PRERENDER_PAGES = [
     path: '/hallbook-software',
     title: 'Hallbook Software for Kirana Pasals in Nepal — Zeyks Book',
     description:
-      'A digital hallbook for Nepali shops: daily sales, customer udhar with due dates, supplier bills and expenses in NPR, with Bikram Sambat dates and printable A4 statements. From NPR 399 per month.',
+      'A digital hallbook for Nepali shops: daily sales, customer udhar with due dates, supplier bills and expenses in NPR, with Bikram Sambat dates and printable A4 statements. From NPR 299 per month.',
   },
   {
     slug: 'agency-accounting',
@@ -118,14 +118,14 @@ export const PRERENDER_PAGES = [
 
 /** Small, route-specific copy visible before JavaScript runs. */
 const SEO_CONTENT = {
-  '/pricing': '<main class="seo-fallback"><p>Pricing for Nepal</p><h1>Simple pricing for Nepali business accounting</h1><p>Zeyks Book has two monthly plans: Starter at NPR 399 and Premium at NPR 599. Starter covers daily books, sales, purchases and expenses. Premium adds inventory, aged receivables and payables, print-ready reports, data health and settlements. There are no per-seat charges.</p><h2>Know what is included</h2><p>Business records are held in a managed Neon Postgres database, and Google sign-in uses Neon Auth. Download a JSON snapshot from Settings; restore is not available yet. Trial terms, refund policy, and IRD approval status are not currently published.</p><p><a href="/demo">Explore sample books in the interactive demo</a> or <a href="/contact">contact Zeyks Book</a> before subscribing.</p></main>',
+  '/pricing': '<main class="seo-fallback"><p>Pricing for Nepal</p><h1>Simple pricing for Nepali business accounting</h1><p>Zeyks Book has two monthly plans: Starter at NPR 299 and Premium at NPR 499. Starter covers daily books, sales, purchases and expenses. Premium adds inventory, aged receivables and payables, print-ready reports, data health and settlements. There are no per-seat charges.</p><h2>Know what is included</h2><p>Business records are held in a managed Neon Postgres database, and Google sign-in uses Neon Auth. Download a JSON snapshot from Settings; restore is not available yet. Trial terms, refund policy, and IRD approval status are not currently published.</p><p><a href="/demo">Explore sample books in the interactive demo</a> or <a href="/contact">contact Zeyks Book</a> before subscribing.</p></main>',
   '/about': '<main class="seo-fallback"><p>About Zeyks Book</p><h1>Double-entry bookkeeping for businesses in Nepal</h1><p>Zeyks Book is a web-based accounting app for Nepali businesses. It supports Bikram Sambat and Gregorian dates, NPR amounts, sales, purchases, expenses, settlements, and printable A4 reports.</p><h2>Designed around local bookkeeping needs</h2><p>Explore sample books in the interactive demo. The team builds and supports Zeyks Book from Janakpur, with a branch in Biratnagar; registered company details and uptime commitments are not published.</p><p><a href="/demo">Try the demo</a> · <a href="/pricing">See pricing</a> · <a href="/contact">Contact</a></p></main>',
   '/contact': '<main class="seo-fallback"><p>Contact Zeyks Book</p><h1>Accounting software support from Janakpur and Biratnagar</h1><p>Contact the Zeyks Book team about the interactive demo, the Starter and Premium monthly plans, data storage, or moving your books.</p><p>Head office: Janakpur, Nepal. Branch: Biratnagar, Nepal. Email: contact@zeyksbook.app. Phone and WhatsApp: +977 9701066114.</p><p><a href="/demo">Try the interactive demo</a> · <a href="/pricing">Read pricing and terms</a></p></main>',
   '/privacy': '<main class="seo-fallback"><p>Privacy and data storage</p><h1>Where Zeyks Book stores accounting data</h1><p>Zeyks Book uses a managed Neon Postgres database for business records and Google sign-in through Neon Auth. This is managed cloud storage, not a database in the customer’s own cloud account. The interactive demo uses sample books stored in the browser.</p><h2>Backups and recovery</h2><p>Users can download a JSON backup from Settings. Restoring a backup is not available yet, and automatic backup and recovery commitments are not published.</p><p><a href="/pricing">See pricing</a> · <a href="/contact">Ask a question</a></p></main>',
   '/terms': '<main class="seo-fallback"><p>Terms of use</p><h1>Using Zeyks Book for business accounts</h1><p>Zeyks Book provides web-based bookkeeping, Bikram Sambat and AD dates, NPR records, and printable reports. Review your accounting outputs with a qualified professional before statutory filing. The public site does not claim IRD certification or approval.</p><p><a href="/pricing">Pricing and subscription questions</a> · <a href="/privacy">Data and backup details</a> · <a href="/contact">Contact</a></p></main>',
   '/signin': '<main class="seo-fallback"><p>Zeyks Book sign in</p><h1>Sign in to your business books</h1><p>Sign in to Zeyks Book with Google. New accounts need Starter or Premium access before creating books.</p><p>Want to explore first? <a href="/demo">Open the interactive demo with sample books</a>.</p></main>',
   '/demo': '<main class="seo-fallback"><p>Interactive product demo</p><h1>Explore Nepali accounting software with sample books</h1><p>Walk through Zeyks Book’s double-entry ledger, invoices, purchases, settlements, reports, and Bikram Sambat dates using sample books. Demo changes stay in this browser.</p><p><a href="/pricing">See the Starter and Premium plans</a> · <a href="/privacy">Read about data storage</a></p></main>',
-  '/hallbook-software': '<main class="seo-fallback"><p>Hallbook software for shops</p><h1>Hallbook software for kirana pasals</h1><p>A digital hallbook keeps the four pages a shop already writes: sales, customer udhar with due dates, supplier bills and shop expenses — in NPR, on Bikram Sambat dates, with party balances that add themselves and A4 statements to print. Starter is NPR 399 per month; Premium at NPR 599 adds settlements, reports, inventory and data health.</p><p>It is not a till: there is no barcode checkout, no payment collection and no payroll. <a href="/demo">Try it with sample books</a> or <a href="/pricing">see the plans</a>.</p></main>',
+  '/hallbook-software': '<main class="seo-fallback"><p>Hallbook software for shops</p><h1>Hallbook software for kirana pasals</h1><p>A digital hallbook keeps the four pages a shop already writes: sales, customer udhar with due dates, supplier bills and shop expenses — in NPR, on Bikram Sambat dates, with party balances that add themselves and A4 statements to print. Starter is NPR 299 per month; Premium at NPR 499 adds settlements, reports, inventory and data health.</p><p>It is not a till: there is no barcode checkout, no payment collection and no payroll. <a href="/demo">Try it with sample books</a> or <a href="/pricing">see the plans</a>.</p></main>',
   '/agency-accounting': '<main class="seo-fallback"><p>Accounting for agencies and freelancers</p><h1>Accounting for agencies, studios and freelancers</h1><p>Invoice clients in NPR with PAN, discount and VAT, record expenses under your own heads, settle payments against open invoices, and print profit and loss, trial balance and aged receivables on A4.</p><p>There is no project or job costing, no time tracking, no payroll and no recurring invoices — the books are one ledger for the whole business. <a href="/demo">Try the demo</a> · <a href="/pricing">See pricing</a></p></main>',
   '/bikram-sambat-accounting': '<main class="seo-fallback"><p>Bikram Sambat dates</p><h1>Accounting software that reads Bikram Sambat</h1><p>Dates are entered in the BS calendar with year, month and day, each month capped to its real published length, and the Gregorian date is kept beside it as the stored, sortable key. Reports print in either calendar and today is computed for Asia/Kathmandu.</p><p>The published day-count table covers BS 2000 to BS 2090; a date outside it is shown as stored rather than guessed. <a href="/demo">Try it</a> · <a href="/contact">Ask a question</a></p></main>',
   '/vat-reporting-nepal': '<main class="seo-fallback"><p>VAT reporting</p><h1>VAT reporting for Nepali businesses</h1><p>Tax posts only when the business is marked VAT-registered, at a rate that defaults to 13% and is editable. Output VAT collects in a VAT payable account, input VAT in a VAT receivable account, and the VAT summary reads those postings for any date range: taxable sales, taxable purchases, output VAT, input VAT, and the net payable or credit carried forward, on A4.</p><p>Zeyks Book is not IRD-approved, files nothing, and has no e-billing integration. <a href="/pricing">Plans</a> · <a href="/contact">Contact</a></p></main>',
@@ -142,7 +142,7 @@ const SEO_CONTENT = {
 export const PRICING_FAQS = [
   {
     q: 'How does pricing work?',
-    a: 'Two plans, billed monthly. Starter (NPR 399) is sized for kirana counters — daily books, sales, purchases and expenses. Premium (NPR 599) unlocks inventory, aged receivables & payables, print-ready reports, data health and settlements. There are no per-seat charges.',
+    a: 'Two plans, billed monthly. Starter (NPR 299) is sized for kirana counters — daily books, sales, purchases and expenses. Premium (NPR 499) unlocks inventory, aged receivables & payables, print-ready reports, data health and settlements. There are no per-seat charges.',
   },
   {
     q: 'Can I upgrade from Starter to Premium later?',
@@ -212,7 +212,7 @@ export const GUIDE_FAQS = {
     },
     {
       q: 'What does an agency pay?',
-      a: 'NPR 599 per month on Premium if you want the reports, settlements and data health. NPR 399 on Starter covers invoicing, expenses and settings. There is no per-seat charge and no setup fee published; confirm current terms before paying.',
+      a: 'NPR 499 per month on Premium if you want the reports, settlements and data health. NPR 299 on Starter covers invoicing, expenses and settings. There is no per-seat charge and no setup fee published; confirm current terms before paying.',
     },
   ],
   '/bikram-sambat-accounting': [
@@ -342,11 +342,11 @@ const SOFTWARE_APPLICATION = {
   offers: {
     '@type': 'AggregateOffer',
     priceCurrency: 'NPR',
-    lowPrice: '399',
-    highPrice: '599',
+    lowPrice: '299',
+    highPrice: '499',
     offerCount: '2',
     url: `${CANONICAL_ORIGIN}/pricing`,
-    description: 'Starter NPR 399 per month, Premium NPR 599 per month. Billed monthly, no per-seat charges.',
+    description: 'Starter NPR 299 per month, Premium NPR 499 per month. Billed monthly, no per-seat charges.',
   },
 };
 

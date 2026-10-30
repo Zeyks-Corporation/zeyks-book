@@ -9,8 +9,8 @@ export interface UserProfile {
   /**
    * App-level role that drives route guards and the admin panel.
    *   user    — signed up, no subscription, dashboard locked.
-   *   plus    — Starter plan (399 NPR, kirana-tier, dashboard + sales + purchase only).
-   *   premium — Premium plan (599 NPR, every feature).
+   *   plus    — Starter plan (299 NPR, kirana-tier, dashboard + sales + purchase only).
+   *   premium — Premium plan (499 NPR, every feature).
    *   admin   — staff at zeyksbook, hidden /king panel.
    */
   appRole?: 'user' | 'plus' | 'premium' | 'admin';
