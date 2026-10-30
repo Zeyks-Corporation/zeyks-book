@@ -7,7 +7,7 @@ import { PLAN_FEATURES, ROLE_LABEL, type AppRole } from '../lib/roles';
 /**
  * Two-tier pricing page.
  *
- *   Starter  — NPR 299 / month. Dashboard, sales, purchases, expenses and
+ *   Plus     — NPR 299 / month. Dashboard, sales, purchases, expenses and
  *              settings. Designed for kirana counters that just need daily
  *              books and a stock view.
  *   Premium  — NPR 499 / month. Every feature: inventory, aged receivables &
@@ -25,10 +25,10 @@ import { PLAN_FEATURES, ROLE_LABEL, type AppRole } from '../lib/roles';
 const FAQS = [
   {
     q: 'How does pricing work?',
-    a: 'Two plans, billed monthly. Starter (NPR 299) is sized for kirana counters — daily books, sales, purchases and expenses. Premium (NPR 499) unlocks inventory, aged receivables & payables, print-ready reports, data health and settlements. There are no per-seat charges.',
+    a: 'Two plans, billed monthly. Plus (NPR 299) is sized for kirana counters — daily books, sales, purchases and expenses. Premium (NPR 499) unlocks inventory, aged receivables & payables, print-ready reports, data health and settlements. There are no per-seat charges.',
   },
   {
-    q: 'Can I upgrade from Starter to Premium later?',
+    q: 'Can I upgrade from Plus to Premium later?',
     a: 'Yes. Switching plans takes effect on the next page load — the role is read from your profile each time.',
   },
   {
@@ -82,7 +82,7 @@ export const PricingPage: React.FC<{
             priceNPR={299}
             highlight={false}
             features={PLAN_FEATURES.plus}
-            ctaLabel={signedIn ? 'Choose Starter' : 'Sign in to start'}
+            ctaLabel={signedIn ? 'Choose Plus' : 'Sign in to start'}
             onCta={() => {
               if (signedIn && onPickPlan) handlePick('plus');
               else onSignIn();

@@ -32,13 +32,13 @@ export const SubscribeView: React.FC<{
           </h1>
           <p className="mt-3 text-[15px] leading-[22px] text-[var(--label-secondary)]">
             Zeyks Book is a complete double-entry engine. Pick a plan that fits the
-            size of your shop — Starter for kirana counters, Premium for everything
+            size of your shop — Plus for kirana counters, Premium for everything
             including inventory and reports.
           </p>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-[10px] border border-[var(--separator)] p-4 text-left">
-            <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--label-tertiary)]">Starter</p>
+            <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--label-tertiary)]">Plus</p>
             <p className="mt-1 text-[20px] font-bold text-[var(--label)]">NPR {ROLE_PRICE_NPR.plus}</p>
             <p className="mt-1 text-[12px] text-[var(--label-secondary)]">Dashboard, sales, purchases & expenses</p>
           </div>

@@ -552,7 +552,7 @@ export default function App() {
 
   // Plans are assigned in the database while a customer may already be signed
   // in. Refresh the profile when they return to the tab so a newly granted
-  // Starter/Premium plan is reflected without requiring a fresh login.
+  // Plus/Premium plan is reflected without requiring a fresh login.
   useEffect(() => {
     if (!user?.id) return;
     let inFlight = false;
@@ -826,7 +826,7 @@ export default function App() {
   const handlePickPlan = useCallback((plan: 'user' | 'plus' | 'premium' | 'admin') => {
     if (plan === 'plus' || plan === 'premium') {
       notify(
-        `Online checkout for ${plan === 'plus' ? 'Starter' : 'Premium'} is not wired yet — please contact us to upgrade.`,
+        `Online checkout for ${plan === 'plus' ? 'Plus' : 'Premium'} is not wired yet — please contact us to upgrade.`,
         true,
       );
     }

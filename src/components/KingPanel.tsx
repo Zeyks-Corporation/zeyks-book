@@ -60,7 +60,7 @@ export const KingPanel: React.FC<{
         <div className="bg-[var(--bg)] border border-[var(--separator)] rounded-[14px] p-6">
           <h2 className="text-[22px] font-bold text-[var(--label)]">Users</h2>
           <p className="mt-2 text-[14px] text-[var(--label-secondary)]">
-            Customers sign in with Google. New accounts start locked. Assign Starter or Premium and staff access in Neon’s public.profiles table.
+            Customers sign in with Google. New accounts start locked. Assign Plus or Premium and staff access in Neon’s public.profiles table.
           </p>
         </div>
         {error && <div className="mt-6"><Callout tone="error">{error}</Callout></div>}

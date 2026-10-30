@@ -77,7 +77,7 @@ export const UpgradePlansSection: React.FC<{
  * the upgrade path is one click away.
  *
  * `feature` names the locked section so we can point at the cheapest plan that
- * unlocks it (Starter for sales/purchases/expenses/settings, Premium for the
+ * unlocks it (Plus for sales/purchases/expenses/settings, Premium for the
  * rest). Omit it on the free dashboard shell, where nothing is unlocked yet.
  */
 export const PlanLockedView: React.FC<{

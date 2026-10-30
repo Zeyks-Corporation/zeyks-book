@@ -9,7 +9,7 @@ install and no per-seat charges.
 
 > Double-entry bookkeeping for Nepali businesses: BS and AD dates, NPR amounts,
 > VAT-aware reports, inventory, and printable A4 statements. Two monthly plans —
-> Starter NPR 299 and Premium NPR 499.
+> Plus NPR 299 and Premium NPR 499.
 
 ## What it does
 
@@ -33,15 +33,15 @@ install and no per-seat charges.
 | Plan | Price | Role value | Unlocks |
 | --- | --- | --- | --- |
 | Free account | NPR 0 | `user` | Sign-in only. Every bookkeeping section is locked; nothing can be added or edited. |
-| Starter | NPR 299 / month | `plus` | Dashboard, sales, purchases, expenses, settings, JSON backup. |
-| Premium | NPR 499 / month | `premium` | Everything in Starter plus payments and settlements, reports, data health, and inventory. |
+| Plus | NPR 299 / month | `plus` | Dashboard, sales, purchases, expenses, settings, JSON backup. |
+| Premium | NPR 499 / month | `premium` | Everything in Plus plus payments and settlements, reports, data health, and inventory. |
 
 Billed monthly. No per-seat charges, no usage-based pricing. Changing plans takes
 effect on the next page load.
 
 ## Access and accounts
 
-- Sign in with Google. New accounts begin locked until the team assigns Starter
+- Sign in with Google. New accounts begin locked until the team assigns Plus
   or Premium in the database; staff access is assigned separately.
 - A demo account is not required to browse the public pages.
 - The interactive demo at /demo needs no account at all and never leaves the

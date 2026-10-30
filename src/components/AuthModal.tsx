@@ -53,7 +53,7 @@ export const AuthModal: React.FC<{
           {busy ? 'Opening Google…' : 'Continue with Google'}
         </Button>
         <p className="text-[12px] text-[var(--label-tertiary)] text-center">
-          New accounts start locked. Contact us to activate Starter or Premium.
+          New accounts start locked. Contact us to activate Plus or Premium.
         </p>
       </div>
     </Modal>

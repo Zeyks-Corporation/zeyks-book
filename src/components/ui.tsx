@@ -299,10 +299,11 @@ export const DateField: React.FC<{
 
 export const DualDate: React.FC<{ iso: string; calendar: 'BS' | 'AD'; className?: string }> = ({ iso, calendar, className = '' }) => {
   const bs = useMemo(() => { try { return adToBs(iso); } catch { return null; } }, [iso]);
-  if (calendar === 'AD' || !bs) return <span className={`tabular-nums ${className}`}>{iso}</span>;
+  if (!bs) return <span className={`tabular-nums ${className}`}>{iso}</span>;
+  const bsDate = `${bs.year}-${String(bs.month).padStart(2, '0')}-${String(bs.day).padStart(2, '0')}`;
   return (
     <span className={`tabular-nums ${className}`} title={`${iso} AD`}>
-      {bs.year}-{String(bs.month).padStart(2, '0')}-{String(bs.day).padStart(2, '0')}
+      {calendar === 'BS' ? `${bsDate} BS · ${iso} AD` : `${iso} AD · ${bsDate} BS`}
     </span>
   );
 };

@@ -7,7 +7,7 @@
  *
  *   user    — signed up, no subscription; the dashboard is reachable but
  *             every section, including adding or editing anything, is locked.
- *   plus    — Starter plan (299 NPR/mo): dashboard, sales, purchases,
+ *   plus    — Plus plan (299 NPR/mo): dashboard, sales, purchases,
  *             expenses and settings.
  *   premium — Premium plan (499 NPR/mo): every feature.
  *   admin   — staff at zeyksbook, hidden /king panel.
@@ -23,7 +23,7 @@ export const ALL_ROLES: AppRole[] = ['user', 'plus', 'premium', 'admin'];
 /** A human-readable label and price (per month, NPR) for the pricing UI. */
 export const ROLE_LABEL: Record<AppRole, string> = {
   user: 'Free account',
-  plus: 'Starter',
+  plus: 'Plus',
   premium: 'Premium',
   admin: 'Admin',
 };
@@ -98,7 +98,7 @@ export const PLAN_FEATURES: Record<'plus' | 'premium', ReadonlyArray<string>> = 
     'JSON backup from Settings',
   ],
   premium: [
-    'Everything in Starter, plus:',
+    'Everything in Plus:',
     'Aged receivables & payables (30, 60, 90 days)',
     'A4 print-ready financial statements & tax reports',
     'Automatic ledger & document health checks',
@@ -115,7 +115,7 @@ export function planOfRole(role: AppRole | undefined): 'plus' | 'premium' | null
 
 /**
  * The cheapest plan that unlocks a feature. Used by the lock screen so a free
- * account clicking a Starter-tier section is nudged to Starter, not Premium.
+ * account clicking a Plus-tier section is nudged to Plus, not Premium.
  */
 export function planForFeature(feature: Feature): 'plus' | 'premium' {
   return FEATURE_FOR_ROLE.plus.includes(feature) ? 'plus' : 'premium';

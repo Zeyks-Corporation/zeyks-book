@@ -108,8 +108,8 @@ export const PUBLIC_PAGES: Record<string, PageMetadata> = {
     indexable: true,
   },
   '/pricing': {
-    title: 'Pricing — Starter NPR 299, Premium NPR 499 | Zeyks Book',
-    description: 'Zeyks Book has two monthly plans for businesses in Nepal: Starter at NPR 299 for daily sales, purchases and expenses, and Premium at NPR 499 adding inventory, aged receivables and payables, printable reports and data health. No per-seat charges.',
+    title: 'Pricing — Plus NPR 299, Premium NPR 499 | Zeyks Book',
+    description: 'Zeyks Book has two monthly plans for businesses in Nepal: Plus at NPR 299 for daily sales, purchases and expenses, and Premium at NPR 499 adding inventory, aged receivables and payables, printable reports and data health. No per-seat charges.',
     path: '/pricing',
     indexable: true,
   },
@@ -121,7 +121,7 @@ export const PUBLIC_PAGES: Record<string, PageMetadata> = {
   },
   '/contact': {
     title: 'Contact — Zeyks Book',
-    description: 'Contact the Zeyks Book team in Janakpur and Biratnagar, Nepal about the interactive demo, the Starter and Premium monthly plans, where business records are stored, or moving your books.',
+    description: 'Contact the Zeyks Book team in Janakpur and Biratnagar, Nepal about the interactive demo, the Plus and Premium monthly plans, where business records are stored, or moving your books.',
     path: '/contact',
     indexable: true,
   },

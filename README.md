@@ -559,7 +559,7 @@ document can be voided too.
 ### Signing in
 
 Sign in with Google. A new account begins with the locked `user` role until a
-database operator assigns Starter (`plus`) or Premium (`premium`). The sign-in
+database operator assigns Plus (`plus`) or Premium (`premium`). The sign-in
 screen has one Google action and no email/password form. It uses the product's
 neutral palette and calls `authService` for the Neon Auth redirect.
 
@@ -938,7 +938,7 @@ tests/            offline test runner (node tests/run.mjs / npm test)
 
 Apply `migration/neon/025_database_access.sql` after migration 024, before deploying the updated web app. Existing `admin` profiles become `premium` customers with `is_staff = true`; the hidden `/king` route reads `is_staff`. New Google accounts receive `role = 'user'` and cannot open books or create a business until an operator assigns a plan in the database. The admin panel only lists accounts; it no longer creates logins or changes plans or staff status.
 
-Assign Starter with `update public.profiles set role = 'plus' where id = '<profile UUID>';` or Premium with `update public.profiles set role = 'premium' where id = '<profile UUID>';`. Lock an account with `role = 'user'`. Staff access is separate: `update public.profiles set is_staff = true where id = '<profile UUID>';`. Run these statements using a trusted database operator connection, never from a customer session. The internal value `plus` is displayed as Starter. Changes apply to the next database request; reload the app to refresh its screen.
+Assign Plus with `update public.profiles set role = 'plus' where id = '<profile UUID>';` or Premium with `update public.profiles set role = 'premium' where id = '<profile UUID>';`. Lock an account with `role = 'user'`. Staff access is separate: `update public.profiles set is_staff = true where id = '<profile UUID>';`. Run these statements using a trusted database operator connection, never from a customer session. The internal value `plus` is displayed as Plus. Changes apply to the next database request; reload the app to refresh its screen.
 
 In the Neon Console, open the production branch's SQL Editor. Find the account first:
 
@@ -950,7 +950,7 @@ where lower(email) = lower('customer@example.com');
 Then use the returned `id` to assign its customer plan:
 
 ```sql
-update public.profiles set role = 'plus' where id = '<profile UUID>';    -- Starter
+update public.profiles set role = 'plus' where id = '<profile UUID>';    -- Plus
 update public.profiles set role = 'premium' where id = '<profile UUID>'; -- Premium
 update public.profiles set role = 'user' where id = '<profile UUID>';    -- Locked
 ```

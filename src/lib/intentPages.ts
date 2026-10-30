@@ -108,7 +108,7 @@ export const INTENT_PAGES: IntentPage[] = [
       {
         heading: 'What a shop pays',
         paragraphs: [
-          'Starter is NPR 299 per month and covers the daily hallbook work: the dashboard, sales, purchases, expenses and your business settings. Premium is NPR 499 and adds settlements, the report set — profit and loss, balance sheet, trial balance, aged receivables and payables, VAT summary — inventory, and the data health checks. Nothing is charged per person.',
+          'Plus is NPR 299 per month and covers the daily hallbook work: the dashboard, sales, purchases, expenses and your business settings. Premium is NPR 499 and adds settlements, the report set — profit and loss, balance sheet, trial balance, aged receivables and payables, VAT summary — inventory, and the data health checks. Nothing is charged per person.',
         ],
       },
     ],
@@ -200,7 +200,7 @@ export const INTENT_PAGES: IntentPage[] = [
       'No payroll. Salary and contractor costs are entered as expenses.',
       'No payment collection — no gateway, no payment link, no bank feed. You record the money when it arrives.',
       'No recurring invoice scheduling. A monthly retainer is issued again by hand.',
-      'Reports and settlements need the Premium plan (NPR 499 per month). Starter (NPR 299) covers invoicing, expenses and settings.',
+      'Reports and settlements need the Premium plan (NPR 499 per month). Plus (NPR 299) covers invoicing, expenses and settings.',
     ],
     faqs: [
       {
@@ -221,7 +221,7 @@ export const INTENT_PAGES: IntentPage[] = [
       },
       {
         q: 'What does an agency pay?',
-        a: 'NPR 499 per month on Premium if you want the reports, settlements and data health. NPR 299 on Starter covers invoicing, expenses and settings. There is no per-seat charge and no setup fee published; confirm current terms before paying.',
+        a: 'NPR 499 per month on Premium if you want the reports, settlements and data health. NPR 299 on Plus covers invoicing, expenses and settings. There is no per-seat charge and no setup fee published; confirm current terms before paying.',
       },
     ],
   },
@@ -342,7 +342,7 @@ export const INTENT_PAGES: IntentPage[] = [
       {
         heading: 'Who can run it',
         paragraphs: [
-          'The VAT summary is part of the report set, so it is on the Premium plan at NPR 499 per month. The records behind it — sales, purchases and expenses with their tax amounts — are entered on Starter at NPR 299, which means you can keep the books on Starter and move to Premium at the point you want the statements.',
+          'The VAT summary is part of the report set, so it is on the Premium plan at NPR 499 per month. The records behind it — sales, purchases and expenses with their tax amounts — are entered on Plus at NPR 299, which means you can keep the books on Plus and move to Premium at the point you want the statements.',
         ],
       },
     ],
