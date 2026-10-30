@@ -6,7 +6,7 @@
  * up, hand payment routes to the Express app.
  *
  * Sign-in and every book read/write go straight from the browser to the Neon
- * Data API and Neon Auth, guarded by row-level security. The Supabase session
+ * Data API and Neon Auth, guarded by row-level security. The legacy session
  * bridge and membership fallbacks that used to live here are gone: they spoke to
  * a retired backend, and the bridge let any unauthenticated caller reset another
  * person's password to a value derived from their email address.
@@ -14,6 +14,8 @@
  * The contact rules — bounds, escaping, header flattening — are imported from
  * `server/resend.js` so this function and the Express server cannot drift apart.
  */
+
+import { allowContactRequest } from './rateLimit.js';
 
 const MAX_BODY_BYTES = 64 * 1024;
 
@@ -137,6 +139,18 @@ export default async function handler(req, res) {
 
     // 2. Contact form
     if (req.method === 'POST' && (matchesPath('/api/contact') || matchesPath('/contact'))) {
+      let allowed;
+      try {
+        allowed = await allowContactRequest(req);
+      } catch {
+        console.error('[contact] shared Neon rate limiter unavailable.');
+        return sendJson(res, 503, { error: 'Contact service is temporarily unavailable.' });
+      }
+      if (!allowed) {
+        res.setHeader('Retry-After', '60');
+        return sendJson(res, 429, { error: 'Too many contact requests. Please try again in a minute.' });
+      }
+
       const payload = await parseBody(req);
       if (payload.__tooLarge) {
         return sendJson(res, 413, { error: 'That message is too large.' });

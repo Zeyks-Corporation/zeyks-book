@@ -1,53 +1,48 @@
-/**
- * Caller authentication and per-request authorization for the payment API.
- *
- * Identity comes from the Firebase ID token in the Authorization header.
- * `requireCaller` verifies the bearer token against Firebase Admin Auth and
- * attaches `req.caller`; nothing downstream may invent one.
- */
+/** Neon Auth JWT verification and Neon Postgres payment authorization. */
 
-import { initializeApp, getApps } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
-import { redact, redactDetail } from './redact.js';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { neonPool } from './neonDb.js';
 
-let adminAuth;
-let adminDb;
-try {
-  if (getApps().length === 0) {
-    const projectId = process.env.VITE_FIREBASE_PROJECT_ID || 'zeyksbook-fa70a';
-    initializeApp({ projectId });
+let jwks;
+let jwksEndpoint;
+
+function getJwksUrl() {
+  if (process.env.NEON_AUTH_JWKS_URL) return process.env.NEON_AUTH_JWKS_URL;
+  const base = process.env.VITE_NEON_URL;
+  if (!base) throw new Error('VITE_NEON_URL or NEON_AUTH_JWKS_URL is required to verify Neon Auth tokens.');
+  const url = new URL(base.replace(/\/rest\/v1\/?$/, ''));
+  const [first, ...rest] = url.hostname.split('.');
+  url.hostname = `${first}.neonauth.${rest.join('.')}`;
+  url.pathname = `${url.pathname.replace(/\/+$/, '')}/auth/.well-known/jwks.json`;
+  url.search = '';
+  url.hash = '';
+  return url.toString();
+}
+
+function remoteJwks() {
+  const endpoint = getJwksUrl();
+  if (!jwks || jwksEndpoint !== endpoint) {
+    jwks = createRemoteJWKSet(new URL(endpoint));
+    jwksEndpoint = endpoint;
   }
-  adminAuth = getAuth();
-  adminDb = getFirestore();
-} catch {
-  adminAuth = { verifyIdToken: async () => { throw new Error('Auth not configured'); } };
-  adminDb = { collection: () => { throw new Error('Firestore not configured'); } };
+  return jwks;
 }
 
-/**
- * Can this process authenticate a caller at all?
- */
 export function authConfigured() {
-  return true;
+  return Boolean(process.env.DATABASE_URL && (process.env.NEON_AUTH_JWKS_URL || process.env.VITE_NEON_URL));
 }
 
-/**
- * The one sentence per failure.
- */
 export const AUTH_MESSAGES = {
-  UNCONFIGURED: 'The payment API cannot verify sessions yet. Configure Firebase environment variables.',
+  UNCONFIGURED: 'The payment API cannot verify Neon Auth sessions yet. Configure its Neon database connection.',
   MISSING: 'Sign in to use payments.',
   MALFORMED: 'Sign in to use payments.',
   INVALID: 'Your session has expired or is not valid for this request. Sign in again.',
 };
 
-/** Longest token we will look at. */
 const MAX_TOKEN_LENGTH = 4096;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const denied = (status, error) => ({ ok: false, status, error });
 
-/**
- * Parse an `Authorization` header.
- */
 export function parseBearer(header) {
   if (typeof header !== 'string' || header.trim() === '') return { ok: false, reason: 'MISSING' };
   const match = /^Bearer[ \t]+([A-Za-z0-9\-._~+/]+=*)$/i.exec(header.trim());
@@ -55,37 +50,100 @@ export function parseBearer(header) {
   return { ok: true, token: match[1] };
 }
 
-/** The 401 body. */
-export function rejectUnauthenticated(res, reason) {
-  return res.status(401).json({ error: AUTH_MESSAGES[reason] ?? AUTH_MESSAGES.INVALID });
-}
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export function isUuid(value) {
   return typeof value === 'string' && UUID_RE.test(value);
 }
 
-export async function verifyCallerToken(token) {
-  return adminAuth.verifyIdToken(token);
-}
-
 export function isMoney(value) {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return false;
-  if (!(value > 0) || value > 100_000_000) return false;
-  return Number(value.toFixed(2)) === value;
+  return typeof value === 'number' && Number.isFinite(value)
+    && value > 0 && value <= 100_000_000 && Number(value.toFixed(2)) === value;
 }
 
-const denied = (status, error) => ({ ok: false, status, error });
+export async function verifyCallerToken(token) {
+  const { payload } = await jwtVerify(token, remoteJwks(), { algorithms: ['EdDSA'] });
+  if (typeof payload.sub !== 'string' || !isUuid(payload.sub)) {
+    throw new Error('Neon Auth token does not contain a valid user id.');
+  }
+  return { id: payload.sub, email: typeof payload.email === 'string' ? payload.email : null };
+}
+
+export function rejectUnauthenticated(res, reason) {
+  return res.status(401).json({ error: AUTH_MESSAGES[reason] ?? AUTH_MESSAGES.INVALID });
+}
+
+export async function requireCaller(req, res, next) {
+  if (!authConfigured()) return res.status(503).json({ error: AUTH_MESSAGES.UNCONFIGURED });
+  const parsed = parseBearer(req.headers.authorization);
+  if (!parsed.ok) return rejectUnauthenticated(res, parsed.reason);
+  try {
+    req.caller = { ...await verifyCallerToken(parsed.token), token: parsed.token };
+    return next();
+  } catch {
+    return rejectUnauthenticated(res, 'INVALID');
+  }
+}
+
+/** Query a single invoice, already constrained to this writer's membership. */
+export async function findInvoice(caller, saleId) {
+  try {
+    const { rows } = await neonPool().query(
+      `select s.id, s.business_id, s.status, s.total_amount, s.invoice_number, s.customer_name
+       from public.sales s
+       join public.business_memberships m on m.business_id = s.business_id
+       join public.profiles p on p.id = m.user_id
+       where s.id = $1::uuid and m.user_id = $2::uuid
+         and m.role in ('OWNER', 'ACCOUNTANT') and p.role in ('plus', 'premium')
+       limit 1`,
+      [saleId, caller.id],
+    );
+    if (!rows[0]) return null;
+    return { ...rows[0], total_amount: Number(rows[0].total_amount) };
+  } catch (error) {
+    throw new Error(`Invoice lookup failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/** Query one gateway reference only within a business the caller may write. */
+export async function findCollection(caller, provider, gatewayRef) {
+  try {
+    const { rows } = await neonPool().query(
+      `select g.id, g.business_id, g.provider, g.gateway_ref, g.amount, g.status
+       from public.gateway_transactions g
+       join public.business_memberships m on m.business_id = g.business_id
+       join public.profiles p on p.id = m.user_id
+       where g.provider = $1 and g.gateway_ref = $2 and m.user_id = $3::uuid
+         and m.role in ('OWNER', 'ACCOUNTANT') and p.role in ('plus', 'premium')
+       limit 1`,
+      [provider, gatewayRef, caller.id],
+    );
+    if (!rows[0]) return null;
+    return { ...rows[0], amount: Number(rows[0].amount) };
+  } catch (error) {
+    throw new Error(`Collection lookup failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+export async function canWriteBusiness(caller, businessId) {
+  if (!isUuid(businessId)) return false;
+  try {
+    const { rowCount } = await neonPool().query(
+      `select 1 from public.business_memberships m
+       join public.profiles p on p.id = m.user_id
+       where m.business_id = $1::uuid and m.user_id = $2::uuid
+         and m.role in ('OWNER', 'ACCOUNTANT') and p.role in ('plus', 'premium')
+       limit 1`,
+      [businessId, caller.id],
+    );
+    return rowCount === 1;
+  } catch {
+    return false;
+  }
+}
 
 export function decideInvoiceAccess({ found, status, canWrite, signedTotal, invoiceTotal }) {
   if (!found) return denied(404, 'That invoice could not be found.');
-  if (status !== 'POSTED') {
-    return denied(409, 'That invoice is void. Only a posted invoice can be collected against.');
-  }
-  if (!canWrite) {
-    return denied(403, 'You do not have permission to collect payments for this invoice.');
-  }
+  if (status !== 'POSTED') return denied(409, 'That invoice is void. Only a posted invoice can be collected against.');
+  if (!canWrite) return denied(404, 'That invoice could not be found.');
   if (signedTotal > invoiceTotal + 0.005) {
     return denied(422, `That is more than the invoice is for (${invoiceTotal.toFixed(2)}).`);
   }
@@ -93,21 +151,15 @@ export function decideInvoiceAccess({ found, status, canWrite, signedTotal, invo
 }
 
 export function decideCollectionAccess({ found, canWrite }) {
-  if (!found) return denied(404, 'That payment reference could not be found.');
-  if (!canWrite) {
-    return denied(403, 'You do not have permission to manage payments for this business.');
-  }
+  if (!found || !canWrite) return denied(404, 'That payment reference could not be found.');
   return { ok: true };
 }
 
 const MAX_REF_LENGTH = 128;
-
 function usableRef(value) {
   if (typeof value !== 'string') return null;
   const ref = value.trim();
-  if (!ref || ref.length > MAX_REF_LENGTH) return null;
-  if (/[\u0000-\u001f\u007f]/.test(ref)) return null;
-  return ref;
+  return ref && ref.length <= MAX_REF_LENGTH && !/[\u0000-\u001f\u007f]/.test(ref) ? ref : null;
 }
 
 export function claimedRefs({ data, transactionUuid } = {}) {
@@ -116,105 +168,20 @@ export function claimedRefs({ data, transactionUuid } = {}) {
     const ref = usableRef(value);
     if (ref && !refs.includes(ref)) refs.push(ref);
   };
-
   if (data) {
-    try {
-      const decoded = JSON.parse(Buffer.from(String(data), 'base64').toString('utf8'));
-      push(decoded?.transaction_uuid);
-    } catch {
-      // Ignored decoding failure
-    }
+    try { push(JSON.parse(Buffer.from(String(data), 'base64').toString('utf8'))?.transaction_uuid); }
+    catch { /* Invalid provider return data is ignored. */ }
   }
   push(transactionUuid);
   return refs;
 }
 
-/* -------------------------------------------------------------------------- */
-/* The middleware                                                             */
-/* -------------------------------------------------------------------------- */
-
-export async function requireCaller(req, res, next) {
-  if (!authConfigured()) {
-    return res.status(503).json({ error: AUTH_MESSAGES.UNCONFIGURED });
-  }
-
-  const parsed = parseBearer(req.headers.authorization);
-  if (!parsed.ok) return rejectUnauthenticated(res, parsed.reason);
-
-  try {
-    const decodedToken = await adminAuth.verifyIdToken(parsed.token);
-    req.caller = { id: decodedToken.uid, email: decodedToken.email ?? null, token: parsed.token };
-    return next();
-  } catch (e) {
-    console.warn(`[payments] session check failed: ${redactDetail(e)}`);
-    return rejectUnauthenticated(res, 'INVALID');
-  }
-}
-
-/* -------------------------------------------------------------------------- */
-/* Reads that the database filters for us                                     */
-/* -------------------------------------------------------------------------- */
-
-export async function findInvoice(caller, saleId) {
-  try {
-    const snap = await adminDb.collectionGroup('sales').get();
-    const doc = snap.docs.find((d) => d.id === saleId || d.data().id === saleId);
-    if (!doc) return null;
-    const data = doc.data();
-    return {
-      id: data.id ?? doc.id,
-      business_id: data.business_id ?? doc.ref.parent.parent?.id ?? '',
-      status: data.status,
-      total_amount: Number(data.total_amount ?? data.totalAmount ?? 0),
-      invoice_number: String(data.invoice_number ?? data.invoiceNumber ?? ''),
-      customer_name: String(data.customer_name ?? data.customerName ?? ''),
-    };
-  } catch (e) {
-    throw new Error(`Invoice lookup failed: ${e instanceof Error ? e.message : String(e)}`);
-  }
-}
-
-export async function findCollection(caller, provider, gatewayRef) {
-  try {
-    const snap = await adminDb.collectionGroup('gateway_transactions').get();
-    const doc = snap.docs.find((d) => {
-      const data = d.data();
-      return data.provider === provider && (data.gateway_ref === gatewayRef || data.reference === gatewayRef);
-    });
-    if (!doc) return null;
-    const data = doc.data();
-    return {
-      id: data.id ?? doc.id,
-      business_id: data.business_id ?? doc.ref.parent.parent?.id ?? '',
-      provider: data.provider,
-      gateway_ref: data.gateway_ref ?? data.reference,
-      amount: Number(data.amount ?? 0),
-      status: data.status,
-    };
-  } catch (e) {
-    throw new Error(`Collection lookup failed: ${e instanceof Error ? e.message : String(e)}`);
-  }
-}
-
-export async function canWriteBusiness(caller, businessId) {
-  try {
-    const snap = await adminDb.collection('businessMemberships').doc(`${caller.id}_${businessId}`).get();
-    return snap.exists;
-  } catch {
-    return false;
-  }
-}
-
 export async function authorizeInvoice(caller, { saleId, signedTotal }) {
   if (!isUuid(saleId)) return denied(400, 'An invoice is required to start a payment.');
   if (!isMoney(signedTotal)) return denied(400, 'Amount must be greater than zero.');
-
   const invoice = await findInvoice(caller, saleId);
   const decision = decideInvoiceAccess({
-    found: Boolean(invoice),
-    status: invoice?.status,
-    canWrite: invoice ? await canWriteBusiness(caller, invoice.business_id) : false,
-    signedTotal,
+    found: Boolean(invoice), status: invoice?.status, canWrite: Boolean(invoice), signedTotal,
     invoiceTotal: Number(invoice?.total_amount ?? 0),
   });
   if (!decision.ok) return decision;
@@ -223,10 +190,7 @@ export async function authorizeInvoice(caller, { saleId, signedTotal }) {
 
 export async function authorizeReference(caller, provider, gatewayRef) {
   const collection = await findCollection(caller, provider, gatewayRef);
-  const decision = decideCollectionAccess({
-    found: Boolean(collection),
-    canWrite: collection ? await canWriteBusiness(caller, collection.business_id) : false,
-  });
+  const decision = decideCollectionAccess({ found: Boolean(collection), canWrite: Boolean(collection) });
   if (!decision.ok) return decision;
   return { ok: true, collection };
 }
@@ -240,5 +204,5 @@ export async function authorizeReferences(caller, provider, refs) {
 }
 
 export function warnIfUnconfigured() {
-  console.log('[payments] Firebase session verification active.');
+  if (!authConfigured()) console.warn('[payments] Neon Auth or DATABASE_URL is not configured.');
 }

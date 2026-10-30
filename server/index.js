@@ -6,7 +6,7 @@
  * secret can forge a signature and mark any amount as paid, so every signing
  * and verification step happens here.
  *
- * Endpoints — every one requires a verified Firebase session as of Stage 14
+ * Endpoints — every payment route requires a verified Neon Auth JWT
  * (`Authorization: Bearer <access token>`; see ./auth.js). There is no public
  * route on this server today. Provider webhooks will be a *separate* mount with
  * their own signature check, because eSewa and Khalti call those without a user
@@ -290,10 +290,9 @@ app.post('/api/payments/khalti/lookup', requireCaller, async (req, res) => {
  * The auth-mail and OTP endpoints that used to live below this are gone. They
  * let an unauthenticated caller send branded email to any address with a
  * caller-supplied reset link, and the OTP pair authenticated anyone who typed
- * `123456`. Sign-in now happens entirely through Firebase Auth (see
- * src/services/authService.ts): Firebase generates, stores, expires and
- * verifies the code, and issues the real access token every Firestore-backed read
- * depends on. This server never sees an OTP again.
+ * `123456`. Sign-in now happens through Neon Managed Auth (see
+ * src/services/authService.ts). The API verifies Neon Auth JWTs against the
+ * branch JWKS and reads payment records from the same Neon Postgres database.
  */
 
 app.get('/api/resend/status', (_req, res) => {

@@ -16,31 +16,19 @@ for the full list if you still have it.
 
 ## Stack
 
-React 19 + TypeScript + Vite + Tailwind v4 on the frontend, Firebase for
-authentication and cloud storage, and a small Express server for payment
-gateway calls. The browser talks to Firebase with the publishable (anon) key
-only; RLS restricts every row to the signed-in user's businesses.
+React 19 + TypeScript + Vite + Tailwind v4 on the frontend. Neon provides
+Managed Better Auth and the Postgres database through its Data API. An optional
+Express API handles contact email and payment gateway calls server-side.
 
 ## Getting started
 
-You need Node 20+, the [Firebase CLI](https://firebase.com/docs/guides/cli) and
-a running Docker. **A new contributor never needs a production or staging
-credential**: the local stack is the target for every command below.
+You need Node 20+ and a Neon project with Auth enabled. Add the branch's
+`VITE_NEON_URL` to `.env.local`, then:
 
 ```bash
 npm install
-firebase start                     # the local stack — the only database local work uses
-cp .env.example .env               # server secrets; the sandbox eSewa test values are already there
-# Now put the *browser* config in .env.local, with the values `firebase status` prints:
-#   VITE_FIREBASE_URL="http://127.0.0.1:54321"
-#   VITE_FIREBASE_PUBLISHABLE_KEY="<publishable (anon) key>"
-firebase db reset --local          # apply migrations 001-015 to the local database
-npm run dev                        # Vite dev server (3000) and the API (4000) together
+npm run dev                        # Vite dev server (3000) and optional API (4000)
 ```
-
-The app tells you which database it is talking to as it starts:
-`[Zeyks Book] Firebase target: local (127.0.0.1:54321)`. If it does not say
-`local`, stop and read the next section — see *Environment safety*.
 
 Open `http://localhost:3000`. Sign in or create an account, then the first
 screen asks for your business name; everything else can be changed later in
@@ -57,33 +45,22 @@ npm run lint       # typecheck only
 
 ## Environment safety — read before pointing anything anywhere
 
-The browser clients require explicit `VITE_FIREBASE_*` and `VITE_SUPABASE_*`
-values; there is no hard-coded production fallback. Start Firebase Auth,
-Firestore and Functions emulators for local development and set
-`VITE_USE_FIREBASE_EMULATORS="true"`. The Supabase URL must also be local
-(`localhost` or `127.0.0.1`). This checkout does not contain a Supabase schema
-or migration setup, so a local Supabase database requires separate provisioning.
-
-`src/lib/envGuard.ts` refuses a remote Firebase or Supabase target in a
-development build unless `VITE_ALLOW_REMOTE_IN_DEV="yes"` is explicitly set.
-Only use that override with a reviewed staging project. The Vite config rejects
-service-role-shaped keys in any `VITE_*` variable before a build is published.
+The browser requires `VITE_NEON_URL`, which points to the Neon branch used by
+Neon Auth and the Data API. Never put a database connection string or other
+server secret in a `VITE_*` variable. The Vite config rejects service-role-shaped
+keys in `VITE_*` values before a build is published.
 
 `.env.local` versus `.env`:
 
-- **`.env.local`** — browser config. Only `VITE_*` names. Vite substitutes them
-  into the bundle, so everything there is public by design; the publishable
-  (anon) key belongs there, a merchant secret does not. Production builds need
-  these public variables configured on the deployment host as well.
-- **`.env` / deployment environment** — server values: `PAYMENT_MODE`, the
-  eSewa/Khalti merchant keys, `FIREBASE_PROJECT_ID`, and Firebase Admin
-  credentials (`FIREBASE_SERVICE_ACCOUNT_JSON` on Vercel or Application Default
-  Credentials locally). The shared API limiter and document lookups use
-  Firestore through those credentials. Payment authorization needs
-  `SUPABASE_URL` and a rotated `SUPABASE_SERVICE_ROLE_KEY`. The Supabase session
-  bridge additionally needs `SUPABASE_ANON_KEY`; if it is absent, that route
-  returns `503`.
-  Never prefix server secrets with `VITE_`.
+- **`.env.local`** — browser config. `VITE_NEON_URL` is public and is used by
+  the Neon Auth and Data API clients. Never put a database connection string or
+  merchant secret in a `VITE_*` variable.
+- **`.env` / deployment environment** — optional server values: `DATABASE_URL`
+  for the shared API rate limiter and Neon-backed payment authorization,
+  `NEON_AUTH_JWKS_URL` only if it should not be derived from `VITE_NEON_URL`,
+  `PAYMENT_MODE`, eSewa/Khalti merchant keys, and Resend mail settings. The API
+  uses Neon Auth JWTs and Neon Postgres; it does not require Firebase or
+  Supabase credentials. Never prefix server secrets with `VITE_`.
 
 `.gitignore` ignores `.env` and every `.env.*` file **except** `.env.example`, so
 a staging or production file cannot be committed by accident.
@@ -101,45 +78,24 @@ does not track `firebase/.temp` files. Keep environment files and generated
 machine state out of Git; `.gitignore` covers the environment files and Vercel
 local config.
 
-### Live security rollout
+### Neon API rollout
 
-The old Supabase service-role credential remains in historical commits. The
-source changes below are not live until the provider configuration and deployments
-are updated:
-
-1. Coordinate revocation or rotation of the exposed credential in Supabase with
-   the new `SUPABASE_SERVICE_ROLE_KEY` in the API deployment. Confirm the old
-   credential no longer works. If the rotation also changes the public anon
-   key, update `SUPABASE_ANON_KEY` and `VITE_SUPABASE_ANON_KEY` together.
-2. Configure the API host with `FIREBASE_PROJECT_ID`, Firebase Admin
-   credentials, `SUPABASE_URL`, the rotated service-role key, and `APP_URL` for
-   payment return links. Configure the public build values
-   `VITE_FIREBASE_*`, `VITE_SUPABASE_URL`, and `VITE_SUPABASE_ANON_KEY` explicitly;
-   the browser no longer has built-in production fallbacks. Set
-   `VITE_PAYMENT_API_URL` to the API origin only after that API and gateway keys
-   are ready. Deploy this source, then check sign-in, business loading, payment
-   configuration and contact in the deployed environment.
-3. Deploy the Firebase callable changes and `firestore.indexes.json` so OTP
-   attempt limits and limiter document TTL are live. The callable deploy needs
-   the existing Resend secrets. Check a failed OTP reaches the five-attempt
-   limit and a new request follows the send cooldown.
-4. With the rotated service-role key, run
-   `node scripts/rotate-legacy-supabase-passwords.mjs` for a count-only preview.
-   `--apply` assigns random passwords to **every** Supabase Auth user in the
-   project; use it only after confirming that scope. Review and revoke existing
-   Supabase sessions separately.
-5. Inspect live Supabase RLS policies and access logs, including owner, viewer
-   and cross-business reads. This checkout has no SQL migration files or live
-   database access from which to establish the deployed policy state.
+The website itself needs `VITE_NEON_URL`. The optional contact and payment API
+also needs a server-only pooled `DATABASE_URL`; payment routes verify Neon Auth
+JWTs using `NEON_AUTH_JWKS_URL` or derive the JWKS endpoint from
+`VITE_NEON_URL`. Apply `migration/neon/026_api_rate_limits.sql` after migration
+025 before enabling the shared contact limiter. Add gateway and Resend secrets
+only for the API features you enable. This Neon-backed API does not require
+Firebase credentials.
 
 ## Deploying — routing, and the two runtimes
 
 Vercel serves the static build from `dist/` and routes `/api/*` to the
 serverless function in `api/index.js`, which imports `server/index.js`.
-The function needs its server environment and Firebase Admin credentials in
-the Vercel project. Missing Supabase admin settings disable the payment and
-session routes; missing Firebase Admin access makes rate-limited API routes
-return `503` until configured.
+The function uses Neon Auth for identity and Neon Postgres for server-side
+payment lookups and the shared contact limiter. Configure `DATABASE_URL` and
+apply the Neon migrations before enabling those API routes; no Firebase or
+Supabase credentials are used by this runtime.
 
 **Declare the payment API origin.** The built browser app offers online
 collection only when `VITE_PAYMENT_API_URL` is set. It may be this Vercel
@@ -240,10 +196,9 @@ range in `tests/run.mjs`. The fiscal year defaults to opening on Shrawan 1
 
 ## Authentication and data storage
 
-**Authentication is Firebase Auth, and your books live in Firebase** — the
-same account signs you in on any device and resolves to the same business.
+**Authentication and data both use Neon** — Neon Auth signs you in on any
+device, and Neon Postgres stores your books and business data.
 Browser `localStorage` is never the source of truth for accounting data; the
-only browser-side session that persists is Firebase's own auth session.
 
 - **Settings → Backup → Export backup** downloads a JSON snapshot of your
   cloud books. Keep it somewhere safe.
@@ -608,9 +563,8 @@ The database is the boundary. The UI only reflects it.
 granted to `authenticated` alone; the internal helpers (`post_settlement_core`,
   `gateway_settlement_state`) are not callable by a client at all. The one
   client-writable surface is the chart of accounts, which is column-scoped.
-- **Browser.** `src/lib/firebase.ts` uses the publishable key only; the
-  service-role key never appears in `src/`, and the client cannot be built without
-  passing the environment guard.
+- **Browser.** Neon Auth and the Neon Data API use the public `VITE_NEON_URL`;
+  server-only database credentials stay out of the client bundle.
 - **Credentials in errors.** `server/redact.js` masks credential-shaped text
   before the payment API logs a provider failure or returns it, so a useful
   business error ("insufficient balance") survives while the signature and the key
@@ -649,17 +603,15 @@ request names.
 | `POST /api/payments/khalti/lookup` | signed-in **OWNER/ACCOUNTANT** of the business owning that collection |
 
 **How a request is authenticated.** The browser sends
-`Authorization: Bearer <Firebase ID token>`; Firebase Admin verifies it with
-`verifyIdToken` and requires a verified email. The email identifies the
-Supabase Auth user, while business and role come from the database. No identity
-or role supplied in the request body is trusted.
+`Authorization: Bearer <Neon Auth JWT>`; the server verifies the signature
+against Neon Auth's JWKS. The user ID, business membership, and customer role
+are checked against Neon Postgres. No identity or role supplied in the request
+body is trusted.
 
-**How it is authorized.** The server uses its Supabase admin client to read the
-invoice or collection, maps the verified Firebase email to a Supabase profile,
-confirms that profile's ID and email against Supabase Auth, then checks the
-`business_memberships` role. Another tenant's record returns 404; a VIEWER
-member receives 403. The admin client bypasses RLS, so this explicit check is
-required for every payment route before contacting a provider.
+**How it is authorized.** The server queries Neon Postgres for the requested
+invoice or collection while checking the verified user's membership and plan
+role in the same scoped query. Another tenant's record returns 404; a VIEWER
+member receives 403. These checks happen before contacting a provider.
 
 **Failure semantics.** 401 unauthenticated (no detail, and never the token),
 403 authenticated but not permitted, 400 malformed request, 404 not found or not
@@ -904,10 +856,9 @@ Known limitations, stated plainly:
   user session at all, so it needs a different mechanism: a separate mount, a
   signature verified over the raw request body, and no bearer token. Until that
   exists there is no public route on this server.
-- **Rate limiting uses shared Firestore counters** for the API and OTP callables,
-  so Vercel instances use the same limits. Deploy `firestore.indexes.json` with
-  `firebase deploy --only firestore:indexes` to enable TTL cleanup for the
-  short-lived limiter documents.
+- **Rate limiting uses shared Neon Postgres counters** across Vercel instances.
+  Apply `migration/neon/026_api_rate_limits.sql` to create the private counter
+  table and expiry index.
 - A non-`VITE_` secret in `.env.local` (for example a deployment token) is not
   bundled, but nothing stops it being added there; the test suite only proves it is
   not in the bundle.
