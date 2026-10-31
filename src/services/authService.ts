@@ -202,7 +202,16 @@ async function readSession(): Promise<{
   error: string | null;
 }> {
   try {
-    const { data, error } = await supabase.auth.getSession({ forceFetch: true });
+    // Neon Auth's OAuth verifier is a one-use callback value. The adapter's
+    // normal getSession request runs its callback hooks, which attach that
+    // verifier, cache the resulting session, and remove it from the URL. A
+    // forced read bypasses those hooks and leaves the verifier behind, so the
+    // next read gets a 400 even though Google already issued a valid session.
+    const isOAuthCallback = typeof window !== 'undefined'
+      && new URLSearchParams(window.location.search).has('neon_auth_session_verifier');
+    const { data, error } = await supabase.auth.getSession(
+      isOAuthCallback ? undefined : { forceFetch: true },
+    );
     if (error) {
       if (typeof window !== 'undefined') {
         const callbackUrl = new URL(window.location.href);
