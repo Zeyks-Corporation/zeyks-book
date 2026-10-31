@@ -17,7 +17,7 @@ import { NotFoundView } from './components/NotFoundView';
 import { IntentPageView } from './components/IntentPage';
 import { SubscribeView } from './components/SubscribeView';
 import { KingPanel } from './components/KingPanel';
-import { isPayingTier, roleHasFeature, paywallHoldsAccount, type AppRole } from './lib/roles';
+import { isPayingTier, roleCanWrite, roleHasFeature, paywallHoldsAccount, type AppRole } from './lib/roles';
 import { PlanLockedView } from './components/UpgradeViews';
 import { gateway, GatewayConfig, takePending } from './services/paymentGateway';
 import { useRoute } from './lib/useRoute';
@@ -56,6 +56,7 @@ const HealthView = lazy(() => import('./components/HealthView').then((m) => ({ d
 const SettingsView = lazy(() => import('./components/SettingsView').then((m) => ({ default: m.SettingsView })));
 const DemoPage = lazy(() => import('./components/DemoPage').then((m) => ({ default: m.DemoPage })));
 const InventoryView = lazy(() => import('./components/InventoryView').then((m) => ({ default: m.InventoryView })));
+const PremiumToolsView = lazy(() => import('./components/PremiumToolsView').then((m) => ({ default: m.PremiumToolsView })));
 
 /** Which capability each transaction kind needs before it can be recorded. */
 const CAPABILITY_FOR_TXN: Record<TxnKind, Capability> = {
@@ -84,11 +85,28 @@ function profileFromAuthUser(authUser: { id: string; email?: string | null; name
 /** First-run business setup, shown once before the app is usable. */
 const OnboardingGate: React.FC<{
   onComplete: (name: string, owner: string) => Promise<void>;
+  onSignOut: () => void;
   busy?: boolean;
   error?: string | null;
-}> = ({ onComplete, busy, error }) => {
+  readOnly?: boolean;
+}> = ({ onComplete, onSignOut, busy, error, readOnly = false }) => {
   const [name, setName] = useState('');
   const [owner, setOwner] = useState('');
+  if (readOnly) {
+    return (
+      <div className="min-h-screen bg-[var(--bg-secondary)] flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-[var(--bg)] border border-[var(--separator)] rounded-[14px] shadow-sm p-6 space-y-3">
+          <h1 className="text-[17px] leading-[22px] font-semibold text-[var(--label)]">Starter is read-only</h1>
+          <p className="text-[14px] leading-[21px] text-[var(--label-secondary)]">
+            This account can view records for businesses it belongs to. Ask an administrator to assign Plus or Premium to create a business or make changes. Existing records are preserved.
+          </p>
+          <Button type="button" variant="secondary" onClick={onSignOut}>
+            Sign out
+          </Button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="min-h-screen bg-[var(--bg-secondary)] flex items-center justify-center p-4">
       <div className="w-full max-w-sm bg-[var(--bg)] border border-[var(--separator)] rounded-[14px] shadow-sm p-6 space-y-4">
@@ -270,6 +288,12 @@ export default function App() {
    */
   const { path, navigate } = useRoute();
   const route = useMemo(() => parseRoute(path), [path]);
+  // Public pages have no account data. Render them while the initial Neon
+  // session request runs so auth latency does not hold the landing page or
+  // sample demo behind a blank/loading screen.
+  const publicRoute = route.kind === 'landing' || route.kind === 'demo'
+    || route.kind === 'pricing' || route.kind === 'about' || route.kind === 'contact'
+    || route.kind === 'privacy' || route.kind === 'terms';
 
   // The document's title, description and canonical URL follow the route, so
   // each public page describes itself instead of all of them claiming the home
@@ -697,13 +721,17 @@ export default function App() {
   }, [loadUserBusinessAndData]);
 
   const openQuickAction = useCallback((kind: TxnKind) => {
+    if (!user?.isStaff && !roleCanWrite(user?.appRole, 'business.write')) {
+      notify('Starter accounts are read-only. Ask an administrator to assign Plus or Premium to make changes.', false);
+      return;
+    }
     if (!isSupported(CAPABILITY_FOR_TXN[kind])) {
       notify(unsupportedMessage(TXN_LABELS[kind]), false);
       return;
     }
     setSettleFor(undefined);
     setTxnModal(kind);
-  }, [notify]);
+  }, [notify, user?.appRole, user?.isStaff]);
 
   /**
    * Settle one document from its own row: a receipt against an invoice (money
@@ -720,15 +748,23 @@ export default function App() {
    * verified it with the provider.
    */
   const openSettle = useCallback((documentId: string, direction: 'INCOMING' | 'OUTGOING') => {
+    if (!user?.isStaff && !roleCanWrite(user?.appRole, 'business.write')) {
+      notify('Starter accounts are read-only. Ask an administrator to assign Plus or Premium to make changes.', false);
+      return;
+    }
     if (!isSupported('payments')) {
       notify(unsupportedMessage('Recording a settlement'), false);
       return;
     }
     setSettleFor({ documentId, direction });
     setTxnModal('payment');
-  }, [notify]);
+  }, [notify, user?.appRole, user?.isStaff]);
 
   const openCollect = useCallback((saleId?: string) => {
+    if (!user?.isStaff && !roleCanWrite(user?.appRole, 'business.write')) {
+      notify('Starter accounts are read-only. Ask an administrator to assign Plus or Premium to make changes.', false);
+      return;
+    }
     // Both halves are required: the RPCs that record a provider interaction and
     // a server that can reach the provider. Without the second, the honest
     // answer is no — not a button that opens a form which cannot complete.
@@ -741,7 +777,7 @@ export default function App() {
       return;
     }
     setCollectFor(saleId); setCollectOpen(true);
-  }, [notify]);
+  }, [notify, user?.appRole, user?.isStaff]);
 
   /** The signed-in screen the URL names. Anything else renders its own page. */
   const activeTab: ViewTab = route.kind === 'app' ? route.tab : 'dashboard';
@@ -755,7 +791,13 @@ export default function App() {
   };
 
   const userRole: AppRole | undefined = user?.appRole;
-  const dashboardAccess = isPayingTier(userRole) || user?.isStaff === true;
+  const dashboardAccess = userRole === 'user' || isPayingTier(userRole) || user?.isStaff === true;
+  const activeBusinessMembership = membership.kind === 'ready'
+    ? membership.memberships.find((item) => item.businessId === business.id)
+    : undefined;
+  const canManageActiveBusiness = roleCanWrite(userRole, 'business.write')
+    && activeBusinessMembership !== undefined
+    && activeBusinessMembership?.role !== 'VIEWER';
 
   /**
    * Which sidebar sections this role has not paid for — the list that drives
@@ -769,7 +811,7 @@ export default function App() {
   );
 
   const headerActions = useMemo(() => {
-    if (currentDocKind && !lockedTabs.includes(activeTab)) {
+    if (currentDocKind && !lockedTabs.includes(activeTab) && (user?.isStaff || isPayingTier(userRole))) {
       const kind = quickActionForTab[currentDocKind]!;
       const supported = isSupported(CAPABILITY_FOR_TXN[kind]);
       return (
@@ -785,7 +827,7 @@ export default function App() {
     }
     return null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentDocKind, openQuickAction, lockedTabs, activeTab]);
+  }, [currentDocKind, openQuickAction, lockedTabs, activeTab, user?.isStaff, userRole]);
 
   const signOutNow = useCallback(() => { void exitSession('this-device'); }, [exitSession]);
   const retryLoad = useCallback(() => { void loadUserBusinessAndData(); }, [loadUserBusinessAndData]);
@@ -823,7 +865,7 @@ export default function App() {
    * real tier change is the admin's /king panel); we still acknowledge the
    * click so the UI feels responsive.
    */
-  const handlePickPlan = useCallback((plan: 'user' | 'plus' | 'premium' | 'admin') => {
+  const handlePickPlan = useCallback((plan: AppRole) => {
     if (plan === 'plus' || plan === 'premium') {
       notify(
         `Online checkout for ${plan === 'plus' ? 'Plus' : 'Premium'} is not wired yet — please contact us to upgrade.`,
@@ -836,7 +878,7 @@ export default function App() {
     return <LandingPage onSignIn={() => navigate('/dashboard')} currentPath="/" navigate={navigate} />;
   }
 
-  if (phase === 'checking-session' || redirect) {
+  if (redirect || (phase === 'checking-session' && (Boolean(user) || !publicRoute))) {
     // `redirect` is set only for a session we already know about, so waiting
     // here is what stops the marketing page flashing up in front of someone's
     // books on every refresh of the root URL.
@@ -844,7 +886,7 @@ export default function App() {
   }
 
   /**
-   * The hidden admin panel at `/king`. Anyone not in role='admin' gets a real
+   * The hidden staff panel at `/king`. Anyone without staff status gets a real
    * 404 — never a silent redirect — so the URL itself never admits the panel
    * exists.
    */
@@ -1046,8 +1088,10 @@ export default function App() {
     return (
       <OnboardingGate
         onComplete={handleOnboardingComplete}
+        onSignOut={signOutNow}
         busy={onboardingBusy}
         error={onboardingError}
+        readOnly={userRole === 'user' && !user?.isStaff}
       />
     );
   }
@@ -1081,6 +1125,12 @@ export default function App() {
           </div>
         )}
 
+        {userRole === 'user' && !user?.isStaff && (
+          <div role="status" className="border-b border-[var(--separator)] bg-[var(--bg)] px-4 py-2 text-[13px] text-[var(--label-secondary)]">
+            Starter access is read-only. You can view authorized records; ask an administrator to assign Plus or Premium to make changes. Your records are preserved.
+          </div>
+        )}
+
         {storageError && (
           <div role="alert" className="bg-[var(--destructive-bg)] border-b border-[var(--destructive)]/30 text-[var(--destructive)] text-[13px] leading-[18px] px-4 py-2">
             {storageError}
@@ -1105,14 +1155,17 @@ export default function App() {
                     books={books} range={range} onRangeChange={updateRange} calendar={calendar}
                     role={userRole}
                     onPickPlan={handlePickPlan}
+                    canWrite={user?.isStaff === true || roleCanWrite(userRole, 'business.write')}
                     onQuickAction={openQuickAction}
                     onGoToHealth={() => navigate(pathForTab('health'))}
                     onGoToInventory={() => navigate(pathForTab('inventory'))}
+                    onGoToTools={() => navigate(pathForTab('tools'))}
                   />
                 )}
                 {currentDocKind && (
                   <DocumentsView
                     kind={currentDocKind} books={books} calendar={calendar}
+                    readOnly={userRole === 'user' && !user?.isStaff}
                     onNew={() => openQuickAction(quickActionForTab[currentDocKind]!)}
                     onCollect={(saleId) => openCollect(saleId)}
                     onReceive={(saleId) => openSettle(saleId, 'INCOMING')}
@@ -1121,7 +1174,8 @@ export default function App() {
                   />
                 )}
                 {activeTab === 'reports' && (
-                  <ReportsView books={books} range={range} onRangeChange={updateRange} calendar={calendar} />
+                  <ReportsView books={books} range={range} onRangeChange={updateRange} calendar={calendar}
+                    canExport={user?.isStaff === true || roleCanWrite(userRole, 'report.export')} />
                 )}
                 {activeTab === 'health' && <HealthView books={books} onDone={notify} />}
                 {activeTab === 'settings' && (
@@ -1134,10 +1188,18 @@ export default function App() {
                 {activeTab === 'inventory' && (
                   <InventoryView
                     businessId={business.id}
+                    readOnly={!user?.isStaff && !roleCanWrite(userRole, 'inventory.manage')}
                     trackInventory={business.trackInventory}
                     onTrackChanged={(next) => { setBusiness({ ...business, trackInventory: next }); }}
                     calendar={calendar}
                     notify={notify}
+                  />
+                )}
+                {activeTab === 'tools' && (
+                  <PremiumToolsView
+                    businessId={business.id}
+                    books={books}
+                    readOnly={!canManageActiveBusiness}
                   />
                 )}
               </>
@@ -1147,7 +1209,7 @@ export default function App() {
       </div>
 
       <TransactionModal
-        isOpen={txnModal !== null} kind={txnModal ?? 'sale'}
+        isOpen={txnModal !== null && (user?.isStaff === true || roleCanWrite(userRole, 'business.write'))} kind={txnModal ?? 'sale'}
         onClose={() => { setTxnModal(null); setSettleFor(undefined); }}
         books={books} calendar={calendar} onDone={notify}
         preselectDocumentId={settleFor?.documentId}

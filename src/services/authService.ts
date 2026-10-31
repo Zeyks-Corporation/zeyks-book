@@ -270,7 +270,7 @@ export async function getProfile(userId: string): Promise<{
     id: string;
     email: string;
     fullName: string;
-    appRole: 'user' | 'plus' | 'premium' | 'admin';
+    appRole: 'user' | 'plus' | 'premium';
     isStaff: boolean;
     createdAt: string;
   } | null;
@@ -290,7 +290,7 @@ export async function getProfile(userId: string): Promise<{
         id: row.id,
         email: row.email || sessionUser?.email || '',
         fullName: row.full_name || (sessionUser as { name?: string | null } | undefined)?.name || row.email.split('@')[0] || '',
-        appRole: (['user', 'plus', 'premium', 'admin'].includes(row.role) ? row.role : 'user') as 'user' | 'plus' | 'premium' | 'admin',
+        appRole: (['user', 'plus', 'premium'].includes(row.role) ? row.role : 'user') as 'user' | 'plus' | 'premium',
         isStaff: row.is_staff === true,
         createdAt: sessionUser && (sessionUser as { created_at?: string }).created_at
           ? (sessionUser as { created_at?: string }).created_at!

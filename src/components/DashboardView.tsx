@@ -48,13 +48,15 @@ const PartyBalances: React.FC<{
 export const DashboardView: React.FC<{
   books: Books; range: DateRange; onRangeChange: (r: DateRange) => void;
   calendar: 'BS' | 'AD'; onQuickAction: (k: 'sale' | 'purchase' | 'expense' | 'payment') => void;
+  canWrite?: boolean;
   onGoToHealth: () => void;
   onGoToInventory?: () => void;
+  onGoToTools?: () => void;
   hideHealthBanner?: boolean;
   /** Signed-in role — drives the "your plan / upgrade" card. */
   role?: AppRole;
   onPickPlan?: (plan: 'plus' | 'premium') => void;
-}> = ({ books, range, onRangeChange, calendar, onQuickAction, onGoToHealth, onGoToInventory, hideHealthBanner = false, role, onPickPlan }) => {
+}> = ({ books, range, onRangeChange, calendar, onQuickAction, canWrite = true, onGoToHealth, onGoToInventory, onGoToTools, hideHealthBanner = false, role, onPickPlan }) => {
   const {
     accounts, journalEntries, sales, purchases, expenses, payments, business, integrityIssues,
     customers, suppliers, receivableByCustomer, payableBySupplier,
@@ -197,6 +199,33 @@ export const DashboardView: React.FC<{
         <InventorySummarySection businessId={business.id} symbol={symbol} onGoToInventory={onGoToInventory} />
       )}
 
+      {role === 'premium' && onGoToTools && (
+        <section aria-label="Premium tools">
+          <div className="flex items-end justify-between gap-4 mb-3">
+            <div>
+              <h2 className="text-xs font-medium uppercase tracking-wider text-[var(--label-secondary)]">Premium tools</h2>
+              <p className="mt-1 text-[13px] text-[var(--label-tertiary)]">Plan and review your books without changing posted records.</p>
+            </div>
+            <Button variant="secondary" onClick={onGoToTools}>Open tools <ArrowRight size={13} aria-hidden="true" /></Button>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              ['Budgets', 'Compare account plans with posted activity.'],
+              ['Bank reconciliation', 'Match statement lines to ledger entries.'],
+              ['Recurring invoices', 'Schedule repeat sales and post each due invoice.'],
+              ['Attachments', 'Keep small supporting files with your business.'],
+              ['Fixed assets', 'Track assets and post straight-line depreciation.'],
+            ].map(([title, detail]) => (
+              <button key={title} type="button" onClick={onGoToTools}
+                className="rounded-lg border border-[var(--separator)] bg-[var(--bg-tertiary)] p-3 text-left hover:border-[var(--accent)]">
+                <span className="block text-[14px] font-semibold text-[var(--label)]">{title}</span>
+                <span className="mt-1 block text-[12px] text-[var(--label-secondary)]">{detail}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section aria-label="Trend">
         <h2 className="text-xs font-medium uppercase tracking-wider text-[var(--label-secondary)] mb-3">Revenue and expenses over the period</h2>
         {trend.length > 1 ? (
@@ -219,7 +248,7 @@ export const DashboardView: React.FC<{
           </div>
         ) : (
           <EmptyState title="Nothing recorded in this period yet."
-            action={<Button variant="primary" onClick={() => onQuickAction('sale')}>Record a sale</Button>} />
+            action={canWrite && <Button variant="primary" onClick={() => onQuickAction('sale')}>Record a sale</Button>} />
         )}
       </section>
 

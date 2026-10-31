@@ -7,13 +7,12 @@ export interface UserProfile {
   /** Legacy per-business role; the app-level subscription/admin role lives in profiles.role. */
   role?: 'OWNER' | 'ACCOUNTANT' | 'VIEWER';
   /**
-   * App-level role that drives route guards and the admin panel.
-   *   user    — signed up, no subscription, dashboard locked.
-   *   plus    — Plus plan (299 NPR, kirana-tier, dashboard + sales + purchase only).
-   *   premium — Premium plan (499 NPR, every feature).
-   *   admin   — staff at zeyksbook, hidden /king panel.
+   * Customer plan only. Staff status is kept separately in isStaff.
+   *   user    — Starter read-only access.
+   *   plus    — Plus plan (NPR 299/month).
+   *   premium — Premium plan (NPR 499/month).
    */
-  appRole?: 'user' | 'plus' | 'premium' | 'admin';
+  appRole?: 'user' | 'plus' | 'premium';
   isStaff?: boolean;
   createdAt: string;
 }
@@ -324,7 +323,7 @@ export interface JournalEntry {
 export type ViewTab =
   | 'dashboard' | 'sales' | 'purchases' | 'expenses'
   | 'payments' | 'reports' | 'health' | 'settings'
-  | 'inventory';
+  | 'inventory' | 'tools';
 
 export interface LedgerEntry {
   date: string;

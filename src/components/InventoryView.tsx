@@ -33,6 +33,7 @@ const InventoryLoader: React.FC<{ message: string }> = ({ message }) => (
 
 interface InventoryViewProps {
   businessId: string;
+  readOnly?: boolean;
   trackInventory: boolean;
   onTrackChanged: (next: boolean) => void;
   calendar: 'AD' | 'BS';
@@ -40,7 +41,7 @@ interface InventoryViewProps {
 }
 
 export const InventoryView: React.FC<InventoryViewProps> = ({
-  businessId, trackInventory, onTrackChanged, calendar, notify,
+  businessId, trackInventory, readOnly = false, onTrackChanged, calendar, notify,
 }) => {
   const [subTab, setSubTab] = useState<SubTab>('items');
   const [loading, setLoading] = useState(true);
@@ -90,6 +91,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           and the inventory reports will read zero. Turn it on to start tracking.
         </Callout>
       )}
+      {readOnly && <Callout tone="warn">Inventory is view-only on this plan. Existing stock records remain available to view.</Callout>}
 
       <div className="flex flex-wrap items-center gap-3">
         <SubTabBar current={subTab} onChange={setSubTab} />
@@ -113,12 +115,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               <Button variant="secondary" onClick={() => void refresh()} disabled={loading}>
                 <RefreshCw size={13} className="mr-1" aria-hidden="true" /> Refresh
               </Button>
-              <Button variant="primary" onClick={() => setEditing('new')}>
+              {!readOnly && <Button variant="primary" onClick={() => setEditing('new')}>
                 <Plus size={13} className="mr-1" aria-hidden="true" /> New item
-              </Button>
+              </Button>}
             </>
           )}
-          {subTab === 'adjustments' && (
+          {subTab === 'adjustments' && !readOnly && (
             <Button variant="primary" onClick={() => setAdjusting('')} disabled={items.filter((i) => i.isActive).length === 0}>
               <Plus size={13} className="mr-1" aria-hidden="true" /> New adjustment
             </Button>
@@ -134,6 +136,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         loading
           ? <InventoryLoader message="Loading inventory…" />
           : <ItemsTable items={filteredRows}
+              readOnly={readOnly}
               onEdit={(it) => setEditing(it)}
               onArchive={(it) => archivePrompt(it, businessId, refresh, notify)}
               onAdjust={(it) => setAdjusting(it.id)} />
@@ -152,9 +155,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         </Suspense>
       )}
 
-      <TrackInventoryToggle businessId={businessId} current={trackInventory} onChanged={onTrackChanged} notify={notify} />
+      {!readOnly && <TrackInventoryToggle businessId={businessId} current={trackInventory} onChanged={onTrackChanged} notify={notify} />}
 
-      {editing !== null && (
+      {!readOnly && editing !== null && (
         <ItemEditorModal
           businessId={businessId}
           item={editing === 'new' ? null : editing}
@@ -167,7 +170,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         />
       )}
 
-      {adjusting !== null && (
+      {!readOnly && adjusting !== null && (
         <AdjustmentModal
           businessId={businessId}
           items={items}
@@ -236,10 +239,11 @@ const SummaryTile: React.FC<{ label: string; value: string; tone?: 'neutral' | '
 
 const ItemsTable: React.FC<{
   items: InventoryStockRow[];
+  readOnly: boolean;
   onEdit: (it: InventoryStockRow) => void;
   onArchive: (it: InventoryStockRow) => void;
   onAdjust: (it: InventoryStockRow) => void;
-}> = ({ items, onEdit, onArchive, onAdjust }) => {
+}> = ({ items, readOnly, onEdit, onArchive, onAdjust }) => {
   const [sortBy, setSortBy] = useState<'name' | 'onHand' | 'stockValue'>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
@@ -252,7 +256,7 @@ const ItemsTable: React.FC<{
   }, [items, sortBy, sortDir]);
 
   if (items.length === 0) {
-    return <EmptyState title="No inventory items yet" action={<Button variant="primary" onClick={() => onEdit({} as InventoryStockRow)}><Plus size={13} className="mr-1" /> New item</Button>} />;
+    return <EmptyState title="No inventory items yet" action={!readOnly && <Button variant="primary" onClick={() => onEdit({} as InventoryStockRow)}><Plus size={13} className="mr-1" /> New item</Button>} />;
   }
 
   const SortHead: React.FC<{ id: 'name' | 'onHand' | 'stockValue'; children: React.ReactNode }> = ({ id, children }) => (
@@ -290,7 +294,7 @@ const ItemsTable: React.FC<{
     ) },
     { key: 'avgCost', header: 'Avg cost', align: 'right', width: 'w-28', render: (r) => <Money value={r.avgCost} size="sm" muted /> },
     { key: 'stockValue', header: <SortHead id="stockValue">Stock value</SortHead>, align: 'right', width: 'w-32', render: (r) => <Money value={r.stockValue} size="sm" /> },
-    { key: 'actions', header: '', width: 'w-32', render: (r) => (
+    ...(!readOnly ? [{ key: 'actions', header: '', width: 'w-32', render: (r: InventoryStockRow) => (
       <div className="flex items-center justify-end gap-1">
         <Button variant="ghost" size="sm" onClick={() => onAdjust(r)} title="Record stock movement" disabled={!r.isActive}>
           <ArrowUpFromLine size={13} aria-hidden="true" />
@@ -304,7 +308,7 @@ const ItemsTable: React.FC<{
           </Button>
         )}
       </div>
-    ) },
+    ) } as Column<InventoryStockRow>] : []),
   ];
 
   return <DataTable

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   CreditCard, FileText, Gauge, Heart, Lock, Menu, Package, Receipt, Settings,
-  ShoppingBag, Wallet, X,
+  ShoppingBag, Wallet, Wrench, X,
 } from 'lucide-react';
 import { ViewTab } from '../types';
 
@@ -47,6 +47,7 @@ const NAV: { tab: ViewTab; label: string; icon: React.ElementType }[] = [
   { tab: 'sales', label: 'Sales', icon: Receipt },
   { tab: 'purchases', label: 'Purchases', icon: ShoppingBag },
   { tab: 'inventory', label: 'Inventory', icon: Package },
+  { tab: 'tools', label: 'Premium tools', icon: Wrench },
   { tab: 'expenses', label: 'Expenses', icon: Wallet },
   { tab: 'payments', label: 'Payments', icon: CreditCard },
   { tab: 'reports', label: 'Reports', icon: FileText },

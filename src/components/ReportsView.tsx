@@ -70,7 +70,8 @@ const REPORT_ROW_LIMIT = 400;
 
 export const ReportsView: React.FC<{
   books: Books; range: DateRange; onRangeChange: (r: DateRange) => void; calendar: 'BS' | 'AD';
-}> = ({ books, range, onRangeChange, calendar }) => {
+  canExport?: boolean;
+}> = ({ books, range, onRangeChange, calendar, canExport = true }) => {
   const {
     accounts, journalEntries, business, integrityIssues, sales, purchases, expenses, payments,
     customers, suppliers,
@@ -734,6 +735,7 @@ export const ReportsView: React.FC<{
   return (
     <div className="py-6 space-y-5">
       <div className="no-print max-w-5xl mx-auto px-4 sm:px-6 space-y-4">
+        {!canExport && <Callout tone="warn">Starter access can view reports but cannot export or print sensitive business data.</Callout>}
         <PeriodPicker value={range} onChange={onRangeChange}
           fiscalStartMonth={business.fiscalYearStartMonth} calendar={calendar} />
 
@@ -758,12 +760,14 @@ export const ReportsView: React.FC<{
             ))}
           </div>
           <div className="flex w-full gap-2 sm:w-auto">
-            <Button className="grow sm:grow-0" onClick={exportCsv}>
-              <Download size={13} aria-hidden="true" /> Export CSV
-            </Button>
-            <Button className="grow sm:grow-0" onClick={() => window.print()}>
-              <Printer size={13} aria-hidden="true" /> Print
-            </Button>
+            {canExport && <>
+              <Button className="grow sm:grow-0" onClick={exportCsv}>
+                <Download size={13} aria-hidden="true" /> Export CSV
+              </Button>
+              <Button className="grow sm:grow-0" onClick={() => window.print()}>
+                <Printer size={13} aria-hidden="true" /> Print
+              </Button>
+            </>}
           </div>
         </div>
 

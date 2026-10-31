@@ -84,9 +84,21 @@ The website itself needs `VITE_NEON_URL`. The optional contact and payment API
 also needs a server-only pooled `DATABASE_URL`; payment routes verify Neon Auth
 JWTs using `NEON_AUTH_JWKS_URL` or derive the JWKS endpoint from
 `VITE_NEON_URL`. Apply `migration/neon/026_api_rate_limits.sql` after migration
-025 before enabling the shared contact limiter. Add gateway and Resend secrets
-only for the API features you enable. This Neon-backed API does not require
-Firebase credentials.
+025, then apply `migration/neon/027_starter_read_only.sql` and
+`migration/neon/028_preserve_all_business_data.sql` before deploying the
+Starter read-only access changes. Migration 028 adds a profile archive marker,
+archives superseded profile rows during sign-in relinking, and disables the
+legacy business-erasure RPC. These migrations preserve existing business and
+ledger records. Apply `migration/neon/029_premium_modules.sql` after 028 to add
+Premium budgets, bank reconciliation, recurring invoices, private small-file
+attachments, fixed assets, and straight-line depreciation. Migration 029 is
+additive and blocks deletion or truncation of its new records. Migration 030
+updates profile relinking to include author references in Premium module tables;
+it changes only those user-id references and preserves the original documents
+and financial values. Review migrations and keep a verified database backup
+before production schema changes.
+Add gateway and Resend secrets only for the API features you enable. This
+Neon-backed API does not require Firebase credentials.
 
 ## Deploying — routing, and the two runtimes
 
@@ -202,9 +214,9 @@ Browser `localStorage` is never the source of truth for accounting data; the
 
 - **Settings → Backup → Export backup** downloads a JSON snapshot of your
   cloud books. Keep it somewhere safe.
-- Restoring from a file, and the destructive "Erase everything" action, are
-  intentionally disabled in cloud mode — nothing in the app can delete your
-  remote data.
+- Restoring from a file is intentionally disabled until a safe import path
+  exists. Business-data erasure is disabled: posted records remain in the cloud
+  and corrections use reversals or archives.
 
 ### Cloud-only capabilities
 
@@ -887,7 +899,7 @@ tests/            offline test runner (node tests/run.mjs / npm test)
 
 ### Database-managed customer access (migration 025)
 
-Apply `migration/neon/025_database_access.sql` after migration 024, before deploying the updated web app. Existing `admin` profiles become `premium` customers with `is_staff = true`; the hidden `/king` route reads `is_staff`. New Google accounts receive `role = 'user'` and cannot open books or create a business until an operator assigns a plan in the database. The admin panel only lists accounts; it no longer creates logins or changes plans or staff status.
+Apply `migration/neon/025_database_access.sql` after migration 024, then apply migrations 026, 027, 028, 029, and 030 in order. Existing `admin` profiles become `premium` customers with `is_staff = true`; the hidden `/king` route reads `is_staff`. New Google accounts receive `role = 'user'`: they can read records for businesses where they already have membership, but cannot create a business or change records. An operator assigns Plus or Premium through the database. Plus is limited to one business; Premium can create more. The staff panel only lists active accounts; it does not change plans or staff status. Migration 028 archives superseded profile rows and makes business-data erasure unavailable. Migration 029 adds Premium modules without removing or rewriting existing records. Migration 030 moves author references for those new tables during account relinking without deleting data.
 
 Assign Plus with `update public.profiles set role = 'plus' where id = '<profile UUID>';` or Premium with `update public.profiles set role = 'premium' where id = '<profile UUID>';`. Lock an account with `role = 'user'`. Staff access is separate: `update public.profiles set is_staff = true where id = '<profile UUID>';`. Run these statements using a trusted database operator connection, never from a customer session. The internal value `plus` is displayed as Plus. Changes apply to the next database request; reload the app to refresh its screen.
 

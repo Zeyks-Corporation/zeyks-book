@@ -161,8 +161,8 @@ const intentPagesMod = await import(pathToFileURL(path.join(tmp, 'lib/intentPage
 const { PUBLIC_PAGES, SITE_ORIGIN, metadataForPath } = pageMetadataMod;
 const { INTENT_PAGES, intentPageForPath } = intentPagesMod;
 const {
-  ALL_ROLES, FEATURE_FOR_ROLE, ROLE_GATING_ENABLED, ROLE_PRICE_NPR, roleHasFeature,
-  paywallHoldsAccount, isPayingTier, isAppAdmin,
+  ALL_ROLES, FEATURE_FOR_ROLE, ROLE_GATING_ENABLED, ROLE_PRICE_NPR, roleCanWrite, roleHasFeature,
+  paywallHoldsAccount, isPayingTier,
 } = rolesMod;
 const {
   APP_TABS, isAppPath, normalizePath, parseRoute, pathForTab, redirectFor,
@@ -947,8 +947,30 @@ test('posting and chart-of-accounts paths are cloud-backed; unsupported capabili
   assertEqual(CAPABILITIES.gateway, true,
     'online collection now has initiate_gateway_txn and settle_gateway_txn');
   assertEqual(isSupported('accounts'), true, 'account writes use column-scoped table grants and RLS');
-  assertEqual(isSupported('erase'), true, 'erase ships as the owner-only erase_business_data RPC (019)');
+  assertEqual(isSupported('erase'), false, 'business-data erasure must remain disabled');
   assertEqual(isSupported('restore'), false, 'restore has no cloud write path yet');
+});
+
+test('customer data cannot be erased from Settings or through the legacy RPC', () => {
+  const settings = readFileSync(path.join(root, 'src/components/SettingsView.tsx'), 'utf8');
+  const capabilities = readFileSync(path.join(root, 'src/lib/capabilities.ts'), 'utf8');
+  const staffPanel = readFileSync(path.join(root, 'src/components/KingPanel.tsx'), 'utf8');
+  const migration = readFileSync(path.join(root, 'migration/neon/028_preserve_all_business_data.sql'), 'utf8');
+  assert(!/erase_business_data|Erase everything/i.test(settings),
+    'Settings must not expose a business-data erasure action');
+  assert(/erase:\s*false/.test(capabilities), 'erasure capability must remain disabled');
+  assert(/add column if not exists archived_at/.test(migration),
+    'superseded profiles need an additive archive marker');
+  assert(/set archived_at = coalesce\(archived_at, now\(\)\)/i.test(migration),
+    'profile relinking must preserve old profile rows by archiving them');
+  assert(/\.is\('archived_at',\s*null\)/.test(staffPanel),
+    'the staff directory must omit archived profile shells from its active list');
+  assert(/Business-data erasure is disabled/i.test(migration),
+    'the legacy erasure RPC must fail closed');
+  assert(!/\b(delete\s+from|truncate\s+(?:table\s+)?|drop\s+table)\b/i.test(migration),
+    'preservation migration must not delete or truncate data or drop tables');
+  assert(/revoke all on function public\.erase_business_data/i.test(migration),
+    'application roles must lose execute access to the legacy erasure RPC');
 });
 
 test('the gateway capability is backed by the payment API, not by a browser write', () => {
@@ -1962,7 +1984,7 @@ test('the payments list voids through the action, behind a confirmation and a bu
   assert(/await books\.voidPayment\(voiding\.id\)/.test(view.text),
     'settlements must dispatch to the payment void action');
   assert(/voidBusy/.test(view.text), 'the dialog must guard against a second click');
-  assert(/if \(!voiding \|\| voidBusy\) return;/.test(view.text),
+  assert(/if \(readOnly \|\| !voiding \|\| voidBusy\) return;/.test(view.text),
     'and refuse to start twice while the RPC is in flight');
   assert(/disabled=\{voidBusy\}/.test(view.text), 'both dialog buttons are disabled while busy');
   assert(/Void and reverse/.test(view.text), 'the confirmation is explicit about what happens');
@@ -2637,8 +2659,8 @@ test('a bill offers its own payment action, behind the server-backed guard', () 
     'and it is disabled when settlements are unavailable, with the reason in its title');
   assert(/onClick=\{\(e\) => \{ e\.stopPropagation\(\); onSettle\(p\.id\); \}\}/.test(view.text),
     'clicking it settles THAT bill');
-  assert(/const canSettle = isSupported\('payments'\)/.test(view.text),
-    'the gate comes from the capability model, not a per-view check');
+  assert(/const canSettle = !readOnly && isSupported\('payments'\)/.test(view.text),
+    'plan read-only state and the capability model gate settlements');
 
   const app = srcFiles.find((f) => f.rel.endsWith('src/App.tsx'));
   assert(/const openSettle = useCallback\(\(documentId: string, direction: 'INCOMING' \| 'OUTGOING'\) => \{/.test(app.text),
@@ -2831,8 +2853,8 @@ test('an invoice offers a manual receipt, kept distinct from collecting online',
     'a voided or fully received invoice is not offered a receipt');
   assert(/disabled=\{!canReceive\}/.test(action),
     'and it is disabled when settlements are unavailable, with the reason in its title');
-  assert(/const canReceive = isSupported\('payments'\)/.test(view.text),
-    'the gate comes from the capability model, not a per-view check');
+  assert(/const canReceive = !readOnly && isSupported\('payments'\)/.test(view.text),
+    'plan read-only state and the capability model gate receipts');
   const receiptButton = view.text.slice(anchor - 800, anchor + 160);
   assert(/HandCoins/.test(receiptButton),
     'the receipt action carries its own icon, so it cannot be mistaken for the gateway');
@@ -3791,14 +3813,14 @@ test('an empty chart of accounts is reported as a failed load, not as empty book
 });
 
 /*
- * Plan gating is on: what each of the three paying states reaches is decided by
+ * Plan gating is on: which data areas each account may view is decided by
  * FEATURE_FOR_ROLE. These pin the matrix as behaviour, so a tier can only be
  * changed by editing the matrix deliberately — and so the switch cannot end up
  * half-applied, with one section reading it and another ignoring it.
  */
-const GATED_FEATURES = ['dashboard', 'sales', 'purchases', 'expenses', 'payments', 'reports', 'health', 'inventory', 'settings'];
+const GATED_FEATURES = ['dashboard', 'sales', 'purchases', 'expenses', 'payments', 'reports', 'health', 'inventory', 'settings', 'tools'];
 
-test('plan gating is on and each role reaches exactly its paid sections', () => {
+test('plan gating is on and Starter remains read-only while paid tiers unlock actions', () => {
   assertEqual(ROLE_GATING_ENABLED, true, 'the switch is what this test is about');
   for (const role of ALL_ROLES) {
     for (const feature of GATED_FEATURES) {
@@ -3806,40 +3828,62 @@ test('plan gating is on and each role reaches exactly its paid sections', () => 
         `${role}/${feature} does not follow the matrix`);
     }
   }
-  // Spelled out per tier, so widening a plan is a written-down decision.
-  for (const feature of GATED_FEATURES) {
-    assert(!roleHasFeature('user', feature), `a free account reaches ${feature}`);
+  // Starter can inspect authorized existing books; Settings stays locked.
+  for (const feature of ['dashboard', 'sales', 'purchases', 'expenses', 'payments', 'reports', 'inventory']) {
+    assert(roleHasFeature('user', feature), `Starter cannot view ${feature}`);
   }
-  for (const feature of ['payments', 'reports', 'health', 'inventory']) {
-    assert(!roleHasFeature('plus', feature), `Starter reaches ${feature}, which is a Premium benefit`);
-  }
-  for (const feature of ['dashboard', 'sales', 'purchases', 'expenses', 'settings']) {
-    assert(roleHasFeature('plus', feature), `Starter lost ${feature} it sells`);
-  }
+  assert(!roleHasFeature('user', 'settings'), 'Starter must not change accounting settings');
+  assert(!roleHasFeature('user', 'health'), 'Premium health checks are not part of Starter');
+  for (const feature of ['dashboard', 'sales', 'purchases', 'expenses', 'settings', 'payments', 'reports', 'inventory'])
+    assert(roleHasFeature('plus', feature), `Plus lost core bookkeeping access to ${feature}`);
+  assert(!roleHasFeature('plus', 'health'), 'the premium health-check module stays Premium');
 });
 
-test('a section is only reachable with a session, and the admin panel stays staff-only', () => {
+test('a section is only reachable with a session, while staff routing stays separate', () => {
   for (const feature of GATED_FEATURES) {
     assert(!roleHasFeature(undefined, feature), 'a signed-out visitor gets nothing');
     assert(!roleHasFeature(null, feature));
   }
-  assert(!roleHasFeature('user', 'admin'), 'a free account must not reach /king');
-  assert(!roleHasFeature('premium', 'admin'), 'paying does not buy staff access');
-  assert(roleHasFeature('admin', 'admin'), 'and staff still do');
+  const app = srcFiles.find((f) => f.rel.endsWith('src/App.tsx')).text;
+  assert(/route\.kind === 'king'[\s\S]*?if \(!user\?\.isStaff\)/.test(app),
+    'the hidden staff page is controlled by isStaff, not a customer plan');
 });
 
-test('the paid matrix is complete and never hands out staff access', () => {
-  assertEqual(FEATURE_FOR_ROLE.user.length, 0, 'a free account unlocks nothing');
+test('the plan matrix contains customer tiers only', () => {
+  assert(!FEATURE_FOR_ROLE.user.includes('settings'), 'Starter cannot manage accounting settings');
+  assertEqual(ALL_ROLES.join(','), 'user,plus,premium', 'staff must not be a subscription tier');
   for (const feature of FEATURE_FOR_ROLE.plus) {
     assert(FEATURE_FOR_ROLE.premium.includes(feature), `premium lost ${feature} that plus has`);
   }
-  assert(!FEATURE_FOR_ROLE.premium.includes('admin'), 'premium is not staff');
-  const known = [...GATED_FEATURES, 'admin'];
-  for (const feature of known) {
-    assert(FEATURE_FOR_ROLE.admin.includes(feature), `admin no longer names ${feature}`);
-  }
-  assertEqual(FEATURE_FOR_ROLE.admin.length, known.length,
-    'the matrix and the app sections have drifted apart');
+  assertEqual(new Set(FEATURE_FOR_ROLE.premium).size, GATED_FEATURES.length,
+    'the customer plan matrix and app sections have drifted apart');
+});
+
+test('Starter is read-only; Plus writes core books; Premium also manages inventory', () => {
+  assertEqual(roleCanWrite('user', 'business.write'), false);
+  assertEqual(roleCanWrite('user', 'inventory.manage'), false);
+  assertEqual(roleCanWrite('user', 'report.export'), false);
+  assertEqual(roleCanWrite('plus', 'business.write'), true);
+  assertEqual(roleCanWrite('plus', 'report.export'), true);
+  assertEqual(roleCanWrite('plus', 'inventory.manage'), false);
+  assertEqual(roleCanWrite('premium', 'inventory.manage'), true);
+  assertEqual(roleCanWrite(undefined, 'business.write'), false);
+});
+
+test('Starter interfaces keep write forms and sensitive report exports closed', () => {
+  const app = srcFiles.find((f) => f.rel.endsWith('src/App.tsx')).text;
+  const documents = srcFiles.find((f) => f.rel.endsWith('src/components/DocumentsView.tsx')).text;
+  const inventory = srcFiles.find((f) => f.rel.endsWith('src/components/InventoryView.tsx')).text;
+  const reports = srcFiles.find((f) => f.rel.endsWith('src/components/ReportsView.tsx')).text;
+  assert(/readOnly=\{userRole === 'user' && !user\?\.isStaff\}/.test(app), 'Starter documents are read-only');
+  assert(/const canCreate = !readOnly/.test(documents) && /const canVoid = !readOnly/.test(documents),
+    'Starter cannot create or reverse documents in the interface');
+  assert(/readOnly=\{!user\?\.isStaff && !roleCanWrite\(userRole, 'inventory\.manage'\)\}/.test(app),
+    'inventory write access follows the centralized plan capability');
+  assert(/canExport=\{user\?\.isStaff === true \|\| roleCanWrite\(userRole, 'report\.export'\)\}/.test(app),
+    'sensitive report export follows the plan capability');
+  assert(/\{canExport && <>/.test(reports), 'report print and CSV controls are hidden without export rights');
+  assert(/!readOnly && <TrackInventoryToggle/.test(inventory), 'Starter cannot change accounting inventory settings');
 });
 
 /*
@@ -3849,16 +3893,10 @@ test('the paid matrix is complete and never hands out staff access', () => {
  * gates read the same switch, so they can never disagree about who is inside
  * the app.
  */
-test('the subscription wall obeys the same switch as the section locks', () => {
-  assertEqual(paywallHoldsAccount('user'), true,
-    'a signed-in free account must be held at the plan page while the gate is on');
-  for (const role of ALL_ROLES) {
-    const tiered = isPayingTier(role) || isAppAdmin(role);
-    assertEqual(paywallHoldsAccount(role), ROLE_GATING_ENABLED && !tiered,
-      `${role} is walled the wrong way`);
-  }
-  assertEqual(paywallHoldsAccount(undefined), ROLE_GATING_ENABLED,
-    'nobody signed in is not a paywall case');
+test('the subscription wall never hides existing records from Starter', () => {
+  assertEqual(paywallHoldsAccount('user'), false, 'Starter must be able to view permitted records');
+  for (const role of ALL_ROLES) assertEqual(paywallHoldsAccount(role), false, `${role} is unexpectedly walled`);
+  assertEqual(paywallHoldsAccount(undefined), false, 'signed-out state is handled by authentication');
 });
 
 test('the app shell decides the wall through the switch, not the tier', () => {
@@ -4236,16 +4274,40 @@ test('a rejection never echoes the token, and carries no detail beyond the sente
 /* ---- the middleware, without a network ---------------------------------- */
 
 test('the API fails closed when it cannot verify a session', async () => {
-  assertEqual(authConfigured(), true, 'Firebase auth is configured');
+  const oldDatabaseUrl = process.env.DATABASE_URL;
+  const oldNeonUrl = process.env.VITE_NEON_URL;
+  try {
+    delete process.env.DATABASE_URL;
+    assertEqual(authConfigured(), false, 'missing server database configuration fails closed');
+    process.env.DATABASE_URL = 'postgresql://test:test@localhost/test';
+    process.env.VITE_NEON_URL = 'https://example.neon.tech/neondb';
+    assertEqual(authConfigured(), true, 'Neon server auth configuration is recognized');
+  } finally {
+    if (oldDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = oldDatabaseUrl;
+    if (oldNeonUrl === undefined) delete process.env.VITE_NEON_URL;
+    else process.env.VITE_NEON_URL = oldNeonUrl;
+  }
 });
 
 test('an unverifiable request is refused before any session check', async () => {
-  for (const header of [undefined, 'Token abc', 'Bearer', 'Bearer  ']) {
-    let nexted = false;
-    const res = fakeRes();
-    await requireCaller({ headers: { authorization: header } }, res, () => { nexted = true; });
-    assertEqual(res.out.code, 401, `accepted ${JSON.stringify(header)}`);
-    assertEqual(nexted, false, `let ${JSON.stringify(header)} through`);
+  const oldDatabaseUrl = process.env.DATABASE_URL;
+  const oldNeonUrl = process.env.VITE_NEON_URL;
+  process.env.DATABASE_URL = 'postgresql://test:test@localhost/test';
+  process.env.VITE_NEON_URL = 'https://example.neon.tech/neondb';
+  try {
+    for (const header of [undefined, 'Token abc', 'Bearer', 'Bearer  ']) {
+      let nexted = false;
+      const res = fakeRes();
+      await requireCaller({ headers: { authorization: header } }, res, () => { nexted = true; });
+      assertEqual(res.out.code, 401, `accepted ${JSON.stringify(header)}`);
+      assertEqual(nexted, false, `let ${JSON.stringify(header)} through`);
+    }
+  } finally {
+    if (oldDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = oldDatabaseUrl;
+    if (oldNeonUrl === undefined) delete process.env.VITE_NEON_URL;
+    else process.env.VITE_NEON_URL = oldNeonUrl;
   }
 });
 
@@ -4293,7 +4355,8 @@ test('the invoice gate gives each way in its own status', () => {
   );
   assertEqual(
     decideInvoiceAccess({ found: true, status: 'POSTED', canWrite: false, signedTotal: 1, invoiceTotal: 10 }).status,
-    403,
+    404,
+    'a record the caller may not write is not disclosed as theirs',
   );
   assertEqual(
     decideInvoiceAccess({ found: true, status: 'POSTED', canWrite: true, signedTotal: 11, invoiceTotal: 10 }).status,
@@ -4313,7 +4376,7 @@ test('the invoice gate gives each way in its own status', () => {
 
 test('a collection the caller may not write is not disclosed as theirs', () => {
   assertEqual(decideCollectionAccess({ found: false }).status, 404);
-  assertEqual(decideCollectionAccess({ found: true, canWrite: false }).status, 403);
+  assertEqual(decideCollectionAccess({ found: true, canWrite: false }).status, 404);
   assertEqual(decideCollectionAccess({ found: true, canWrite: true }).ok, true);
 });
 
@@ -4363,14 +4426,14 @@ test('no payment route reads an identity, role or tenant from the request body',
     'the auth boundary must never read the body it is judging');
 });
 
-test('the server authorizes with Firebase Admin SDK token verification', () => {
+test('the server authorizes with Neon Auth JWT verification', () => {
   const auth = readProjectFile('server/auth.js');
-  assert(/adminAuth\.verifyIdToken\(parsed\.token\)/.test(auth), 'the token is verified by Firebase Admin SDK');
-  assert(!/service_role|SERVICE_ROLE|sb_secret_/.test(auth), 'no legacy secret keys in server auth');
+  assert(/jwtVerify\(token, remoteJwks\(\), \{ algorithms: \['EdDSA'\] \}\)/.test(auth), 'Neon Auth signature and algorithm are verified');
+  assert(/createRemoteJWKSet/.test(auth), 'signing keys come from Neon Auth JWKS');
   assert(/verifyCallerToken/.test(auth), 'verifyCallerToken function present');
 });
 
-test('ownership is verified through the caller token against Firestore', () => {
+test('payment ownership is checked through Neon Postgres without API-side writes', () => {
   const auth = readProjectFile('server/auth.js');
   const code = withoutComments(auth);
   assert(!/\.(insert|update|upsert|delete)\(/.test(code), 'the API never writes a document itself');
@@ -5611,7 +5674,7 @@ test('every screen has an address, and the address alone decides the screen', ()
 
 test('the sidebar and the route table are inverses of each other', () => {
   const shell = fileText('src/components/Shell.tsx');
-  assertEqual(APP_TABS.length, 9, 'nine signed-in screens');
+  assertEqual(APP_TABS.length, 10, 'ten signed-in screens');
   for (const tab of APP_TABS) {
     assertEqual(parseRoute(pathForTab(tab)).tab, tab, `${tab} round-trips`);
     assert(isAppPath(pathForTab(tab)), `${tab} requires a session`);
@@ -6110,10 +6173,10 @@ test('a page promises only what the product does, and denies what it does not', 
     assert(amount === ROLE_PRICE_NPR.plus || amount === ROLE_PRICE_NPR.premium,
       `NPR ${amount} is not a plan price the app enforces`);
   }
-  for (const feature of ['reports', 'payments', 'inventory', 'health']) {
-    assert(!roleHasFeature('plus', feature), `Starter must not be described as having ${feature}`);
+  for (const feature of ['reports', 'payments', 'inventory', 'health'])
     assert(roleHasFeature('premium', feature), `Premium must actually have ${feature}`);
-  }
+  for (const feature of ['reports', 'payments', 'inventory'])
+    assert(roleHasFeature('plus', feature), `Plus must be able to view/use core ${feature}`);
 });
 
 test('the intent pages are reachable, listed, and allowed', () => {
@@ -6836,7 +6899,7 @@ test('claim_profile creates the profile row before anything is pointed at it', (
 });
 
 test('every table with a foreign key into profiles is relinked by the claim', () => {
-  const sql = readProjectFile(`migration/neon/${CLAIM_SQL}`);
+  const sql = readProjectFile('migration/neon/030_relink_premium_module_authors.sql');
   const referenced = new Set();
   for (const file of migrationSqlFiles) {
     const body = readProjectFile(`migration/neon/${file}`);
@@ -6863,7 +6926,7 @@ test('a failed profile claim reaches the user instead of becoming a placeholder'
 });
 
 test('the claim opens the append-only guards only for its own relink', () => {
-  const sql = readProjectFile(`migration/neon/${CLAIM_SQL}`);
+  const sql = readProjectFile('migration/neon/030_relink_premium_module_authors.sql');
   const list = sql.match(/v_guarded\s+text\[\]\s*:=\s*array\s*\[([\s\S]*?)\]/i);
   assert(list, 'the relink must name the tables whose guards it opens');
   const tables = list[1].replace(/[\s']/g, '');
@@ -6873,21 +6936,37 @@ test('the claim opens the append-only guards only for its own relink', () => {
   const disable = sql.search(/disable trigger user/i);
   const enable = sql.search(/enable trigger user/i);
   const firstUpdate = sql.search(/update public\.business_memberships/im);
-  const dropStale = sql.search(/delete from public\.profiles where id = any/im);
+  const archiveStale = sql.search(/update public\.profiles[\s\S]*?set archived_at[\s\S]*?where id = any/im);
   assert(disable > 0 && enable > 0, 'the guards must be closed as well as opened');
   assert(disable < firstUpdate && firstUpdate < enable, 'the window is exactly the relink');
-  assert(enable < dropStale, 'the stale row is deleted with every guard back in place');
+  assert(enable < archiveStale, 'the old profile is archived after every reference moves');
+  assert(!/delete\s+from\s+public\.profiles/i.test(sql), 'profile rows must be retained');
 });
 
-test('no later migration quietly redefines the claim functions', () => {
+test('the latest intentional migration defines profile relinking', () => {
   for (const fnName of ['claim_profile', 'create_business']) {
     let last = '';
     for (const file of migrationSqlFiles) {
       if (new RegExp(`create (or replace )?function public\\.${fnName}\\b`, 'i')
         .test(readProjectFile(`migration/neon/${file}`))) last = file;
     }
-    assertEqual(last, '025_database_access.sql', `${fnName} has an unexpected later definition`);
+    const expectedLast = fnName === 'claim_profile'
+      ? '030_relink_premium_module_authors.sql'
+      : '025_database_access.sql';
+    assertEqual(last, expectedLast, `${fnName} has an unexpected later definition`);
   }
+});
+
+test('Starter access migration preserves every existing customer and ledger row', () => {
+  const sql = withoutComments(readProjectFile('migration/neon/027_starter_read_only.sql'));
+  assert(/create or replace function public\.is_member/i.test(sql), 'business read authorization is updated additively');
+  assert(/create policy inventory_items_read[\s\S]*?using \(public\.is_member\(business_id\)\)/i.test(sql),
+    'existing inventory becomes readable to members');
+  assert(/before insert on public\.businesses/i.test(sql) && /for update/i.test(sql),
+    'future Plus business creation is serialized and limited');
+  assert(!/\bupdate\s+(?:public\.)?\w+\s+set\b|\bdelete\s+from\b|\btruncate\b|\binsert\s+into\b/i.test(sql),
+    'the migration contains no operation that changes existing account or accounting rows');
+  assert(!/drop table/i.test(sql), 'no customer data table is removed');
 });
 
 /* ---------------------------------------------------------------------- */

@@ -1,24 +1,26 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Plus, XCircle } from 'lucide-react';
 import { ViewTab } from '../types';
 import { useDemoBooks } from '../state/useDemoBooks';
 import { Sidebar, Header } from './Shell';
-import { HealthView } from './HealthView';
-import { DashboardView } from './DashboardView';
-import { DocumentsView } from './DocumentsView';
-import { ReportsView } from './ReportsView';
-import { SettingsView } from './SettingsView';
-import { TransactionModal, TxnKind } from './TransactionModal';
+import type { TxnKind } from './TransactionModal';
 import { Button } from './ui';
 import { readCalendarPreference, writeCalendarPreference } from '../lib/preferences';
 import type { CalendarPreference } from '../lib/preferences';
 import { isSupported, unsupportedMessage } from '../lib/capabilities';
 import type { Capability } from '../lib/capabilities';
 
+const DashboardView = lazy(() => import('./DashboardView').then((m) => ({ default: m.DashboardView })));
+const DocumentsView = lazy(() => import('./DocumentsView').then((m) => ({ default: m.DocumentsView })));
+const ReportsView = lazy(() => import('./ReportsView').then((m) => ({ default: m.ReportsView })));
+const HealthView = lazy(() => import('./HealthView').then((m) => ({ default: m.HealthView })));
+const SettingsView = lazy(() => import('./SettingsView').then((m) => ({ default: m.SettingsView })));
+const TransactionModal = lazy(() => import('./TransactionModal').then((m) => ({ default: m.TransactionModal })));
+
 const TITLES: Record<ViewTab, string> = {
   dashboard: 'Dashboard', sales: 'Sales', purchases: 'Purchases', expenses: 'Expenses',
   payments: 'Payments', reports: 'Reports', health: 'Data health', settings: 'Settings',
-  inventory: 'Inventory',
+  inventory: 'Inventory', tools: 'Premium tools',
 };
 
 const CAPABILITY_FOR_TXN: Record<TxnKind, Capability> = {
@@ -152,6 +154,7 @@ export const DemoPage: React.FC<{
           />
 
           <main>
+            <Suspense fallback={<div className="px-6 py-8 text-sm text-[var(--label-secondary)]">Loading demo section…</div>}>
             {activeTab === 'dashboard' && (
               <DashboardView
                 books={books}
@@ -198,11 +201,23 @@ export const DemoPage: React.FC<{
                 signingOut={false}
               />
             )}
+            {activeTab === 'tools' && (
+              <section className="mx-auto max-w-3xl space-y-4 px-4 py-8 sm:px-6">
+                <h1 className="text-2xl font-semibold">Premium business tools</h1>
+                <p className="text-sm text-[var(--label-secondary)]">These modules use your signed-in business database, so they are available in a Premium account rather than the offline sample book.</p>
+                <ul className="grid gap-2 text-sm sm:grid-cols-2">
+                  {['Budgets', 'Bank reconciliation', 'Recurring invoices', 'Supporting files', 'Fixed assets and depreciation'].map((label) => (
+                    <li key={label} className="rounded-lg border border-[var(--separator)] bg-[var(--bg)] p-3">{label}</li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            </Suspense>
           </main>
         </div>
 
         {/* ── Transaction Modal ── */}
-        <TransactionModal
+        {txnModal !== null && <Suspense fallback={null}><TransactionModal
           isOpen={txnModal !== null}
           kind={txnModal ?? 'sale'}
           onClose={() => { setTxnModal(null); setSettleFor(undefined); }}
@@ -211,7 +226,7 @@ export const DemoPage: React.FC<{
           onDone={notify}
           preselectDocumentId={settleFor?.documentId}
           preselectDirection={settleFor?.direction}
-        />
+        /></Suspense>}
 
         {toast && <Toast key={toast.key} message={toast.message} ok={toast.ok} onDismiss={() => setToast(null)} />}
       </div>

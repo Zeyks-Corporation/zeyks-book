@@ -20,8 +20,9 @@ Disallow: /reports
 Disallow: /health
 Disallow: /settings
 Disallow: /inventory
+Disallow: /tools
 
-# The admin panel (no nav link, admin-only) and the server endpoints.
+# The staff panel (no nav link, staff-only) and the server endpoints.
 Disallow: /king
 Disallow: /api/
 

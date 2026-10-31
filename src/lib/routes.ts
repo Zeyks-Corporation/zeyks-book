@@ -28,6 +28,7 @@ const TAB_PATHS: Record<ViewTab, string> = {
   health: '/health',
   settings: '/settings',
   inventory: '/inventory',
+  tools: '/tools',
 };
 
 /** Every path that maps to a signed-in screen. */
@@ -108,7 +109,7 @@ export function parseRoute(pathname: string): Route {
   if (guide) return { kind: 'guide', path: guide.path };
 
   // The admin panel has no nav button — a staff member types `/king` and only
-  // an admin role may render it; everyone else sees 404.
+  // a staff account may render it; everyone else sees 404.
   if (path === '/king') return { kind: 'king' };
 
   return { kind: 'not-found', path };

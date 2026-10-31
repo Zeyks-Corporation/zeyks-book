@@ -21,11 +21,12 @@ const isVoided = (d: AnyDoc): boolean => ('docStatus' in d ? d.docStatus : d.sta
 
 export const DocumentsView: React.FC<{
   kind: Kind; books: Books; calendar: 'BS' | 'AD';
+  readOnly?: boolean;
   onNew: () => void; onCollect: (saleId: string) => void;
   onReceive: (saleId: string) => void;
   onSettle: (purchaseId: string) => void;
   onDone: (message: string, ok: boolean) => void;
-}> = ({ kind, books, calendar, onNew, onCollect, onReceive, onSettle, onDone }) => {
+}> = ({ kind, books, calendar, readOnly = false, onNew, onCollect, onReceive, onSettle, onDone }) => {
   const { business, sales, purchases, expenses, payments } = books;
   const symbol = business.currencySymbol;
   const [voiding, setVoiding] = useState<{ id: string; label: string } | null>(null);
@@ -49,11 +50,11 @@ export const DocumentsView: React.FC<{
     </Button>
   );
 
-  const canCreate = isSupported(CAPABILITY_FOR_KIND[kind]);
-  const canVoid = isVoidable(kind);
-  const canCollect = isSupported('gateway');
-  const canSettle = isSupported('payments');
-  const canReceive = isSupported('payments');
+  const canCreate = !readOnly && isSupported(CAPABILITY_FOR_KIND[kind]);
+  const canVoid = !readOnly && isVoidable(kind);
+  const canCollect = !readOnly && isSupported('gateway');
+  const canSettle = !readOnly && isSupported('payments');
+  const canReceive = !readOnly && isSupported('payments');
 
   const rows = useMemo<AnyDoc[]>(() => {
     const list = { sales, purchases, expenses, payments }[kind] as AnyDoc[];
@@ -66,7 +67,7 @@ export const DocumentsView: React.FC<{
   // A settlement is voided through its own RPC (void_payment); documents go
   // through void_document. Both are server-authoritative.
   const confirmVoid = async () => {
-    if (!voiding || voidBusy) return;
+    if (readOnly || !voiding || voidBusy) return;
     setVoidBusy(true);
     try {
       const result = singular === 'payment'
@@ -229,14 +230,15 @@ export const DocumentsView: React.FC<{
 
   return (
     <div className="max-w-5xl mx-auto py-6 px-4 sm:px-6 space-y-4">
+      {readOnly && <Callout tone="warn">Starter access is read-only. Existing records remain available to view and print.</Callout>}
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-zinc-500">
           {rows.length} {rows.length === 1 ? labels.title.replace(/s$/, '') : labels.title}
         </p>
-        <Button variant="primary" onClick={onNew} disabled={!canCreate}
+        {!readOnly && <Button variant="primary" onClick={onNew} disabled={!canCreate}
           title={canCreate ? undefined : unsupportedMessage(labels.cta)}>
           <Plus size={13} aria-hidden="true" /> {labels.cta}
-        </Button>
+        </Button>}
       </div>
 
       {!canCreate && <Callout tone="warn">{unsupportedMessage(labels.cta)}</Callout>}
@@ -247,7 +249,7 @@ export const DocumentsView: React.FC<{
         searchKeys={searchKeys}
         searchPlaceholder={`Search ${labels.title}`}
         empty={<EmptyState title={`No ${labels.title} recorded yet.`}
-          action={<Button variant="primary" onClick={onNew} disabled={!canCreate}
+          action={!readOnly && <Button variant="primary" onClick={onNew} disabled={!canCreate}
             title={canCreate ? undefined : unsupportedMessage(labels.cta)}>{labels.cta}</Button>} />}
       />
 

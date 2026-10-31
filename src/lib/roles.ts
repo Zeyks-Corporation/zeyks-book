@@ -1,31 +1,27 @@
 /**
  * App-level role gating.
  *
- * The DB column `profiles.role` carries one of four values — user / plus /
- * premium / admin — and the rest of the app reads role through this module
+ * The DB column `profiles.role` carries customer plans only — user / plus /
+ * premium — and the rest of the app reads plans through this module
  * so the rules live in one place.
  *
- *   user    — signed up, no subscription; the dashboard is reachable but
- *             every section, including adding or editing anything, is locked.
+ *   user    — Starter: may read records for businesses they belong to, but
+ *             cannot change business data or accounting settings.
  *   plus    — Plus plan (299 NPR/mo): dashboard, sales, purchases,
  *             expenses and settings.
  *   premium — Premium plan (499 NPR/mo): every feature.
- *   admin   — staff at zeyksbook, hidden /king panel.
- *
- * Permissions are NOT additive (a premium does not also inherit `plus`); they
- * are intentionally distinct so a tier change is meaningful and visible.
+ * Staff at Zeyks Book are tracked separately by `profiles.is_staff`.
  */
 
-export type AppRole = 'user' | 'plus' | 'premium' | 'admin';
+export type AppRole = 'user' | 'plus' | 'premium';
 
-export const ALL_ROLES: AppRole[] = ['user', 'plus', 'premium', 'admin'];
+export const ALL_ROLES: AppRole[] = ['user', 'plus', 'premium'];
 
 /** A human-readable label and price (per month, NPR) for the pricing UI. */
 export const ROLE_LABEL: Record<AppRole, string> = {
-  user: 'Free account',
+  user: 'Starter / User',
   plus: 'Plus',
   premium: 'Premium',
-  admin: 'Admin',
 };
 
 export const ROLE_PRICE_NPR: Partial<Record<AppRole, number>> = {
@@ -43,22 +39,34 @@ export type Feature =
   | 'reports'
   | 'health'
   | 'inventory'
-  | 'settings'
-  | 'admin';
+  | 'tools'
+  | 'settings';
 
 /**
  * Which features each role unlocks. Locked features stay visible in the
  * sidebar and open a plan-lock screen — nothing is hidden.
  *
- * `admin` is not a plan benefit at any setting of the switch: it is the staff
- * panel, and only role='admin' reaches it.
+ * Staff pages are guarded separately by `profiles.is_staff`.
  */
 export const FEATURE_FOR_ROLE: Record<AppRole, ReadonlyArray<Feature>> = {
-  user: [],
-  plus: ['dashboard', 'sales', 'purchases', 'expenses', 'settings'],
-  premium: ['dashboard', 'sales', 'purchases', 'expenses', 'settings', 'payments', 'reports', 'health', 'inventory'],
-  admin: ['dashboard', 'sales', 'purchases', 'expenses', 'settings', 'payments', 'reports', 'health', 'inventory', 'admin'],
+  user: ['dashboard', 'sales', 'purchases', 'expenses', 'payments', 'reports', 'inventory'],
+  plus: ['dashboard', 'sales', 'purchases', 'expenses', 'payments', 'reports', 'settings', 'inventory'],
+  premium: ['dashboard', 'sales', 'purchases', 'expenses', 'settings', 'payments', 'reports', 'health', 'inventory', 'tools'],
 };
+
+/** Write capabilities that exist in the shipped product today. The database
+ * remains authoritative; these values control whether the UI offers actions. */
+export type PlanWriteCapability = 'business.write' | 'inventory.manage' | 'report.export';
+
+const WRITE_CAPABILITIES_FOR_ROLE: Record<AppRole, ReadonlyArray<PlanWriteCapability>> = {
+  user: [],
+  plus: ['business.write', 'report.export'],
+  premium: ['business.write', 'inventory.manage', 'report.export'],
+};
+
+export function roleCanWrite(role: AppRole | undefined, capability: PlanWriteCapability): boolean {
+  return role ? WRITE_CAPABILITIES_FOR_ROLE[role].includes(capability) : false;
+}
 
 /**
  * Plan gating, switched on.
@@ -69,17 +77,13 @@ export const FEATURE_FOR_ROLE: Record<AppRole, ReadonlyArray<Feature>> = {
  * screen and the "New" action all derive from `roleHasFeature`, so one flip
  * turns them off together and nothing about a person's plan is lost.
  *
- * The `/king` admin panel is deliberately NOT covered by this. It is guarded
- * by `isAppAdmin`, which requires role='admin' at either setting — it can
- * change other people's plans and erase their books.
+ * Staff routes remain separate from subscription entitlements.
  */
 export const ROLE_GATING_ENABLED = true;
 
 export function roleHasFeature(role: AppRole | undefined, feature: Feature): boolean {
   if (!role) return false;
-  // Switching the gate off opens the paid sections; it does not hand out staff
-  // access, which keeps meaning what the matrix says it means.
-  if (!ROLE_GATING_ENABLED) return feature === 'admin' ? role === 'admin' : true;
+  if (!ROLE_GATING_ENABLED) return true;
   return FEATURE_FOR_ROLE[role].includes(feature);
 }
 
@@ -104,6 +108,7 @@ export const PLAN_FEATURES: Record<'plus' | 'premium', ReadonlyArray<string>> = 
     'Automatic ledger & document health checks',
     'Settlements & receipts against any invoice or bill',
     'Inventory: items, stock adjustments, valuation, low-stock alerts',
+    'Budgets, bank reconciliation, recurring invoices, attachments, fixed assets',
   ],
 };
 
@@ -124,27 +129,16 @@ export function planForFeature(feature: Feature): 'plus' | 'premium' {
 /** Plan purchases happen over WhatsApp until online checkout is wired. */
 export const WHATSAPP_PLAN_URL = 'https://wa.me/9779701066114?text=I%20want%20to%20buy%20a%20plan%20of%20Zeyks%20Book';
 
-export function isAppAdmin(role: AppRole | undefined): boolean {
-  // Legacy compatibility only; staff authorization is profiles.is_staff.
-  return role === 'admin';
-}
-
 export function isPayingTier(role: AppRole | undefined): boolean {
   return role === 'plus' || role === 'premium';
 }
 
 /**
- * Whether the subscription wall should replace the app for this account.
- *
- * The wall is a second, coarser gate than `roleHasFeature`: it hides the whole
- * shell rather than one section, so it has to read the same switch. Deriving
- * it from `isPayingTier` alone left a signed-in free account outside the app
- * even with `ROLE_GATING_ENABLED` off — the sections were unlocked, but the
- * screen in front of them was the plan page.
+ * Starter accounts can open their authorized records in read-only mode.
  */
 export function paywallHoldsAccount(role: AppRole | undefined): boolean {
-  if (!ROLE_GATING_ENABLED) return false;
-  return !(isPayingTier(role) || isAppAdmin(role));
+  void role;
+  return false;
 }
 
 /** Default role for newly-created profiles (matches the DB column default). */

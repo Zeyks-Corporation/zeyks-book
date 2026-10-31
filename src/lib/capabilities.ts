@@ -27,9 +27,9 @@ export const CAPABILITIES = {
   gateway: true,
   accounts: true,
   restore: false,
-  // Cloud-backed via public.erase_business_data (019) — owner-only RPC that
-  // wipes every row owned by the business and reseeds the default chart.
-  erase: true,
+  // Business-data erasure is intentionally unavailable: posted records must
+  // remain in the books and mistakes are corrected with reversals/archives.
+  erase: false,
   // Cloud-backed via public.{create,update,archive}_inventory_item and
   // public.record_inventory_adjustment (migration 020). Items management,
   // stock adjustments and reports read the inventory_stock_value view.

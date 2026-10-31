@@ -3,7 +3,7 @@
   The public surface only.
 
   /dashboard, /sales, /purchases, /expenses, /payments, /reports, /health,
-  /settings and /inventory are deliberately absent: they are the signed-in
+  /settings, /inventory and /tools are deliberately absent: they are signed-in
   application, they render nothing without a session, and one business's books
   must never be indexed. See robots.txt, which disallows them too.
 

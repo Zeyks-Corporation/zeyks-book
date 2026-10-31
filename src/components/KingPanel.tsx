@@ -29,6 +29,7 @@ export const KingPanel: React.FC<{
     try {
       const { data, error: loadError } = await supabase.from('profiles')
         .select('id, email, full_name, role, is_staff, created_at')
+        .is('archived_at', null)
         .order('created_at', { ascending: true });
       if (loadError) throw new Error(loadError.message);
       setRows((data ?? []) as ProfileRow[]);
