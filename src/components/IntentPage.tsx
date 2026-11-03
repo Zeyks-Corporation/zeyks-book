@@ -33,12 +33,12 @@ export const IntentPageView: React.FC<{
         </h1>
         <p className="mt-4 text-[17px] leading-[26px] text-[var(--label-secondary)]">{page.lead}</p>
         <div className="mt-7 flex flex-wrap gap-3">
-          <Button variant="primary" size="md" onClick={() => navigate('/demo')}>
+          <a href="/demo" className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-full bg-[var(--accent)] px-5 py-3 text-[17px] font-medium text-white transition-[transform,background-color] hover:bg-[var(--accent-hover)] active:scale-[0.97]">
             Try it with sample books <ArrowRight size={15} strokeWidth={1.8} aria-hidden="true" />
-          </Button>
-          <Button size="md" onClick={() => navigate('/pricing')}>
+          </a>
+          <a href="/pricing" className="inline-flex min-h-[44px] items-center justify-center rounded-[12px] border border-[var(--separator)] bg-[var(--bg)] px-5 py-3 text-[17px] font-medium text-[var(--label)] transition-[transform,background-color] hover:bg-[var(--fill-secondary)] active:scale-[0.97]">
             See the plans
-          </Button>
+          </a>
         </div>
       </header>
 
@@ -106,9 +106,9 @@ export const IntentPageView: React.FC<{
           business before you pay for it.
         </p>
         <div className="mt-5 flex flex-wrap gap-3">
-          <Button variant="primary" size="md" onClick={() => navigate('/contact')}>
+          <a href="/contact" className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-full bg-[var(--accent)] px-5 py-3 text-[17px] font-medium text-white transition-[transform,background-color] hover:bg-[var(--accent-hover)] active:scale-[0.97]">
             Contact us
-          </Button>
+          </a>
           <Button size="md" onClick={onSignIn}>
             Sign in
           </Button>

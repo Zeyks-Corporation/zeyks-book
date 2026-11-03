@@ -32,15 +32,15 @@ const COMPARISON = [
   },
   {
     feature: 'Statement Output',
-    zeyks: 'Official A4 paper-ready reports (P&L, Balance Sheet, VAT)',
+    zeyks: 'A4 reports for accountant review (P&L, Balance Sheet, VAT)',
     excel: 'Messy print scaling; inconsistent multi-page breaks',
     foreign: 'Cluttered US-Letter exports requiring reformatting',
   },
   {
     feature: 'Data Ownership & Privacy',
-    zeyks: 'Self-hosted on your own private cloud database (100% Private)',
-    excel: 'Scattered unencrypted .xlsx files vulnerable to loss',
-    foreign: 'Locked on proprietary cloud servers with monthly fees',
+    zeyks: 'Managed Neon Postgres storage with account-scoped business records',
+    excel: 'File storage and access controls depend on how each team manages spreadsheets',
+    foreign: 'Features and storage terms vary by provider and plan',
   },
 ];
 
@@ -58,11 +58,11 @@ export const LandingPage: React.FC<{
           {/* Hero Headline & Subtitle */}
           <div className="text-center">
             <h1 className="mx-auto max-w-4xl text-[36px] font-extrabold leading-[44px] tracking-[-0.03em] sm:text-[58px] sm:leading-[66px] text-[var(--label)] font-lovelace">
-              Accounting for the way Nepal actually does business.{' '}
+              Accounting software for businesses in Nepal.
             </h1>
 
             <p className="mx-auto mt-4 max-w-2xl text-[16px] leading-[24px] text-[var(--label-secondary)] sm:text-[19px] sm:leading-[28px]">
-              Simple, powerful tools to manage your business from one place.
+              Keep sales, purchases and expenses in one double-entry ledger, with NPR amounts and Bikram Sambat and Gregorian dates.
             </p>
 
             {/* CTAs */}
@@ -79,8 +79,6 @@ export const LandingPage: React.FC<{
 
               <a
                 href="/demo"
-                target="_blank"
-                rel="noopener noreferrer"
                 className="inline-flex h-11 min-h-[44px] items-center justify-center rounded-full border border-[var(--separator)] bg-[var(--bg)] px-6 text-[15px] font-medium text-[var(--label)] shadow-sm hover:bg-[var(--fill-secondary)] transition-all active:scale-[0.97] gap-1.5"
               >
                 <span>See Demo</span>
@@ -92,11 +90,11 @@ export const LandingPage: React.FC<{
             <div className="mt-6 flex flex-wrap items-center justify-center gap-6 text-[13px] text-[var(--label-tertiary)]">
               <div className="flex items-center gap-2">
                 <ShieldCheck size={16} className="text-[var(--accent)]" />
-                <span>100% Private</span>
+                <span>Account-scoped records</span>
               </div>
               <div className="flex items-center gap-2">
                 <Scale size={16} className="text-[var(--success)]" />
-                <span>Mathematical Proof</span>
+                <span>Balanced double-entry</span>
               </div>
               <div className="flex items-center gap-2">
                 <Printer size={16} className="text-[var(--warning)]" />
@@ -188,10 +186,10 @@ export const LandingPage: React.FC<{
                 <FileSpreadsheet size={24} strokeWidth={1.8} />
               </div>
               <h3 className="mt-6 text-[22px] font-bold text-[var(--label)]">
-                Statements you can file
+                Reports for accountant review
               </h3>
               <p className="mt-2.5 text-[15px] leading-[24px] text-[var(--label-secondary)]">
-                Profit & Loss, Balance Sheet, VAT returns, Trial Balance, Cash & Bank statements laid out as 210mm A4 sheets.
+                Profit & Loss, Balance Sheet, VAT summaries, Trial Balance, Cash & Bank statements laid out as 210mm A4 sheets.
               </p>
             </div>
 
@@ -201,10 +199,10 @@ export const LandingPage: React.FC<{
                 <Database size={24} strokeWidth={1.8} />
               </div>
               <h3 className="mt-6 text-[22px] font-bold text-[var(--label)]">
-                Your data, your database
+                Managed cloud storage
               </h3>
               <p className="mt-2.5 text-[15px] leading-[24px] text-[var(--label-secondary)]">
-                Zero telemetry or third-party tracking. Your accounting records live privately in your own project.
+                Business records are stored in managed Neon Postgres and scoped to the signed-in account. Download a JSON snapshot from Settings; restore is not available yet.
               </p>
             </div>
           </div>
@@ -289,7 +287,7 @@ export const LandingPage: React.FC<{
                 </li>
                 <li className="flex items-start gap-2.5">
                   <span className="mt-1 text-[var(--accent)] font-bold">•</span>
-                  <span>Anyone requiring formatted A4 financial statements to submit to banks, auditors, or IRD.</span>
+                  <span>Businesses preparing A4 working reports for review with their accountant.</span>
                 </li>
               </ul>
             </div>
@@ -304,7 +302,7 @@ export const LandingPage: React.FC<{
               <ul className="mt-5 space-y-3.5 text-[15px] leading-[24px] text-[var(--label-secondary)]">
                 <li className="flex items-start gap-2.5">
                   <span className="mt-1 text-[var(--warning)] font-bold">•</span>
-                  <span>No demo data and no sample figures anywhere in the application.</span>
+                  <span>The live workspace does not include sample figures; sample books are available in the separate demo.</span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <span className="mt-1 text-[var(--warning)] font-bold">•</span>

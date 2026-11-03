@@ -17,6 +17,12 @@ export const PublicLayout: React.FC<{
   children: React.ReactNode;
 }> = ({ currentPath, navigate, onSignIn, children }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const followLink = (event: React.MouseEvent<HTMLAnchorElement>, path: string) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    setMobileMenuOpen(false);
+    navigate(path);
+  };
 
   return (
     <div className="min-h-screen bg-[var(--bg-secondary)] text-[var(--label)] transition-colors duration-300">
@@ -24,36 +30,33 @@ export const PublicLayout: React.FC<{
       <header className="sticky top-0 z-30 border-b border-[var(--separator)] bg-[var(--bg)]">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4 sm:px-6">
           {/* Logo */}
-          <button
-            type="button"
-            onClick={() => {
-              setMobileMenuOpen(false);
-              navigate('/');
-            }}
+          <a
+            href="/"
+            onClick={(event) => followLink(event, '/')}
             className="flex items-center gap-2.5 min-h-[44px] px-1 rounded-[10px] hover:bg-[var(--fill-secondary)] transition-all group"
             aria-label="Zeyks Book home"
           >
             <img src="/zeyks-mark.png" alt="Zeyks Book" className="h-10 w-9 shrink-0 object-contain transition-transform group-hover:scale-105" />
-          </button>
+          </a>
 
           {/* Desktop Nav links + Sign In (sm and up) */}
           <nav aria-label="Public pages" className="hidden sm:flex items-center gap-1 sm:gap-2">
             {NAV_LINKS.map(({ path, label }) => {
               const active = currentPath === path;
               return (
-                <button
+                <a
                   key={path}
-                  type="button"
-                  onClick={() => navigate(path)}
+                  href={path}
+                  onClick={(event) => followLink(event, path)}
                   aria-current={active ? 'page' : undefined}
                   className={`min-h-[44px] px-3 py-2 rounded-[10px] text-[14px] sm:text-[15px] leading-[20px] font-medium transition-all ${
                     active
                       ? 'bg-[var(--fill-secondary)] text-[var(--label)] font-semibold shadow-xs'
-                      : 'text-[var(--label-secondary)] hover:bg-[var(--fill-secondary)] hover:text-[var(--label)]'
-                  }`}
+                    : 'text-[var(--label-secondary)] hover:bg-[var(--fill-secondary)] hover:text-[var(--label)]'
+                  } inline-flex items-center`}
                 >
                   {label}
-                </button>
+                </a>
               );
             })}
 
@@ -85,22 +88,19 @@ export const PublicLayout: React.FC<{
             {NAV_LINKS.map(({ path, label }) => {
               const active = currentPath === path;
               return (
-                <button
+                <a
                   key={path}
-                  type="button"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    navigate(path);
-                  }}
+                  href={path}
+                  onClick={(event) => followLink(event, path)}
                   aria-current={active ? 'page' : undefined}
                   className={`w-full text-left min-h-[44px] px-3.5 py-2.5 rounded-lg text-[15px] font-medium transition-all ${
                     active
                       ? 'bg-[var(--fill-secondary)] text-[var(--label)] font-semibold'
-                      : 'text-[var(--label-secondary)] hover:bg-[var(--fill-secondary)] hover:text-[var(--label)]'
-                  }`}
+                    : 'text-[var(--label-secondary)] hover:bg-[var(--fill-secondary)] hover:text-[var(--label)]'
+                  } block`}
                 >
                   {label}
-                </button>
+                </a>
               );
             })}
             <div className="pt-2 border-t border-[var(--separator)]">
@@ -149,13 +149,13 @@ export const PublicLayout: React.FC<{
                     { path: '/pricing', label: 'Pricing' },
                   ].map(({ path, label }) => (
                     <li key={path}>
-                      <button
-                        type="button"
-                        onClick={() => navigate(path)}
+                      <a
+                        href={path}
+                        onClick={(event) => followLink(event, path)}
                         className="text-[13px] text-[var(--label-secondary)] hover:text-[var(--label)] transition-colors"
                       >
                         {label}
-                      </button>
+                      </a>
                     </li>
                   ))}
                 </ul>
@@ -169,13 +169,13 @@ export const PublicLayout: React.FC<{
                 <ul className="mt-3.5 space-y-2">
                   {INTENT_PAGES.map(({ path, navLabel }) => (
                     <li key={path}>
-                      <button
-                        type="button"
-                        onClick={() => navigate(path)}
+                      <a
+                        href={path}
+                        onClick={(event) => followLink(event, path)}
                         className="text-[13px] text-[var(--label-secondary)] hover:text-[var(--label)] transition-colors"
                       >
                         {navLabel}
-                      </button>
+                      </a>
                     </li>
                   ))}
                 </ul>
@@ -190,13 +190,13 @@ export const PublicLayout: React.FC<{
                     { path: '/contact', label: 'Contact' },
                   ].map(({ path, label }) => (
                     <li key={path}>
-                      <button
-                        type="button"
-                        onClick={() => navigate(path)}
+                      <a
+                        href={path}
+                        onClick={(event) => followLink(event, path)}
                         className="text-[13px] text-[var(--label-secondary)] hover:text-[var(--label)] transition-colors"
                       >
                         {label}
-                      </button>
+                      </a>
                     </li>
                   ))}
                 </ul>
@@ -211,13 +211,13 @@ export const PublicLayout: React.FC<{
                     { path: '/terms', label: 'Terms of Service' },
                   ].map(({ path, label }) => (
                     <li key={path}>
-                      <button
-                        type="button"
-                        onClick={() => navigate(path)}
+                      <a
+                        href={path}
+                        onClick={(event) => followLink(event, path)}
                         className="text-[13px] text-[var(--label-secondary)] hover:text-[var(--label)] transition-colors"
                       >
                         {label}
-                      </button>
+                      </a>
                     </li>
                   ))}
                 </ul>

@@ -43,7 +43,7 @@ export const PrivacyPage: React.FC<{
             <div className="border-t border-[var(--separator)] pt-6">
               <h2 className="text-[20px] font-bold text-[var(--label)] flex items-center gap-2">
                 <EyeOff size={18} className="text-[var(--accent)]" />
-                2. Zero Third-Party Telemetry & Tracking
+                2. Analytics and Third-Party Services
               </h2>
               <p className="mt-2">
                 The app does not use behavioral ad pixels or session recording tools. Core app functions rely on Neon (database and sign-in), and contact messages are sent through the configured email service. Google Fonts may be contacted to load typefaces. These providers receive the technical information required for their services; review their policies for their handling practices.
@@ -53,7 +53,7 @@ export const PrivacyPage: React.FC<{
             <div className="border-t border-[var(--separator)] pt-6">
               <h2 className="text-[20px] font-bold text-[var(--label)] flex items-center gap-2">
                 <Database size={18} className="text-[var(--accent)]" />
-                3. Demo Mode Local Storage
+                3. Demo Mode & Sample Data
               </h2>
               <p className="mt-2">
                 The interactive demo starts with sample books and keeps your demo edits only while the page stays open — refreshing resets it to the sample data. Demo data is separate from a signed-in business account and nothing from the demo is saved to your browser or sent to the server.
