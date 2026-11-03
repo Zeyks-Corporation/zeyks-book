@@ -26,4 +26,8 @@ Disallow: /tools
 Disallow: /king
 Disallow: /api/
 
+# Cloudflare infrastructure routes (including email-address obfuscation) are
+# not site content and should not be crawled as public pages.
+Disallow: /cdn-cgi/
+
 Sitemap: https://www.zeyksbook.app/sitemap.xml
